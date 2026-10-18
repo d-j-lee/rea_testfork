@@ -42,7 +42,7 @@ const CONCEPTS: readonly [string, string][] = [
   ["천수", `남은 수명. 대전 승리와 공덕으로 늘고, 일섬·자력 소생에 쓴다. ${FINAL_YEAR}년까지 닿아야 한다.`],
   ["의심도", "늙지 않는 얼굴이 부르는 의심. 높아지면 세월이 흐를 때 신분을 바꾸자."],
   ["풍향계", "선택지 옆의 숙청 위험(0–100). 지략이 낮으면 ±10 오차가 있다."],
-  ["사경", "쓰러진 상태. 동료가 일으켜 세우거나, 천수 1년을 써서 스스로 일어난다."],
+  ["사경", "쓰러진 상태. 동료가 일으켜 세우거나 스스로 일어난다. 장마다 첫 자력 소생은 무료, 이후는 천수 1년이 든다."],
   // The particle follows 지표, not the data-built list, so any meter order reads right.
   ["국운 · 분기", `국운 지표(${NATION_KEYS.map((key) => NATION_NAMES[key]).join("·")})와 ${ALL_BRANCHES} 분기가 ${FINAL_YEAR}년의 결말을 정한다.`],
   ["◇ 표시", "시뮬레이션 동료. 오프라인에서 마당을 채우는 컴퓨터 동료다."],

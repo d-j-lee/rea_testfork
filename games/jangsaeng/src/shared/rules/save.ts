@@ -4,7 +4,7 @@ import type { ChapterDef, ChapterId, Effect, FlagValue, NationKey, OriginDef, Or
 import { CHAPTER_IDS, DISCIPLE_XP_FLAG, NATION_KEYS, POINT_KEYS, SCHOOL_FLAG, STAT_KEYS } from "../content/schema.ts";
 import type { BodyVariant } from "../sprites.ts";
 import { AWAKENING_AGE, AWAKENING_YEAR, BASE_LIFESPAN, SAVE_VERSION, type DemoPath, type PlayerSave } from "../types.ts";
-import { apparentAge, suggestName } from "./identity.ts";
+import { apparentAge, cleanName, suggestName } from "./identity.ts";
 import { meritSubjectTitle } from "./effects.ts";
 import { chapterBranches, closeChapterBranches, setBranch, setLongFlag } from "./nation.ts";
 import { DEFAULT_ARMOR, DEFAULT_WEAPON, eraGear, LEVEL_CAP, SKILL_SLOTS } from "./progression.ts";
@@ -65,9 +65,6 @@ export function originOf(content: ContentIndex, origin: string): OriginDef {
   return content.origins[origin] ?? (Object.values(content.origins)[0] as OriginDef);
 }
 
-function cleanName(name: string): string {
-  return name.replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, 16) || "무명";
-}
 
 /** Skills unlocked by chapters up to and including `chapter`, in unlock order. */
 export function skillsUnlockedBy(content: ContentIndex, chapter: ChapterId): string[] {
@@ -87,7 +84,7 @@ export function skillsUnlockedBy(content: ContentIndex, chapter: ChapterId): str
 
 export function createSave(content: ContentIndex, options: CreateOptions): PlayerSave {
   const origin = originOf(content, options.origin);
-  const name = cleanName(options.name);
+  const name = cleanName(options.name) || "무명";
   const stats = {} as Record<StatKey, number>;
   for (const stat of STAT_KEYS) stats[stat] = BASE_STAT + (origin.stats[stat] ?? 0);
   const points = {} as PlayerSave["points"];
