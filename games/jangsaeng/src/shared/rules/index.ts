@@ -11,7 +11,7 @@
 //   nation       nation meters, infiltration, carry-over, ending
 //   save/migrate new characters, demo presets, untrusted-save parsing
 export type { CreateOptions } from "./save.ts";
-export { createSave, REFORM_DRIFT, skillsUnlockedBy } from "./save.ts";
+export { createSave, demoStartIndex, REFORM_DRIFT, skillsUnlockedBy } from "./save.ts";
 export { migrateSave } from "./migrate.ts";
 
 export type { Derived } from "./progression.ts";
@@ -73,8 +73,11 @@ export type { ActivityDef, SmallEvent, SmallEventContext, YearsChoice } from "./
 export { ACTIVITIES, advanceYears, SMALL_EVENTS, advanceStepYear, smallEventAt, tokensBetween, yearsPlan } from "./years.ts";
 
 export {
+  BRANCH_CHAPTER,
   BRANCH_LABELS,
   carryNation,
+  chapterBranches,
+  closeChapterBranches,
   computeEnding,
   finalInfiltration,
   INFILTRATION_WEIGHTS,

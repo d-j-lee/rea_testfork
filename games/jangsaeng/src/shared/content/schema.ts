@@ -408,6 +408,12 @@ export interface ChapterDef {
   battles: readonly BattleDef[];
   prompts: readonly PromptDef[];
   steps: readonly StepDef[];
+  /**
+   * Demo mode only: id of the step a demo preset starts at. The steps before
+   * it are played out by rules/save.ts the way 건너뛰기 would (first enabled
+   * option, every battle won). Normal play always starts at the first step.
+   */
+  demoStart?: string;
   /** Montage chapters play mostly as cards during the passage of years. */
   montage?: boolean;
   /** 공동 실록 world event shown to the channel. */
