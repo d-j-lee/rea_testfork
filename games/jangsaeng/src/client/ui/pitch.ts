@@ -1,8 +1,18 @@
 // 게임 소개: concept, pillars, how the MMO works, prototype scope. Honest copy:
 // no metrics, no claims beyond what the prototype and its roadmap state.
-import { greatBattleTitles, PITCH_BATTLES } from "./chapters.ts";
+// Counts, ranges and names the content owns (chapters, branches, meters,
+// endings, 대전) are read from it, not retyped here.
+import { NATION_ENDINGS, PERSONAL_ENDINGS } from "../../shared/content/endings.ts";
+import { BRANCH_IDS, NATION_KEYS } from "../../shared/content/schema.ts";
+import { ALL_BRANCHES, allChapters, BRANCH_YEARS, greatBattleTitles, PITCH_BATTLES } from "./chapters.ts";
 import { button, h } from "./dom.ts";
 import { paperPanel } from "./panel.ts";
+
+const CHAPTER_LIST = allChapters();
+const NATIVE_COUNT = ["", "한", "두", "세", "네", "다섯", "여섯", "일곱", "여덟", "아홉"];
+const count = (n: number): string => NATIVE_COUNT[n] ?? String(n);
+const montages = CHAPTER_LIST.filter((c) => c.montage).length;
+const span = `${CHAPTER_LIST[0]?.years[0]}년부터 ${CHAPTER_LIST[CHAPTER_LIST.length - 1]?.years[1]}년까지`;
 
 const PILLARS: readonly { glyph: string; title: string; text: string }[] = [
   {
@@ -28,11 +38,11 @@ const PILLARS: readonly { glyph: string; title: string; text: string }[] = [
 ];
 
 const IN_PROTOTYPE: readonly string[] = [
-  "1361년부터 1910년까지 16개 장으로 이어지는 한 생애 (두 장은 짧은 몽타주)",
+  `${span} ${CHAPTER_LIST.length}개 장으로 이어지는 한 생애${montages ? ` (${count(montages)} 장은 짧은 몽타주)` : ""}`,
   "실시간 탑다운 전투 · 보스와 대전 · 사경(死境)과 소생",
   "선택지와 풍향계, 숙청 판정, 품계와 관직",
   "세월 흐르기(10년 단위 활동) · 신분 세탁 · 노인성 봉헌",
-  "국운 5지표와 침투도 · 분기 B1–B12 · 국가 3 × 개인 6 결말 정산",
+  `국운 ${NATION_KEYS.length}지표와 침투도 · 분기 ${ALL_BRANCHES} · 국가 ${Object.keys(NATION_ENDINGS).length} × 개인 ${Object.keys(PERSONAL_ENDINGS).length} 결말 정산`,
   "시대 마당 채팅 · 온라인 서버 / 오프라인 단일 파일",
   "시연 모드: 어느 장에서든 바로 시작",
 ];
@@ -85,7 +95,7 @@ export function pitchPanel(handlers: { onBack(): void; onNew(): void; onDemo(): 
           h("h3", { class: "sub-title" }, "로드맵 (아직 없음)"),
           h("ul", { class: "plan-list" }, ...ROADMAP.map((t) => h("li", null, t))))),
       h("p", { class: "pitch-note" },
-        "역사의 기둥(조선 개국, 이순신의 전사, 삼전도 등)은 바꾸지 않는다. 바꿀 수 있는 것은 1802~1907년 분기점(B1–B12)의 누적뿐이다. 장마다 실제 역사 노트에서 사실과 해석, 창작을 구분한다. 시제품이므로 일부 장의 분량과 연출은 계속 다듬고 있다."),
+        `역사의 기둥(조선 개국, 이순신의 전사, 삼전도 등)은 바꾸지 않는다. 바꿀 수 있는 것은 ${BRANCH_YEARS[0]}~${BRANCH_YEARS[1]}년의 분기점 ${BRANCH_IDS.length}개(${ALL_BRANCHES})가 쌓인 결과뿐이다. 장마다 실제 역사 노트에서 사실과 해석, 창작을 구분한다. 시제품이므로 일부 장의 분량과 연출은 계속 다듬고 있다.`),
     ),
   );
 }

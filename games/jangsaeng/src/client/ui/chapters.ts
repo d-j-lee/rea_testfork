@@ -1,8 +1,10 @@
 // Chapter metadata for the demo-mode chapter select and the pitch screen.
-// Titles, years, levels, montage and 대전 come from the content registry;
-// the one-line highlights and extra tags are presenter copy owned by the UI.
+// Titles, years, levels, montage, 대전 and the branches a chapter decides
+// come from the content registry and the rules; the one-line highlights and
+// extra tags are presenter copy owned by the UI.
 import { CHAPTERS } from "../../shared/content/index.ts";
-import { CHAPTER_IDS, type ChapterId } from "../../shared/content/schema.ts";
+import { BRANCH_IDS, CHAPTER_IDS, type BranchId, type ChapterId } from "../../shared/content/schema.ts";
+import { chapterBranches } from "../../shared/rules/index.ts";
 
 export interface ChapterMeta {
   id: ChapterId;
@@ -31,17 +33,36 @@ const COPY: Readonly<Record<ChapterId, { highlight: string; tags?: readonly stri
   ch10: { highlight: "열세 척으로 명량의 바다를 버틴다." },
   ch11: { highlight: "남한산성 농성. 척화와 주화 사이에서 선택한다." },
   ch12: { highlight: "환국의 소용돌이를 줄서기와 탕평으로 건넌다." },
-  ch13: { highlight: "장용영을 지켜 세도의 그늘을 늦춘다.", tags: ["B1·B2"] },
-  ch14: { highlight: "정족산성을 지키고, 강화도조약의 조항을 다툰다.", tags: ["B3·B4"] },
-  ch15: { highlight: "군란과 정변, 갑오년. 외국군 개입의 연쇄를 끊는다.", tags: ["B5–B8"] },
-  ch16: { highlight: "중명전 수호와 13도 창의군. 1910년의 최종 정산.", tags: ["B9–B12", "최종장"] },
+  ch13: { highlight: "장용영을 지켜 세도의 그늘을 늦춘다." },
+  ch14: { highlight: "정족산성을 지키고, 강화도조약의 조항을 다툰다." },
+  ch15: { highlight: "군란과 정변, 갑오년. 외국군 개입의 연쇄를 끊는다." },
+  ch16: { highlight: "중명전 수호와 13도 창의군. 1910년의 최종 정산.", tags: ["최종장"] },
 };
+
+/** "B1·B2" for two branches, "B5–B8" for a run of more, by branch id order. */
+function branchSpan(ids: readonly BranchId[]): string {
+  const first = ids[0];
+  const last = ids[ids.length - 1];
+  if (!first || !last) return "";
+  return ids.length <= 2 ? ids.join("·") : `${first}–${last}`;
+}
+
+/** Every branch, as the pitch and help name the range ("B1–B12c"). */
+export const ALL_BRANCHES = branchSpan(BRANCH_IDS);
+
+/**
+ * Years of the first and last branch decisions (B1 장용영 1802, B12c 군대
+ * 해산 1907). Presenter copy: the rules own the branches and carry each
+ * year in BRANCH_LABELS; tests/unit/client-copy.test.ts pins these to them.
+ */
+export const BRANCH_YEARS: readonly [number, number] = [1802, 1907];
 
 export function chapterMeta(id: ChapterId): ChapterMeta {
   const def = CHAPTERS[id];
   const copy = COPY[id];
   const great = def.battles.some((battle) => battle.great);
   const montage = def.montage ?? false;
+  const branches = branchSpan(chapterBranches(id));
   return {
     id,
     order: def.order,
@@ -50,7 +71,7 @@ export function chapterMeta(id: ChapterId): ChapterMeta {
     years: def.years,
     level: def.level,
     highlight: copy.highlight,
-    tags: [...(great ? ["대전"] : []), ...(montage ? ["몽타주"] : []), ...(copy.tags ?? [])],
+    tags: [...(great ? ["대전"] : []), ...(montage ? ["몽타주"] : []), ...(branches ? [branches] : []), ...(copy.tags ?? [])],
     montage,
     great,
   };
