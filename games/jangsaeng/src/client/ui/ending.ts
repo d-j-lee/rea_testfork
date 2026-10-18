@@ -28,7 +28,9 @@ function restart(hash: "#new" | "#demo"): void {
 }
 
 export function endingScreen(e: EndingView): HTMLElement {
-  const total = e.breakdown.reduce((n, b) => n + b.value, 0);
+  // The host settles the score; the rows explain it and are never re-summed
+  // here (rounded rows can disagree with the settled score by a tenth).
+  const score = e.score.toFixed(1);
   const record = RECORD_LABELS.filter(([k]) => k !== "turncoat" || e.record.turncoat > 0).map(([k, label]) =>
     h("li", null, h("b", null, String(e.record[k])), h("span", null, label)));
   const chron = e.chronicle.length > 14
@@ -40,7 +42,7 @@ export function endingScreen(e: EndingView): HTMLElement {
     h(
       "article",
       { class: "ending paper" },
-      seal("長生", "end-seal"),
+      seal("長生", "end-seal", true),
       h("header", { class: "end-head" },
         h("p", { class: "end-kicker" }, `${FINAL_YEAR}년 8월 · 정산`),
         h("h1", { class: "end-title" }, e.nation.title),
@@ -50,13 +52,13 @@ export function endingScreen(e: EndingView): HTMLElement {
         h("h2", null, e.personal.title),
         ...e.personal.body.map((t) => h("p", null, t))),
       h("section", { class: "end-score" },
-        h("div", { class: "score-big" }, h("span", { class: "end-k" }, "국운 판정"), h("b", null, e.score.toFixed(1))),
+        h("div", { class: "score-big" }, h("span", { class: "end-k" }, "국운 판정"), h("b", null, score)),
         h("table", { class: "breakdown" },
           h("caption", { class: "sr-only" }, "판정 내역"),
           h("tbody", null,
             ...e.breakdown.map((b) =>
               h("tr", { class: b.value < 0 ? "neg" : "" }, h("th", { scope: "row" }, b.label), h("td", null, b.value > 0 ? `+${b.value.toFixed(1)}` : b.value.toFixed(1)))),
-            h("tr", { class: "sum" }, h("th", { scope: "row" }, "합계"), h("td", null, total.toFixed(1)))))),
+            h("tr", { class: "sum" }, h("th", { scope: "row" }, "합계"), h("td", null, score))))),
       h("section", { class: "end-grid" },
         h("div", null,
           h("h3", { class: "sub-title" }, "국운"),

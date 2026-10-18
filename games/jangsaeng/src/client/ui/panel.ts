@@ -38,9 +38,22 @@ export function paperPanel(opts: PanelOptions, ...body: Child[]): HTMLElement {
   );
 }
 
-/** Red square seal (낙관) with one to four hanja. */
-export function seal(text: string, cls = ""): HTMLElement {
-  return h("span", { class: `seal ${cls}`, "aria-hidden": "true" }, text);
+/**
+ * Vertical text as one fixed 1em block per glyph. Unlike writing-mode, this
+ * does not depend on the font's vertical metrics, so a seal or the logo keeps
+ * its shape when the web fonts are unavailable and a system font stands in.
+ */
+export function stackedGlyphs(text: string): HTMLElement[] {
+  return [...text].map((ch) => h("span", { class: "glyph-stack" }, ch));
+}
+
+/** Red square seal (낙관) with one to four hanja; `stacked` reads top to bottom. */
+export function seal(text: string, cls = "", stacked = false): HTMLElement {
+  return h(
+    "span",
+    { class: `seal ${cls}${stacked ? " seal-stacked" : ""}`, "aria-hidden": "true" },
+    ...(stacked ? stackedGlyphs(text) : [text]),
+  );
 }
 
 /** Segmented control (radio group) returning its element. */

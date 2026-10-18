@@ -6,7 +6,7 @@ import { creationPanel } from "./creation.ts";
 import { demoPanel } from "./demo.ts";
 import { h, type Child } from "./dom.ts";
 import type { TitleChoice, TitleOptions } from "./index.ts";
-import { paperPanel, seal, segmented } from "./panel.ts";
+import { paperPanel, seal, segmented, stackedGlyphs } from "./panel.ts";
 import { pitchPanel } from "./pitch.ts";
 import type { SettingsStore } from "./settings.ts";
 import { settingsControls } from "./settings-panel.ts";
@@ -143,9 +143,9 @@ export function createTitle(
   const logo = h(
     "div",
     { class: "logo" },
-    h("h1", { class: "logo-hanja", "aria-label": "장생 오백년" }, "長生"),
+    h("h1", { class: "logo-hanja", "aria-label": "장생 오백년" }, ...stackedGlyphs("長生")),
     h("div", { class: "logo-side" },
-      seal("五百年", "logo-seal"),
+      seal("五百年", "logo-seal", true),
       h("p", { class: "logo-hangul" }, "장생"),
       h("p", { class: "logo-sub" }, "오백년")),
   );

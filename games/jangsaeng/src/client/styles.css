@@ -10,8 +10,11 @@
   --gold: #d1a13a; --gold-hi: #f1d387; --gold-ink: #7d5c12; --jade: #2f8f83; --jade-hi: #4fbfae; --orange: #d9772b;
   --sim: #93b8cf;
   --f-body: "Gowun Batang", "Nanum Myeongjo", "AppleMyungjo", "Batang", "Noto Serif KR", "Noto Serif CJK KR", serif;
-  --f-title: "Song Myung", "Gowun Batang", "Nanum Myeongjo", "AppleMyungjo", "Batang", serif;
-  --f-brush: "Yuji Syuku", "Song Myung", "Noto Serif KR", "Noto Serif CJK KR", serif;
+  /* Web fonts are decoration: offline, the system serif/brush faces of
+     Windows (Gungsuh, Batang), macOS (AppleMyungjo, Hiragino Mincho) and
+     Linux (Noto Serif CJK) stand in, and no layout depends on their metrics. */
+  --f-title: "Song Myung", "Gowun Batang", "Nanum Myeongjo", "AppleMyungjo", "Batang", "Noto Serif KR", "Noto Serif CJK KR", serif;
+  --f-brush: "Yuji Syuku", "Song Myung", "Gungsuh", "궁서", "Hiragino Mincho ProN", "AppleMyungjo", "Batang", "Noto Serif KR", "Noto Serif CJK KR", serif;
   --g: 14px;
   --sat: env(safe-area-inset-top, 0px); --sab: env(safe-area-inset-bottom, 0px);
   --sal: env(safe-area-inset-left, 0px); --sar: env(safe-area-inset-right, 0px);
@@ -112,6 +115,8 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 .sub-title::after { content: ""; flex: 1; height: 1px; background: linear-gradient(90deg, rgba(29, 26, 25, .35), transparent); }
 .seal { display: inline-grid; place-items: center; padding: 4px 5px; font: 18px/1.05 var(--f-brush); color: #fbe9dc; background: radial-gradient(circle at 30% 30%, #cf4a40, #a8262a 70%); border-radius: 3px; box-shadow: inset 0 0 0 2px rgba(255, 230, 210, .35), 0 1px 2px rgba(0, 0, 0, .35); transform: rotate(-3deg); }
 .seal-small { font-size: 13px; padding: 2px 3px; margin-right: 6px; }
+.glyph-stack { display: block; width: 1em; height: 1em; line-height: 1; text-align: center; }
+.seal-stacked .glyph-stack { height: 1.05em; line-height: 1.05; }
 
 .meter { position: relative; display: block; height: 10px; background: rgba(0, 0, 0, .55); border: 1px solid rgba(0, 0, 0, .7); border-radius: 2px; overflow: hidden; box-shadow: inset 0 1px 2px rgba(0, 0, 0, .7); }
 .meter-fill { position: absolute; left: 0; top: 0; bottom: 0; width: calc(var(--v, 0) * 100%); transition: width .3s ease; background: linear-gradient(#f1d387, #c39232); }
@@ -148,9 +153,9 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 .title-screen.leaving { animation: fadeout .8s ease forwards; }
 .title-brand { display: flex; flex-direction: column; gap: 22px; }
 .logo { display: flex; align-items: flex-start; gap: 22px; }
-.logo-hanja { writing-mode: vertical-rl; margin: 0; font: 400 clamp(110px, 21vh, 190px)/1 var(--f-brush); color: #f5ecd8; letter-spacing: .02em; text-shadow: 0 0 34px rgba(255, 210, 150, .22), 0 3px 0 rgba(0, 0, 0, .45); animation: inkin 1.6s ease both; }
+.logo-hanja { flex: none; margin: 0; font: 400 clamp(110px, 21vh, 190px)/1 var(--f-brush); color: #f5ecd8; letter-spacing: .02em; text-shadow: 0 0 34px rgba(255, 210, 150, .22), 0 3px 0 rgba(0, 0, 0, .45); animation: inkin 1.6s ease both; }
 .logo-side { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding-top: 10px; animation: rise 1.4s .5s ease both; }
-.logo-seal { writing-mode: vertical-rl; font-size: 21px; padding: 7px 5px; margin-bottom: 8px; }
+.logo-seal { font-size: 21px; padding: 7px 5px; margin-bottom: 8px; }
 .logo-hangul { font: 54px/1 var(--f-title); color: #f5ecd8; letter-spacing: .08em; }
 .logo-sub { font: 22px/1 var(--f-title); color: var(--gold-hi); letter-spacing: .5em; }
 .tagline { max-width: 26em; font-size: 17.5px; line-height: 1.75; color: #ddd1b9; text-shadow: 0 1px 2px rgba(0, 0, 0, .6); animation: rise 1.4s .8s ease both; }
@@ -222,7 +227,7 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 .demo-tags { display: flex; flex-wrap: wrap; gap: 4px; }
 
 /* Pitch */
-.pitch { max-width: 860px; margin: 0 auto; }
+.pitch { max-width: 860px; margin: 0 auto; word-break: keep-all; overflow-wrap: anywhere; }
 .pitch-lead { font-size: 17.5px; line-height: 1.85; }
 .pitch-genre { margin-top: 8px; font-size: 14px; color: var(--ink-mute); }
 .pillars { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 20px; }
@@ -450,6 +455,8 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 html[data-touch="on"] .chat-open::after { content: none; }
 
 .ui-root.battle-on .toasts { top: calc(var(--sat) + 178px); }
+.toast-layer { display: contents; }
+.toast-dock { position: absolute; left: 50%; bottom: calc(var(--sab) + 20px); transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 6px; width: min(560px, calc(100vw - 32px)); pointer-events: none; }
 .toasts { position: absolute; left: 50%; top: calc(var(--sat) + 96px); transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 6px; width: min(560px, calc(100vw - 32px)); pointer-events: none; }
 .toast { display: flex; align-items: center; gap: 8px; padding: 8px 18px; font-size: 15.5px; line-height: 1.4; text-align: center; color: #f8efdc; border-radius: 3px; background: linear-gradient(90deg, rgba(14, 12, 11, 0), rgba(14, 12, 11, .86) 14%, rgba(14, 12, 11, .86) 86%, rgba(14, 12, 11, 0)); text-shadow: 0 1px 2px #000; animation: toast-in .35s ease both; }
 .toast.out { animation: fadeout .4s ease forwards; }
@@ -748,7 +755,7 @@ html[data-touch="on"] .chat-open::after { content: none; }
 /* ── Ending ───────────────────────────────────────────────────────────── */
 .ending-screen { overflow-y: auto; padding: calc(36px + var(--sat)) 16px calc(36px + var(--sab)); background: radial-gradient(80% 60% at 50% 0%, #26222c, #0a0a0d 70%); animation: fadein 1.2s ease both; }
 .ending { max-width: 980px; margin: 0 auto; padding: 54px 64px 40px; border-radius: 3px; }
-.end-seal { position: absolute; top: 26px; right: 34px; writing-mode: vertical-rl; font-size: 24px; padding: 8px 6px; transform: rotate(5deg); }
+.end-seal { position: absolute; top: 26px; right: 34px; font-size: 24px; padding: 8px 6px; transform: rotate(5deg); }
 .end-head { text-align: center; padding-bottom: 24px; border-bottom: 1px solid rgba(29, 26, 25, .2); }
 .end-kicker { font-size: 14px; font-weight: 700; letter-spacing: .3em; color: var(--red); }
 .end-title { margin: 10px 0 16px; font: clamp(36px, 6vw, 54px)/1.2 var(--f-title); }
@@ -771,14 +778,18 @@ html[data-touch="on"] .chat-open::after { content: none; }
 .life-graph { display: block; width: 100%; height: auto; font-family: var(--f-body); }
 .lg-axis, .lg-tick line { stroke: rgba(29, 26, 25, .45); }
 .lg-tick text { font-size: 12px; fill: var(--ink-mute); }
-.lg-row text { font-size: 13px; fill: var(--ink); }
-.lg-base rect { fill: rgba(29, 26, 25, .3); }
-.lg-gain rect { fill: var(--jade); }
-.lg-spent rect { fill: var(--red); }
+.lg-base { --lg: rgba(29, 26, 25, .3); }
+.lg-gain { --lg: var(--jade); }
+.lg-spent { --lg: var(--red); }
+rect.lg-base, rect.lg-gain, rect.lg-spent { fill: var(--lg); }
+.lg-legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 22px; margin-top: 6px; font-size: 14px; color: var(--ink-2); }
+.lg-legend li { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.lg-legend b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.lg-swatch { width: 18px; height: 10px; border-radius: 2px; background: var(--lg); }
 .lg-goal { stroke: var(--gold); stroke-width: 2; stroke-dasharray: 4 3; }
 .lg-end { stroke: var(--jade); stroke-width: 2.5; }
 .lg-end.short { stroke: var(--red); }
-.lg-endlabel { font-size: 13px; font-weight: 700; fill: var(--ink); }
+.lg-endlabel { font-size: 13px; font-weight: 700; fill: var(--ink); paint-order: stroke; stroke: var(--paper); stroke-width: 4px; stroke-linejoin: round; }
 .record-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .record-grid li { display: grid; justify-items: center; padding: 10px 6px; border: 1px solid rgba(29, 26, 25, .18); background: rgba(255, 252, 244, .5); text-align: center; }
 .record-grid b { font: 26px/1.1 var(--f-title); font-weight: 400; }
@@ -976,6 +987,10 @@ html[data-layout="compact"] .ui-root.battle-on .toasts { top: calc(var(--g) + va
 html[data-layout="compact"] .toast { padding: 5px 14px; font-size: 14px; }
 html[data-layout="compact"] .toast.tone-epic { padding: 6px 16px; font-size: 15px; }
 html[data-layout="compact"] .toast:nth-last-child(n + 3) { display: none; }
+/* The life graph scales to the phone's width; its few labels grow to stay legible. */
+html[data-layout="compact"] .lg-tick text { font-size: 21px; }
+html[data-layout="compact"] .lg-tick.minor text { display: none; }
+html[data-layout="compact"] .lg-endlabel { font-size: 22px; }
 html[data-layout="compact"] .hud-tl, html[data-layout="compact"] .hud-obj, html[data-layout="compact"] .hud-bl { display: none; }
 html[data-layout="compact"] .hud[data-drawer] .drawer-scrim { display: block; inset: 0; z-index: 5; pointer-events: auto; background: rgba(8, 7, 7, .5); animation: fadein .2s ease both; }
 html[data-layout="compact"] .hud[data-drawer="status"] .hud-tl { display: block; z-index: 6; top: calc(var(--g) + var(--sat)); left: calc(var(--g) + var(--sal)); right: calc(var(--g) + var(--sar)); pointer-events: auto; }

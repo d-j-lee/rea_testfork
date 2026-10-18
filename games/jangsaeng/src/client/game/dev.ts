@@ -52,6 +52,7 @@ export class FrameStats {
 export function drawDevOverlay(ctx: CanvasRenderingContext2D, lines: readonly string[], unit: number): void {
   const fs = Math.round(11 * unit);
   const lh = Math.round(fs * 1.3);
+  ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.font = `${fs}px ui-monospace, Menlo, Consolas, monospace`;
   ctx.textBaseline = "top";
@@ -63,4 +64,5 @@ export function drawDevOverlay(ctx: CanvasRenderingContext2D, lines: readonly st
   ctx.fillRect(x - 4 * unit, y - 4 * unit, w + 8 * unit, lines.length * lh + 6 * unit);
   ctx.fillStyle = "#c8f0b0";
   for (let i = 0; i < lines.length; i++) ctx.fillText(lines[i] as string, x, y + i * lh);
+  ctx.restore();
 }

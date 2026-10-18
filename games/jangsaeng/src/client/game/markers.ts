@@ -185,18 +185,29 @@ export function drawObjectiveArrow(
   ctx.restore();
   const label = o.siteName ?? "";
   if (label) {
+    // The clamp below measures from the label's left edge, so the text state
+    // it assumes is set here, not inherited from whoever drew before.
+    ctx.save();
     const fs = Math.round(11 * unit);
     ctx.font = `${fs}px ${FONT}`;
+    ctx.textAlign = "left";
     ctx.textBaseline = "middle";
     const w = ctx.measureText(label).width;
-    // Keep the label inside the screen, on the inner side of the arrow.
-    const lx = Math.min(cam.width - w - 6 * unit, Math.max(6 * unit, ax - Math.cos(angle) * (size + 6 * unit) - w / 2));
+    // Keep the label inside the screen, on the inner side of the arrow: at a
+    // side edge it grows away from the arrow, at the top or bottom it is
+    // centred past the arrow's tail.
+    const c = Math.cos(angle);
+    const px = ax - c * (size + 6 * unit);
+    const left = c < -0.5 ? px : c > 0.5 ? px - w : px - w / 2;
+    const lx = Math.min(cam.width - w - 6 * unit, Math.max(6 * unit, left));
     const ly = Math.min(cam.height - fs, Math.max(fs, ay - Math.sin(angle) * (size + 8 * unit)));
+    ctx.lineJoin = "round";
     ctx.lineWidth = 3 * unit;
     ctx.strokeStyle = OUTLINE;
     ctx.strokeText(label, Math.round(lx), Math.round(ly));
     ctx.fillStyle = "#f3ecdc";
     ctx.fillText(label, Math.round(lx), Math.round(ly));
+    ctx.restore();
   }
   return true;
 }
