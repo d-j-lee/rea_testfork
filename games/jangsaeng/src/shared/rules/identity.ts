@@ -172,12 +172,13 @@ export const WASH_METHODS: Readonly<Record<WashMethod | "forced", WashSpec>> = {
     cost: 200, life: 0, suspicion: 10, carry: { money: 0.7, rank: "exam", bonds: 0.6, merit: 0 }, minYear: 1402,
   },
   forced: {
-    name: "발각·숙청 도주",
+    name: "발각 도주",
     desc: "정체가 드러나 쫓기듯 달아난다. 천수 −2년, 재산 30%·인연 50%만 남는다.",
     cost: 0, life: -2, suspicion: 0, carry: { money: 0.3, rank: 0, bonds: 0.5, merit: 0 },
   },
 };
 
+/** Short identity names shown everywhere an identity is listed; each wash's name ends with its short name. */
 const KIND_NAMES: Readonly<Record<IdentityKind, string>> = {
   birth: "본래 이름",
   descendant: "후손 행세",

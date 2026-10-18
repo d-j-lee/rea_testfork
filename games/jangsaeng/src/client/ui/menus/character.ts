@@ -4,7 +4,8 @@ import { POINT_KEYS, POINT_NAMES, STAT_HELP, STAT_KEYS, STAT_NAMES } from "../..
 import type { SelfView } from "../../../shared/types.ts";
 import type { PlayerAction } from "../../../shared/protocol.ts";
 import { button, h, meter, ratio, setMeter } from "../dom.ts";
-import { IDENTITY_LABELS, meritLabel, SKILL_GLYPH } from "../labels.ts";
+import { identityKindName } from "../../../shared/rules/index.ts";
+import { meritLabel, SKILL_GLYPH } from "../labels.ts";
 import { seal } from "../panel.ts";
 import { spriteView } from "../portrait.ts";
 
@@ -16,7 +17,7 @@ export function identityTimeline(list: SelfView["identities"], current?: string)
       h("li", { class: `id-item${r.name === current && r.to === undefined ? " now" : ""}` },
         h("span", { class: "id-years" }, `${r.from}–${r.to ?? "현재"}`),
         h("strong", null, r.name),
-        h("span", { class: "id-kind" }, IDENTITY_LABELS[r.kind]))),
+        h("span", { class: "id-kind" }, identityKindName(r.kind)))),
   );
 }
 
@@ -68,7 +69,7 @@ export function characterTab(self: SelfView, act: (a: PlayerAction) => void): HT
       h("div", { class: "ch-id" },
         h("h3", { class: "ch-name" }, self.name),
         self.name !== self.birthName ? h("p", { class: "muted" }, `본명 ${self.birthName}`) : null,
-        h("p", null, `Lv ${self.level} · ${IDENTITY_LABELS[self.identityKind]}`),
+        h("p", null, `Lv ${self.level} · ${identityKindName(self.identityKind)}`),
         h("p", null, `${self.rankName}${self.office ? ` · ${self.office}` : ""}`),
         self.meritSubject ? h("p", { class: "merit" }, seal("功", "seal-small"), meritLabel(self.meritSubject)) : null,
         self.titles.length ? h("p", { class: "chips" }, ...self.titles.map((t) => h("span", { class: "chip" }, t))) : null),

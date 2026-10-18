@@ -240,7 +240,8 @@ export class YearsPlanner {
       }, h("span", { class: "wash-glyph", "aria-hidden": "true" }, "—"), h("strong", null, "지금 이름을 지킨다"), h("span", { class: "yr-desc" }, "신분을 바꾸지 않는다."));
       washList.replaceChildren(
         none,
-        ...plan.washes.map((w) =>
+        // The name field follows the chosen wash, so it never covers the other choices.
+        ...plan.washes.flatMap((w) => [
           h("button", {
             type: "button", role: "radio",
             class: `yr-wash${wash === w.id ? " on" : ""}${w.disabled ? " locked" : ""}`,
@@ -256,7 +257,9 @@ export class YearsPlanner {
           h("span", { class: "wash-glyph", "aria-hidden": "true" }, isWash(w.id) ? WASH_GLYPH[w.id] : "·"),
           h("strong", null, w.name),
           h("span", { class: "yr-desc" }, w.desc),
-          w.disabled ? h("span", { class: "opt-lock" }, "⊘ ", w.disabled) : null)),
+          w.disabled ? h("span", { class: "opt-lock" }, "⊘ ", w.disabled) : null),
+          ...(wash === w.id ? [nameRow] : []),
+        ]),
       );
       nameRow.classList.toggle("hidden", wash === null);
     };
@@ -338,7 +341,6 @@ export class YearsPlanner {
         ? h("p", { class: "yr-warn", role: "alert" }, "의심이 짙다. 늙지 않는 얼굴을 보는 눈이 많다 — 이번 세월에 신분을 바꾸는 편이 안전하다.")
         : null,
       washList,
-      nameRow,
       h("h3", { class: "sub-title" }, "천수"),
       offerBtn,
       graceBtn,

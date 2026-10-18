@@ -54,6 +54,7 @@ export {
   eraFactor,
   exposure,
   growSuspicion,
+  identityKindName,
   realAge,
   suggestName,
   suspicionBand,

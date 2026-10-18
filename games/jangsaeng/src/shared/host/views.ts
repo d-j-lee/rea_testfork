@@ -90,6 +90,8 @@ export interface SelfContext {
   worldEvent?: SelfView["worldEvent"];
   /** Objectives currently visible with their progress. */
   objectives: ObjectiveView[];
+  /** While downed: someone standing could still raise the player. */
+  downedHelp?: boolean;
 }
 
 export function selfView(content: ContentIndex, save: PlayerSave, context: SelfContext): SelfView {
@@ -207,7 +209,7 @@ export function selfView(content: ContentIndex, save: PlayerSave, context: SelfC
   };
   if (save.meritSubject) view.meritSubject = save.meritSubject;
   if (status?.downed !== null && status?.downed !== undefined)
-    view.downed = { secondsLeft: Math.max(0, Math.ceil(status.downed)) };
+    view.downed = { secondsLeft: Math.max(0, Math.ceil(status.downed)), help: context.downedHelp ?? false };
   if (context.battle) view.battle = context.battle;
   if (context.worldEvent) view.worldEvent = context.worldEvent;
   return view;

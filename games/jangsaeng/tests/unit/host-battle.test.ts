@@ -116,7 +116,8 @@ test("a lone hero who revives themself mid-battle fights on from the rim; the ba
   tick(channel, 1);
   world.damage(hero.session.id, 1e6);
   tick(channel, 0.5);
-  assert.ok(hero.toasts.includes("사경(死境)에 빠졌다 — 동료를 기다리거나 스스로 일어서라."), "companions stand: wait for them or rise");
+  assert.equal(hero.self()?.downed?.help, true, "companions stand: the overlay waits for them");
+  assert.ok(!hero.toasts.some((text) => text.startsWith("사경")), "the overlay says it; no toast outlives the fall");
   hero.session.receive({ t: "action", action: { kind: "selfRevive" } });
   const ring = world.battleView();
   const me = world.playerStatus(hero.session.id);
@@ -373,16 +374,17 @@ test("a battle won inside a failed campaign is not toasted as a victory", () => 
   assert.ok(hero.toasts.includes(`${won.title} 승리`), "other battles keep '승리'");
 });
 
-test("the downed toast promises help only when someone could bring it", () => {
+test("the downed view promises help only when someone could bring it", () => {
+  // Alone in the channel and outside any battle (a lone battle is simply lost and withdrawn).
   const channel = channelOf(0);
   const hero = join(channel, "한결");
   const world = channel.world;
   tick(channel, 1);
-  assert.ok(channel.startBattle(BATTLE, hero.session, true));
   world.damage(hero.session.id, 1e6);
-  tick(channel, 0.2);
-  assert.ok(hero.toasts.includes("사경(死境)에 빠졌다 — 스스로 일어서라."), hero.toasts.join(" / "));
-  assert.ok(!hero.toasts.some((text) => text.includes("동료를 기다리거나")));
+  tick(channel, 0.5);
+  assert.equal(world.battleView(), null);
+  assert.equal(hero.self()?.downed?.help, false, "nobody standing: nobody can raise the hero");
+  assert.ok(!hero.toasts.some((text) => text.startsWith("사경")), hero.toasts.join(" / "));
 });
 
 // ── Demo entries: a cold open plays the steps before its entry with 건너뛰기 ──

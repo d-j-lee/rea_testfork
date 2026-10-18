@@ -28,6 +28,8 @@ const MOCK = { ENDING, YEARS_PROMPT, RESULT_PROMPT, LONG_RESULT_PROMPT, ALT_PROM
 declare global {
   interface Window {
     __ready?: boolean;
+    /** Messages the UI sent, read back by ui-check after each input (console delivery is asynchronous). */
+    __sent?: unknown[];
     /** Hooks for tools/preview/ui-check.mjs. */
     __ui?: Ui;
     __input?: Input;
@@ -69,7 +71,7 @@ function drawWorld(): { x: number; y: number } {
   return { x: c.x / TILE_PX, y: c.y / TILE_PX };
 }
 
-const send = (m: unknown) => console.log("send", JSON.stringify(m));
+const send = (m: unknown) => void (window.__sent ??= []).push(m);
 const input = new Input(canvas);
 const ui: Ui = createUi({ root, send, audio: mockAudio(), input, map });
 window.__ui = ui;
@@ -224,7 +226,7 @@ async function run(): Promise<void> {
       break;
     case "downed":
       startGame();
-      ui.handle({ t: "self", self: mockSelf({ hp: 0, downed: { secondsLeft: 12 } }) });
+      ui.handle({ t: "self", self: mockSelf({ hp: 0, downed: { secondsLeft: 12, help: true } }) });
       break;
     case "character":
     case "inventory":

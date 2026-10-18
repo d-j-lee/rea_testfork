@@ -1,6 +1,6 @@
-// Display vocabulary shared by several screens. Identity values stay as the
-// protocol sends them; these tables only map them to Korean labels.
-import type { IdentityKind, WashMethod } from "../../shared/content/schema.ts";
+// Display vocabulary shared by several screens. Identity names belong to the
+// rules (identityKindName); these tables only add client glyphs and labels.
+import type { WashMethod } from "../../shared/content/schema.ts";
 import type { SelfView } from "../../shared/types.ts";
 
 /** Marks simulated companions wherever a name is shown (chat, roster, plates). */
@@ -9,17 +9,6 @@ export const SIM_MARK = "◇";
 export function botName(name: string): string {
   return name.startsWith(SIM_MARK) ? name : `${SIM_MARK}${name}`;
 }
-
-export const IDENTITY_LABELS: Readonly<Record<IdentityKind, string>> = {
-  birth: "본래 이름",
-  descendant: "후손 행세",
-  fakeDeath: "죽음 위장",
-  monk: "출가",
-  merchant: "상인 신분",
-  exam: "과거 급제",
-  forced: "강제 세탁",
-  successor: "유지 계승",
-};
 
 export const WASH_GLYPH: Readonly<Record<WashMethod, string>> = {
   descendant: "孫",

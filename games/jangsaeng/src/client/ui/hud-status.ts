@@ -2,7 +2,8 @@
 // 천수 (lifespan) track with the 1910 goal, 의심도 gauge and rank/office.
 import { AWAKENING_YEAR, FINAL_YEAR, type SelfView } from "../../shared/types.ts";
 import { h, meter, ratio, setMeter, setStyle, setText, toggle } from "./dom.ts";
-import { IDENTITY_LABELS, lifeWarning, meritLabel, SUSPICION_BANDS } from "./labels.ts";
+import { identityKindName } from "../../shared/rules/index.ts";
+import { lifeWarning, meritLabel, SUSPICION_BANDS } from "./labels.ts";
 
 export class StatusCard {
   readonly el: HTMLElement;
@@ -60,7 +61,7 @@ export class StatusCard {
     setText(this.#name, self.name);
     const washed = self.name !== self.birthName;
     this.#nameBtn.title = washed ? `본명 ${self.birthName}` : "본명 그대로";
-    setText(this.#birth, washed ? `본명 ${self.birthName} · ${IDENTITY_LABELS[self.identityKind]}` : `본명 그대로 · ${IDENTITY_LABELS[self.identityKind]}`);
+    setText(this.#birth, washed ? `본명 ${self.birthName} · ${identityKindName(self.identityKind)}` : `본명 그대로 · ${identityKindName(self.identityKind)}`);
     setText(this.#level, self.level);
     setMeter(this.#exp, ratio(self.exp, self.expNext));
     this.#exp.root.title = `경험 ${self.exp} / ${self.expNext}`;

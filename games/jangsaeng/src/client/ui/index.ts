@@ -281,6 +281,9 @@ export function createUi(deps: UiDeps): Ui {
       return;
     }
     card?.dismiss();
+    // A new chapter ends whatever card was still on screen (the answered years result).
+    prompt.close();
+    years.close();
     const built = chapterCard(c, channel, reduced(), () => {
       card = null;
       sync();

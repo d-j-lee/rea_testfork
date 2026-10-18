@@ -636,10 +636,10 @@ html[data-touch="on"] .chat-open::after { content: none; }
 .yr-side > .yr-offer + .yr-offer { margin-top: 8px; }
 .yr-side .yr-washes { grid-template-columns: 1fr; gap: 6px; }
 .yr-side .yr-wash { padding: 8px 12px; }
-/* The new name follows the chosen wash; below the fold it rides the bottom of the view until scrolled to. */
-.yr-side > .yr-name { position: sticky; bottom: -1px; z-index: 1; grid-template-columns: auto minmax(0, 1fr); align-items: center; column-gap: 10px; max-width: none; padding: 8px 12px; border: 1px solid rgba(29, 26, 25, .22); border-radius: 3px; background: rgba(250, 245, 233, .97); box-shadow: 0 -8px 16px rgba(60, 40, 10, .12); }
-.yr-side > .yr-name .field-label { margin: 0; }
-.yr-side > .yr-name .field-hint { grid-column: 2; margin-top: 3px; }
+/* The new name sits in the wash list, right under the chosen wash (src/client/ui/years.ts renderWashes). */
+.yr-washes > .yr-name { grid-template-columns: auto minmax(0, 1fr); align-items: center; column-gap: 10px; max-width: none; margin-top: 0; padding: 8px 12px; border: 1px solid rgba(29, 26, 25, .22); border-radius: 3px; background: rgba(250, 245, 233, .97); }
+.yr-washes > .yr-name .field-label { margin: 0; }
+.yr-washes > .yr-name .field-hint { grid-column: 2; margin-top: 3px; }
 .yr-body p { font-size: 16px; line-height: 1.75; color: var(--ink-2); }
 .yr-track { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 6px; }
 .yr-token { display: grid; gap: 2px; width: 100%; padding: 8px 10px; text-align: left; border: 1.5px solid rgba(29, 26, 25, .3); border-radius: 3px; background: rgba(255, 252, 244, .5); color: var(--ink); }
@@ -1023,6 +1023,10 @@ html[data-touch="on"] .hud-skills { display: none; }
 /* --row2 clears the minimap and its region label, with room for the chat badge (.c-badge) above the row. */
 html[data-layout="compact"] { --g: 10px; --mm: 100px; --row2: 128px; }
 html[data-layout="compact"] .hud-cbar { display: block; top: calc(var(--g) + var(--sat)); left: calc(var(--g) + var(--sal)); right: calc(var(--g) + var(--sar) + var(--mm) + 8px); }
+/* The world draws under the compact bar: keep names and plates from showing through it. */
+html[data-layout="compact"] .cbar.lacquer { background: linear-gradient(180deg, rgba(36, 31, 29, .95), rgba(16, 14, 13, .93)); }
+/* On phones the touch cluster owns the bottom: errors dock under the top rows instead. */
+html[data-layout="compact"] .toast-dock { top: calc(var(--g) + var(--sat) + var(--row2) + 8px); bottom: auto; }
 .cbar { display: grid; gap: 3px; width: 100%; max-width: 340px; padding: 5px 9px 5px 10px; text-align: left; }
 .cb-row { display: flex; align-items: baseline; gap: 6px; min-width: 0; white-space: nowrap; }
 .cb-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; font: 17px/1.15 var(--f-title); font-weight: 400; color: #f8efdc; }

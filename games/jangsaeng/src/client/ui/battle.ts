@@ -98,7 +98,7 @@ export class DownedOverlay {
   readonly #count = h("span", { class: "dn-count" });
   #endsAt = 0;
   #downed = false;
-  /** Nobody can raise the player any more: the host's down timer ran out. */
+  /** Nobody can raise the player: the host's down timer ran out, or nobody is left standing to do it. */
   #alone = false;
   #wasActive = false;
   readonly #onActive: () => void;
@@ -136,7 +136,7 @@ export class DownedOverlay {
     if (!d) this.#alone = false;
     else {
       // Only the host knows whether anyone can still raise the player.
-      if (d.secondsLeft <= 0) this.#alone = true;
+      this.#alone = d.secondsLeft <= 0 || !d.help;
       this.#endsAt = now + d.secondsLeft * 1000;
     }
     this.#downed = !!d;

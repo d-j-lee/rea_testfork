@@ -571,17 +571,21 @@ export class Session {
     this.persist();
   }
 
+  /** The 사경 overlay (self view `downed`) says it; no toast, which would outlive the fall. */
   onDowned(): void {
-    const channel = this.channel;
-    // Queued downs can arrive after a lost battle already stood the player up.
-    if (!channel?.world.playerStatus(this.id)?.downed) return;
-    // Who could come to help: in a battle its other fighters, elsewhere anyone in the channel.
-    const fighters = channel?.world.battleParticipants() ?? [];
-    const helpers = fighters.includes(this.id) ? fighters : [...(channel?.sessions.keys() ?? []), ...(channel?.bots.keys() ?? [])];
-    const help = helpers.some((id) => id !== this.id && channel?.world.playerStatus(id)?.downed === null);
-    const text = help ? "사경(死境)에 빠졌다 — 동료를 기다리거나 스스로 일어서라." : "사경(死境)에 빠졌다 — 스스로 일어서라.";
-    this.send({ t: "toast", text, tone: "bad" });
     this.#markSelf();
+  }
+
+  /**
+   * Whether anyone could still raise this player: in a battle its other
+   * fighters, elsewhere anyone in the channel, who is standing.
+   */
+  #helpAvailable(): boolean {
+    const channel = this.channel;
+    if (!channel) return false;
+    const fighters = channel.world.battleParticipants();
+    const helpers = fighters.includes(this.id) ? fighters : [...channel.sessions.keys(), ...channel.bots.keys()];
+    return helpers.some((id) => id !== this.id && channel.world.playerStatus(id)?.downed === null);
   }
 
   onRevived(byName: string | null): void {
@@ -1269,8 +1273,9 @@ export class Session {
     const world = channel.world;
     const status = world.playerStatus(this.id);
     const battle = world.battleView();
+    const help = status !== null && status.downed !== null && this.#helpAvailable();
     const signature = JSON.stringify([
-      status && [Math.ceil(status.hp), Math.floor(status.energy), Math.floor(status.stamina), status.downed !== null && Math.ceil(status.downed), status.cooldowns.map((c) => Math.ceil(c * 2)), Math.ceil(status.longevityReady)],
+      status && [Math.ceil(status.hp), Math.floor(status.energy), Math.floor(status.stamina), status.downed !== null && [Math.ceil(status.downed), help], status.cooldowns.map((c) => Math.ceil(c * 2)), Math.ceil(status.longevityReady)],
       battle && [battle.timeLeft !== undefined && Math.ceil(battle.timeLeft), battle.wave, battle.boss?.hp, battle.defend?.hp, battle.morale, battle.participants],
       channel.worldEventProgress,
     ]);
@@ -1285,6 +1290,7 @@ export class Session {
       stepYear: step?.year ?? this.save.year,
       channel: channel.channelInfo(),
       objectives: this.#objectiveViews(),
+      downedHelp: help,
     };
     const event = channel.worldEventView();
     if (event) context.worldEvent = event;

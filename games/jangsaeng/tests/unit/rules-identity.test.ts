@@ -9,12 +9,14 @@ import {
   eraFactor,
   exposure,
   growSuspicion,
+  identityKindName,
   realAge,
   suggestName,
   suspicionBand,
   washBlocker,
   washCost,
   washIdentity,
+  WASH_METHODS,
 } from "../../src/shared/rules/index.ts";
 import type { PlayerSave } from "../../src/shared/types.ts";
 import { at, FIXTURE, newSave } from "./rules-fixture.ts";
@@ -187,4 +189,11 @@ test("suggestName is a deterministic Korean name that avoids past identities", (
   assert.notEqual(suggestName(save, "wash:1"), name, "a used name is skipped");
   assert.notEqual(suggestName(newSave({ seed: 4242 }), "wash:1"), name);
   assert.match(suggestName(newSave({ variant: "f" }), "x"), /^[가-힣]{3,4}$/);
+});
+
+test("an identity is listed by the name of the wash that made it", () => {
+  for (const method of Object.keys(WASH_METHODS) as (WashMethod | "forced")[]) {
+    const { name } = WASH_METHODS[method];
+    assert.ok(name.endsWith(identityKindName(method)), `${method}: ${name} / ${identityKindName(method)}`);
+  }
 });

@@ -47,18 +47,18 @@ try {
     // Offline, like the single-file demo: the only remote requests are web fonts.
     await context.route(/^https?:\/\//, (route) => route.abort());
     const page = await context.newPage();
-    const sent = [];
     const errors = [];
     page.on("console", (m) => {
       const t = m.text();
-      if (t.startsWith("send ")) sent.push(JSON.parse(t.slice(5)));
       // Blocked web-font requests are expected (see the route above).
-      else if (m.type() === "error" && !/Failed to load resource|net::ERR_/.test(t)) errors.push(t);
+      if (m.type() === "error" && !/Failed to load resource|net::ERR_/.test(t)) errors.push(t);
     });
     page.on("pageerror", (e) => errors.push(e.message));
     await page.goto(`${url}#${state}`);
     await page.waitForFunction(() => window.__ready === true);
     await page.waitForTimeout(300);
+    // Read in the page, so it reflects every input that has already resolved.
+    const sent = () => page.evaluate(() => window.__sent ?? []);
     return { page, sent, errors, close: () => context.close() };
   };
 
@@ -68,9 +68,9 @@ try {
     await t.page.keyboard.press("3"); // locked option: denied, nothing sent
     await t.page.keyboard.press("2");
     await t.page.keyboard.press("1"); // ignored: a choice is already pending
-    const choose = t.sent.find((m) => m.t === "choose");
+    const choose = (await t.sent()).find((m) => m.t === "choose");
     check("prompt: digit selects option", choose?.option === "oppose", JSON.stringify(choose));
-    check("prompt: locked option not sent", !t.sent.some((m) => m.option === "silent"));
+    check("prompt: locked option not sent", !(await t.sent()).some((m) => m.option === "silent"));
     check("prompt: no page errors", t.errors.length === 0, t.errors.join(" | "));
     await t.close();
   }
@@ -78,7 +78,7 @@ try {
     const t = await open("result");
     await t.page.keyboard.press("Enter");
     await t.page.keyboard.press("Enter");
-    check("result: Enter continues", t.sent.some((m) => m.t === "choose" && m.option === "ok"));
+    check("result: Enter continues", (await t.sent()).some((m) => m.t === "choose" && m.option === "ok"));
     await t.close();
   }
   {
@@ -87,7 +87,7 @@ try {
     await t.page.click(".yr-wash >> nth=1");
     await t.page.click(".yr-offer");
     await t.page.click('[data-action="years-confirm"]');
-    const y = t.sent.find((m) => m.t === "years");
+    const y = (await t.sent()).find((m) => m.t === "years");
     // The planner starts from the suggested plan (offering on), so the click turns it off.
     check("years: plan sent", !!y && y.activities.length === 2 && y.wash === "descendant" && y.name === "윤현" && y.offer === false, JSON.stringify(y));
     await t.close();
@@ -99,9 +99,9 @@ try {
     await t.page.keyboard.press("Escape");
     check("menu: Escape closes", (await t.page.locator(".book").count()) === 0);
     await t.page.click(".sk-item.sk-bar");
-    check("hud: quick item uses consumable", t.sent.some((m) => m.t === "action" && m.action.kind === "use"));
+    check("hud: quick item uses consumable", (await t.sent()).some((m) => m.t === "action" && m.action.kind === "use"));
     await t.page.click(".btn-demo-skip");
-    check("hud: demo skip action", t.sent.some((m) => m.t === "action" && m.action.kind === "demoSkip"));
+    check("hud: demo skip action", (await t.sent()).some((m) => m.t === "action" && m.action.kind === "demoSkip"));
     await t.close();
   }
   {
@@ -118,7 +118,7 @@ try {
     await t.page.click(".chat-open");
     await t.page.keyboard.type("안녕하시오");
     await t.page.keyboard.press("Enter");
-    check("compact: chat sends", t.sent.some((m) => m.t === "chat" && m.text === "안녕하시오"));
+    check("compact: chat sends", (await t.sent()).some((m) => m.t === "chat" && m.text === "안녕하시오"));
     check("compact: no page errors", t.errors.length === 0, t.errors.join(" | "));
     await t.close();
   }
@@ -333,7 +333,7 @@ try {
     });
     check(`${tag}: Page keys scroll the list; the cue goes at its end`, end.top > 0 && !end.cue, JSON.stringify(end));
     await t.page.keyboard.press("Enter");
-    check(`${tag}: Enter continues`, t.sent.some((m) => m.t === "choose" && m.option === "ok"));
+    check(`${tag}: Enter continues`, (await t.sent()).some((m) => m.t === "choose" && m.option === "ok"));
     check(`${tag}: no page errors`, t.errors.length === 0, t.errors.join(" | "));
     await t.close();
   }
@@ -383,21 +383,25 @@ try {
         const shown = (sel) => !!el.querySelector(sel)?.getClientRects().length;
         return { hidden: el.classList.contains("hidden"), alone: el.classList.contains("alone"), count: shown(".dn-line") ? el.querySelector(".dn-count").textContent : null, revive: shown(".dn-btn") };
       });
-    await self({ hp: 0, downed: { secondsLeft: 12 } });
+    await self({ hp: 0, downed: { secondsLeft: 12, help: true } });
     await toast("사경 뒤의 소식");
     const down = { ...(await downed()), top: await top() };
-    await self({ hp: 0, downed: { secondsLeft: 9 }, battle: undefined });
+    await self({ hp: 0, downed: { secondsLeft: 9, help: true }, battle: undefined });
     const ended = { ...(await downed()), top: await top() };
     check("downed: the overlay counts down while others can help; toasts wait", !down.hidden && !down.alone && down.count === "12" && down.top === 0, JSON.stringify(down));
     check("downed: only the host's timer decides — a battle view going away does not close the countdown", !ended.hidden && !ended.alone && ended.count === "9", JSON.stringify(ended));
     await self({});
-    await self({ hp: 0, downed: { secondsLeft: 0.3 } });
+    await self({ hp: 0, downed: { secondsLeft: 0.3, help: true } });
     await t.page.waitForTimeout(700);
     const late = await downed();
-    await self({ hp: 0, downed: { secondsLeft: 0 } });
+    await self({ hp: 0, downed: { secondsLeft: 0, help: true } });
     const expired = await downed();
     check("downed: the countdown never shows 0초 (the host's own zero is awaited)", !late.alone && late.count === "1", JSON.stringify(late));
     check("downed: the host's timer ran out — the overlay closes to the self-revive plate", expired.alone && expired.count === null && expired.revive, JSON.stringify(expired));
+    await self({});
+    await self({ hp: 0, downed: { secondsLeft: 10, help: false } });
+    const nobody = await downed();
+    check("downed: nobody standing to help — the self-revive plate at once, no countdown", nobody.alone && nobody.count === null && nobody.revive, JSON.stringify(nobody));
     await toast("사경 뒤의 다른 소식");
     const lanes = await t.page.evaluate(() => {
       const plate = document.querySelector(".downed .dn-center")?.getBoundingClientRect();
@@ -439,6 +443,20 @@ try {
     check("years (laptop): the offering switch is on screen when the planner opens", (await view(".yr-offer")) === true);
     await t.page.click(".yr-wash:not(.locked) >> nth=-1");
     check("years (laptop): the new-name field shows with the chosen wash", (await view(".yr-name:not(.hidden) input")) === true);
+    const nameSpot = () =>
+      t.page.evaluate(() => {
+        const row = document.querySelector(".yr-name");
+        const r = row.getBoundingClientRect();
+        const covered = [...document.querySelectorAll(".yr-wash")].filter((w) => {
+          const b = w.getBoundingClientRect();
+          return b.bottom > r.top + 1 && b.top < r.bottom - 1;
+        });
+        return { afterChosen: row.previousElementSibling?.classList.contains("on") ?? false, covered: covered.length };
+      });
+    const last = await nameSpot();
+    await t.page.click(".yr-wash:not(.locked) >> nth=1");
+    const second = await nameSpot();
+    check("years (laptop): the new-name field sits under the chosen wash and covers none", last.afterChosen && second.afterChosen && last.covered === 0 && second.covered === 0, JSON.stringify({ last, second }));
     await t.close();
   }
   {

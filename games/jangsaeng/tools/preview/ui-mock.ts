@@ -275,10 +275,10 @@ export const YEARS_PROMPT: PromptView = {
       { id: "hide", name: "은거", desc: "산골에 숨어 지낸다.", effect: "의심도 −15", disabled: "이번 장에서는 이미 은거했다" },
     ],
     washes: [
-      { id: "descendant", name: "후손 행세", desc: "자신의 조카·손자로 행세한다. 전 300 · 의심도 −30" },
-      { id: "fakeDeath", name: "죽음 위장", desc: "장례를 치르고 다른 고을에서 산다. 의심도 −50 · 인연 일부 끊김" },
+      { id: "descendant", name: "낙향 후 후손 행세", desc: "자신의 조카·손자로 행세한다. 전 300 · 의심도 −30" },
+      { id: "fakeDeath", name: "전사 위장", desc: "장례를 치르고 다른 고을에서 산다. 의심도 −50 · 인연 일부 끊김" },
       { id: "monk", name: "출가", desc: "법명을 받고 산사로 든다. 의심도 −40 · 관직 잃음" },
-      { id: "exam", name: "과거 급제", desc: "새 이름으로 무과에 급제한다.", disabled: "지략 25 이상 필요" },
+      { id: "exam", name: "무과 재응시", desc: "새 이름으로 무과에 급제한다.", disabled: "지략 25 이상 필요" },
     ],
     washAdvised: true,
     lifeEnd: 1861,

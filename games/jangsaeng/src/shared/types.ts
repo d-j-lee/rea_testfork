@@ -445,7 +445,8 @@ export interface SelfView {
   equipment: { weapon: string; armor: string };
   chronicle: ChronicleEntry[];
   bonds: { id: string; name: string; value: number }[];
-  downed?: { secondsLeft: number };
+  /** `help`: someone standing could still raise the player before the timer runs out. */
+  downed?: { secondsLeft: number; help: boolean };
   battle?: BattleView;
   worldEvent?: { title: string; desc: string; progress: number };
   channel: { id: string; name: string; players: number; companions: number };
