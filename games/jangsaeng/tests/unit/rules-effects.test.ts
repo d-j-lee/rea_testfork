@@ -2,8 +2,8 @@
 // condition algebra.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { Effect } from "../../src/shared/content/schema.ts";
-import { applyEffects, battleResult, evalCond, hashRoll, nationValue } from "../../src/shared/rules/index.ts";
+import type { BattleDef, Effect } from "../../src/shared/content/schema.ts";
+import { applyEffects, battleResult, evalCond, hashRoll, HOLD_VICTORY_VIRTUE, nationValue, virtueEarned } from "../../src/shared/rules/index.ts";
 import { FIXTURE, HWANGSAN, newSave } from "./rules-fixture.ts";
 
 const texts = (lines: readonly { text: string }[]) => lines.map((entry) => entry.text);
@@ -235,7 +235,7 @@ test("nested if/check effects apply in order and merge their outcomes", () => {
   assert.deepEqual(out.objectives, ["else_branch"]);
 });
 
-test("battleResult records wins and grants +2 years once for a 대전", () => {
+test("battleResult grants victory rewards once per battle; a 대전 adds +2 years", () => {
   const save = newSave();
   const first = battleResult(FIXTURE, save, HWANGSAN, true);
   assert.equal(save.lifeEnd, 1863);
@@ -243,11 +243,42 @@ test("battleResult records wins and grants +2 years once for a 대전", () => {
   assert.equal(save.points.merit, 50);
   assert.ok(texts(first.lines).includes("천수 +2년"));
   assert.equal(save.flags["renowned"], true, "a 대전 victory makes the identity renowned");
-  battleResult(FIXTURE, save, HWANGSAN, true);
+  const again = battleResult(FIXTURE, save, HWANGSAN, true);
   assert.equal(save.lifeEnd, 1863, "only the first victory extends life");
-  assert.equal(save.points.merit, 100);
+  assert.equal(save.points.merit, 50, "victory effects are a first-victory reward too");
+  assert.deepEqual(again.lines, []);
+  assert.deepEqual(save.battlesWon, ["hwangsan"]);
   battleResult(FIXTURE, save, HWANGSAN, false);
-  assert.equal(save.lifeEnd, 1862);
+  assert.equal(save.lifeEnd, 1862, "a defeat applies every time");
+  battleResult(FIXTURE, save, HWANGSAN, false);
+  assert.equal(save.lifeEnd, 1861);
+});
+
+test("winning a 방어·생존형 battle the first time grants 공덕 +30 (§5.3.2)", () => {
+  const battle = (kind: BattleDef["kind"]): BattleDef => ({
+    id: `hold_${kind}`, title: "진포 포대", site: "jinpo", radius: 10, kind, waves: [],
+    victory: [{ k: "point", point: "merit", add: 40 }], defeat: [],
+  });
+  assert.equal(HOLD_VICTORY_VIRTUE, 30);
+  for (const kind of ["defend", "survive"] as const) {
+    const save = newSave();
+    const virtue = save.points.virtue;
+    const earned = virtueEarned(save);
+    const out = battleResult(FIXTURE, save, battle(kind), true);
+    assert.equal(save.points.virtue, virtue + 30, kind);
+    assert.equal(virtueEarned(save), earned + 30, `${kind}: counts toward cumulative virtue`);
+    assert.ok(texts(out.lines).includes("지켜 낸 싸움 — 공덕 +30"), kind);
+    battleResult(FIXTURE, save, battle(kind), true);
+    assert.equal(save.points.virtue, virtue + 30, `${kind}: once per battle`);
+    battleResult(FIXTURE, save, battle(kind), false);
+    assert.equal(save.points.virtue, virtue + 30, `${kind}: never for a defeat`);
+  }
+  for (const kind of ["waves", "boss", "escape", "deck", "duel"] as const) {
+    const save = newSave();
+    const virtue = save.points.virtue;
+    battleResult(FIXTURE, save, battle(kind), true);
+    assert.equal(save.points.virtue, virtue, kind);
+  }
 });
 
 test("conditions: ranges, logic, flags, branches, items and battles", () => {

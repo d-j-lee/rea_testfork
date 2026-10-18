@@ -33,7 +33,7 @@ export {
 } from "./progression.ts";
 
 export type { EffectOutcome } from "./effects.ts";
-export { applyEffects, battleResult, evalCond, purgeRisk, purgeRiskShown } from "./effects.ts";
+export { applyEffects, battleResult, evalCond, HOLD_VICTORY_VIRTUE, purgeRisk, purgeRiskShown } from "./effects.ts";
 export { discipleGeneration, hashRoll, isRenowned, virtueEarned } from "./util.ts";
 
 export type { PurgeResolution, PurgeTerm, PurgeVerdict } from "./politics.ts";

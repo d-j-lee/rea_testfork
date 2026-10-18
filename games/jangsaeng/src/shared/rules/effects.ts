@@ -125,6 +125,8 @@ export function emptyOutcome(): EffectOutcome {
 
 const MERIT_SUBJECT_RANK: Readonly<Record<1 | 2 | 3 | 4, number>> = { 1: 14, 2: 13, 3: 12, 4: 10 };
 const MAX_DEPTH = 16;
+/** 공덕 for the first victory in a 방어·생존형 battle (GDD §5.3.2). */
+export const HOLD_VICTORY_VIRTUE = 30;
 
 /**
  * 풍향계 preview probe: the walk stops at the purge with this id and records
@@ -405,21 +407,30 @@ export function purgeRiskShown(
 }
 
 /**
- * Records a battle outcome: victory/defeat effects, battlesWon, and the 대전
- * first-victory reward (+2 lifespan years, a chronicle line, renown for this identity).
+ * Records a battle outcome. A defeat applies the defeat effects every time.
+ * Victory rewards are granted once per battle (§3.7): the first victory is
+ * recorded in battlesWon, a 대전 adds +2 lifespan years, a chronicle line and
+ * renown for this identity, a 방어·생존형 battle adds 공덕 +30 (§5.3.2), then
+ * the victory effects apply. A repeated victory changes nothing.
  */
 export function battleResult(content: ContentIndex, save: PlayerSave, battle: BattleDef, won: boolean): EffectOutcome {
   const out = emptyOutcome();
-  if (won) {
-    const first = !save.battlesWon.includes(battle.id);
-    if (first) save.battlesWon.push(battle.id);
-    if (first && battle.great) {
-      changeLife(save, 2);
-      save.flags["renowned"] = true;
-      out.lines.push(line(`대전 — ${battle.title}`, "epic"), lifeLine(2));
-      chronicle(save, `${battle.title}에서 이기다.`, "epic");
-    }
+  if (!won) {
+    applyList(content, save, battle.defeat, out, 0);
+    return out;
   }
-  applyList(content, save, won ? battle.victory : battle.defeat, out, 0);
+  if (save.battlesWon.includes(battle.id)) return out;
+  save.battlesWon.push(battle.id);
+  if (battle.great) {
+    changeLife(save, 2);
+    save.flags["renowned"] = true;
+    out.lines.push(line(`대전 — ${battle.title}`, "epic"), lifeLine(2));
+    chronicle(save, `${battle.title}에서 이기다.`, "epic");
+  }
+  if (battle.kind === "defend" || battle.kind === "survive") {
+    const gained = gainVirtue(save, HOLD_VICTORY_VIRTUE);
+    out.lines.push(line(`지켜 낸 싸움 — ${pointName("virtue")} ${signed(gained)}`, "good"));
+  }
+  applyList(content, save, battle.victory, out, 0);
   return out;
 }
