@@ -23,7 +23,7 @@ const COPY: Readonly<Record<ChapterId, { highlight: string; tags?: readonly stri
   ch02: { highlight: "진포의 화통과 황산대첩. 최영과 이성계 사이에서 이름을 쌓는다." },
   ch03: { highlight: "회군의 갈림길. 새 왕조의 개국공신 책록을 노린다.", tags: ["숙청 판정"] },
   ch04: { highlight: "왕자의 난 속에서 살아남고, 처음으로 신분을 바꾼다.", tags: ["신분 세탁"] },
-  ch05: { highlight: "대마도 정벌과 4군 6진. 신기전이 손에 들어온다." },
+  ch05: { highlight: "쓰시마 정벌(기해동정)과 4군 6진. 신기전이 손에 들어온다." },
   ch06: { highlight: "계유정난. 가장 높은 숙청 위험 속에서 편을 고른다.", tags: ["숙청 판정"] },
   ch07: { highlight: "사화가 휩쓰는 백 년을 세월 카드로 건넌다." },
   ch08: { highlight: "녹둔도에서 이순신을 만나고, 다가오는 전쟁을 대비한다." },
@@ -58,6 +58,21 @@ export function chapterMeta(id: ChapterId): ChapterMeta {
 
 export function allChapters(): ChapterMeta[] {
   return CHAPTER_IDS.map(chapterMeta);
+}
+
+/** The historical 대전 the pitch screen names (presenter choice, by battle id). */
+export const PITCH_BATTLES: readonly string[] = ["ch02_hwangsan", "b_haengju", "b_myeongnyang", "b_namhan", "b_jeongjok"];
+
+/**
+ * Titles of the given 대전 battles, in the order given. The names come from
+ * the content registry (which owns battle titles: 황산대첩, 남한산성 농성 …);
+ * an id that is not a 대전 there is left out.
+ */
+export function greatBattleTitles(ids: readonly string[]): string[] {
+  const titles = new Map<string, string>();
+  for (const id of CHAPTER_IDS)
+    for (const battle of CHAPTERS[id].battles) if (battle.great) titles.set(battle.id, battle.title);
+  return ids.flatMap((id) => titles.get(id) ?? []);
 }
 
 export function chapterNumber(order: number): string {
