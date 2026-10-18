@@ -1,6 +1,7 @@
 // 도움말: controls for keyboard/mouse, touch and gamepad, plus key concepts.
-// Skills, 일섬 and interact fire once per press (Input ignores key repeat);
-// attack, bow and dodge act while held.
+// Dodge, skills, 일섬 and interact fire once per press (Input ignores key
+// repeat; the sim rolls once per dodge press); attack repeats while held and
+// the bow draws while held, shooting on release.
 import { NATION_KEYS, NATION_NAMES } from "../../../shared/content/schema.ts";
 import { ALL_BRANCHES } from "../chapters.ts";
 import { h } from "../dom.ts";
@@ -41,7 +42,8 @@ const CONCEPTS: readonly [string, string][] = [
   ["의심도", "늙지 않는 얼굴이 부르는 의심. 높아지면 세월이 흐를 때 신분을 바꾸자."],
   ["풍향계", "선택지 옆의 숙청 위험(0–100). 지략이 낮으면 ±10 오차가 있다."],
   ["사경", "쓰러진 상태. 동료가 일으켜 세우거나, 천수 1년을 써서 스스로 일어난다."],
-  ["국운 · 분기", `${NATION_KEYS.map((key) => NATION_NAMES[key]).join("·")}과 ${ALL_BRANCHES} 분기가 1910년의 결말을 정한다.`],
+  // The particle follows 지표, not the data-built list, so any meter order reads right.
+  ["국운 · 분기", `국운 지표(${NATION_KEYS.map((key) => NATION_NAMES[key]).join("·")})와 ${ALL_BRANCHES} 분기가 1910년의 결말을 정한다.`],
   ["◇ 표시", "시뮬레이션 동료. 오프라인에서 마당을 채우는 컴퓨터 동료다."],
 ];
 

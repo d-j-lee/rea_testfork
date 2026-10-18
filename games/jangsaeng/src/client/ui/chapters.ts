@@ -1,4 +1,4 @@
-// Chapter metadata for the demo-mode chapter select and the pitch screen.
+// Chapter metadata for the demo-mode chapter select, the title and the pitch screen.
 // Titles, years, levels, montage, 대전 and the branches a chapter decides
 // come from the content registry and the rules; the one-line highlights and
 // extra tags are presenter copy owned by the UI.
@@ -79,6 +79,18 @@ export function chapterMeta(id: ChapterId): ChapterMeta {
 
 export function allChapters(): ChapterMeta[] {
   return CHAPTER_IDS.map(chapterMeta);
+}
+
+/**
+ * The one life the chapters tell: how many there are and the years from the
+ * first chapter's start to the last chapter's end (the title and the pitch
+ * name these).
+ */
+export function chapterArc(chapters: readonly ChapterMeta[] = allChapters()): { count: number; from: number; to: number } {
+  const first = chapters[0];
+  const last = chapters[chapters.length - 1];
+  if (!first || !last) throw new Error("the content registry has no chapters");
+  return { count: chapters.length, from: first.years[0], to: last.years[1] };
 }
 
 /** The historical 대전 the pitch screen names (presenter choice, by battle id). */

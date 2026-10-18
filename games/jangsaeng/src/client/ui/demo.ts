@@ -1,4 +1,4 @@
-// Presenter mode: jump into any of the 16 chapters with a preset character.
+// Presenter mode: jump into any chapter with a preset character.
 import type { ChapterId } from "../../shared/content/schema.ts";
 import type { DemoPath } from "../../shared/types.ts";
 import type { AudioEngine } from "../audio/types.ts";
