@@ -1,8 +1,8 @@
-// Passage of years: tokens, activities, small events, salary, promotion,
-// nation carry-over, chapter reset, washes, offering, grace and successor.
+// Passage of years (GDD §5.7): tokens, the fixed processing order,
+// activities, small events, carry-over, counters, inquiry, forced wash, gear.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { ChapterId } from "../../src/shared/content/schema.ts";
+import { CHAPTER_IDS, type ChapterId } from "../../src/shared/content/schema.ts";
 import {
   advanceStepYear,
   advanceYears,
@@ -11,178 +11,256 @@ import {
   smallEventAt,
   tokensBetween,
   yearsPlan,
+  type YearsChoice,
 } from "../../src/shared/rules/index.ts";
 import type { PlayerSave } from "../../src/shared/types.ts";
 import { at, FIXTURE, newSave } from "./rules-fixture.ts";
 
-/** A seed whose passage fromYear → next rolls no small events. */
-function quietSeed(fromYear: number, next: ChapterId, tokens: number): number {
+const texts = (lines: readonly { text: string }[]) => lines.map((entry) => entry.text);
+
+/** A seed whose tokens leaving `chapter` roll no small events. */
+function quietSeed(chapter: ChapterId, tokens = 5): number {
   for (let seed = 1; ; seed++) {
     let quiet = true;
-    for (let index = 0; index < tokens; index++) if (smallEventAt(seed, fromYear, next, index)) quiet = false;
+    for (let index = 0; index < tokens; index++) if (smallEventAt(seed, chapter, index)) quiet = false;
     if (quiet) return seed;
   }
 }
 
-/** A save at `chapter`/`year` with a fresh identity, so growth is negligible. */
-function saveAt(chapter: ChapterId, year: number, next: ChapterId, tokens: number): PlayerSave {
-  const save = at(newSave({ seed: quietSeed(year, next, tokens) }), chapter, year);
-  save.identity = { kind: "descendant", startYear: year, startAge: Math.round(apparentAge(year)) };
+/** A save at the end of `chapter` with a fresh identity (negligible growth) and quiet events. */
+function ending(chapter: ChapterId, year?: number): PlayerSave {
+  const save = at(newSave({ seed: quietSeed(chapter) }), chapter, year ?? FIXTURE.chapters[chapter].years[1]);
+  save.identity = { kind: "descendant", startYear: save.year, startAge: Math.round(apparentAge(save.year)) };
   return save;
 }
 
-const texts = (lines: readonly { text: string }[]) => lines.map((entry) => entry.text);
+const go = (save: PlayerSave, next: ChapterId, choice: Partial<YearsChoice> = {}) =>
+  texts(advanceYears(FIXTURE, save, next, { activities: [], offer: false, ...choice }));
 
-test("tokens = max(1, ceil(years / 10))", () => {
-  assert.equal(tokensBetween(1393, 1419), 3);
-  assert.equal(tokensBetween(1418, 1419), 1);
-  assert.equal(tokensBetween(1419, 1419), 1);
-  assert.equal(tokensBetween(1659, 1776), 12);
-  const save = at(newSave(), "ch04", 1393);
-  assert.equal(yearsPlan(FIXTURE, save, "ch05").tokens, 3);
-  assert.equal(yearsPlan(FIXTURE, save, "ch05").toYear, 1419);
+test("tokens = clamp(ceil((next start − current start) / 15), 1, 5), 37 in a full run", () => {
+  assert.equal(tokensBetween(1361, 1365), 1);
+  assert.equal(tokensBetween(1469, 1575), 5);
+  const counts = CHAPTER_IDS.slice(0, -1).map((id, index) => {
+    const next = CHAPTER_IDS[index + 1] as ChapterId;
+    return yearsPlan(FIXTURE, at(newSave(), id), next).tokens;
+  });
+  assert.deepEqual(counts, [1, 2, 1, 2, 3, 2, 5, 2, 1, 1, 4, 5, 5, 2, 1]);
+  assert.equal(counts.reduce((sum, value) => sum + value, 0), 37);
 });
 
-test("martial, study and commerce tokens", () => {
-  const save = saveAt("ch04", 1393, "ch05", 3);
+test("train, study and commerce (백가 ≥ 60 ×1.2)", () => {
+  const save = ending("ch04");
   save.stats.tact = 10;
-  const lines = advanceYears(FIXTURE, save, "ch05", { activities: ["martial", "study", "commerce"], offer: false });
+  const lines = go(save, "ch05", { activities: ["train", "commerce"] });
   assert.equal(save.freePoints, 2);
-  assert.equal(save.stats.wit, 7);
-  assert.equal(save.points.money, 50 + Math.round(400 * (1 + 10 / 50)));
+  assert.equal(save.points.money, 50 + 480);
   assert.equal(save.points.fame, 1);
-  assert.equal(texts(lines)[0], "1393년 → 1419년 · 세월이 흐른다 (3토큰)");
-  assert.ok(texts(lines).some((text) => text.includes("치부") && text.includes("전 +480")));
+  assert.equal(lines[0], "1418년 → 1419년 · 세월이 흐른다 (2토큰)");
+  const rich = ending("ch04");
+  rich.bonds["baek_house"] = 60;
+  go(rich, "ch05", { activities: ["study", "commerce"] });
+  assert.equal(rich.stats.wit, 7);
+  assert.equal(rich.points.money, 50 + Math.round(400 * 1.1 * 1.2));
 });
 
-test("mountain retreat: +1 year, −8 suspicion, bonds −5% per token", () => {
-  const save = saveAt("ch04", 1393, "ch05", 3);
+test("seclusion: +1 year, −12 suspicion, bonds ×0.95 per token", () => {
+  const save = ending("ch05");
   save.suspicion = 50;
-  save.bonds["monk"] = 40;
-  advanceYears(FIXTURE, save, "ch05", { activities: ["mountain", "mountain", "mountain"], offer: false });
+  save.bonds["kim_jongseo"] = 40;
+  go(save, "ch06", { activities: ["seclusion", "seclusion", "seclusion"] });
   assert.equal(save.lifeEnd, 1864);
-  assert.equal(save.record.lifeGained, 3);
-  assert.equal(save.bonds["monk"], Math.round(Math.round(Math.round(40 * 0.95) * 0.95) * 0.95));
-  // −24 from retreats, then 26 years of (small) growth for a fresh identity.
-  assert.ok(save.suspicion >= 26 && save.suspicion < 40, `got ${save.suspicion}`);
+  assert.equal(save.bonds["kim_jongseo"], 34);
+  assert.ok(save.suspicion >= 14 && save.suspicion < 16, `50 − 36 + a little growth, got ${save.suspicion}`);
 });
 
-test("office needs a rank; it pays merit, money and ruling favor", () => {
-  const idle = saveAt("ch04", 1393, "ch05", 3);
-  const lines = advanceYears(FIXTURE, idle, "ch05", { activities: ["office", "office", "office"], offer: false });
-  assert.equal(idle.freePoints, 6, "falls back to 무예 수련");
-  assert.ok(texts(lines).some((text) => text.includes("관직 근무 불가")));
-
-  const official = saveAt("ch04", 1393, "ch05", 3);
+test("office needs a rank; it pays merit 40, money 20×rank and ruling favor", () => {
+  const idle = ending("ch04");
+  const lines = go(idle, "ch05", { activities: ["office", "office"] });
+  assert.equal(idle.freePoints, 4, "falls back to 무예 수련");
+  assert.ok(lines.some((text) => text.includes("관직 근무 불가")));
+  const official = ending("ch04");
   official.rank = 2;
-  advanceYears(FIXTURE, official, "ch05", { activities: ["office", "office", "office"], offer: false });
-  assert.equal(official.points.merit, 60);
-  assert.equal(official.favor["bangwon"], 15, "ruling faction of the chapter being left");
-  assert.equal(official.rank, 2, "merit 60 < 75 for 정8품");
-  assert.equal(official.points.money, 50 + 3 * 80 + 2 * 40, "duty pay plus salary");
+  go(official, "ch05", { activities: ["office", "office"] });
+  assert.equal(official.points.merit, 80);
+  assert.equal(official.favor["court_ch04"], 10, "favor goes to the court being left");
+  assert.equal(official.favor["court_ch05"], 5, "then half of it carries to the successor court");
+  assert.equal(official.points.money, 50 + 2 * 40 + 2 * 40, "salary first, then duty pay");
 });
 
-test("charity, network and disciples tokens", () => {
-  const save = saveAt("ch04", 1393, "ch05", 3);
+test("charity, network and disciple tokens", () => {
+  const save = ending("ch04");
   save.points.money = 200;
-  const lines = advanceYears(FIXTURE, save, "ch05", { activities: ["charity", "charity", "network"], offer: false });
+  go(save, "ch05", { activities: ["charity", "charity"] });
   assert.equal(save.points.virtue, 60, "the second charity is unaffordable");
   assert.equal(save.points.money, 50);
-  assert.ok(texts(lines).some((text) => text.includes("선행·구휼 불가")));
-  const families = Object.entries(save.bonds).filter(([, value]) => value === 10);
-  assert.equal(families.length, 1, "network adds +10 to one family");
 
-  const teacher = saveAt("ch04", 1393, "ch05", 3);
-  advanceYears(FIXTURE, teacher, "ch05", { activities: ["disciples", "disciples", "disciples"], offer: false });
-  assert.equal(teacher.bonds["disciple"], 30);
-  assert.equal(teacher.flags["disciples"], 3);
+  const social = ending("ch05");
+  social.bonds = { kim_jongseo: 30, jang_yeongsil: 10, han_house: 5 };
+  go(social, "ch06", { activities: ["network"] });
+  assert.deepEqual(social.bonds, { kim_jongseo: 35, jang_yeongsil: 10, han_house: 13, baek_house: 8, hong_house: 8 });
+
+  const teacher = ending("ch05");
+  const blocked = go(teacher, "ch06", { activities: ["disciple"] });
+  assert.ok(blocked.some((text) => text.includes("유파를 세운 뒤에")));
+  const school = ending("ch05");
+  school.flags["school"] = true;
+  go(school, "ch06", { activities: ["disciple", "disciple", "disciple"] });
+  assert.equal(school.flags["discipleXp"], 3);
 });
 
-test("about 30% of tokens roll a small event resolved by a stat check", () => {
+test("small events: ~30% of tokens, ids yrs:<chapter>:<i>, kind = roll mod 10", () => {
   let events = 0;
-  for (let seed = 1; seed <= 400; seed++) if (smallEventAt(seed, 1393, "ch05", 0)) events++;
-  assert.ok(events > 90 && events < 150, `≈30% of 400, got ${events}`);
-  let seed = 1;
-  while (!smallEventAt(seed, 1393, "ch05", 0)) seed++;
-  const save = at(newSave({ seed }), "ch04", 1393);
-  const event = smallEventAt(seed, 1393, "ch05", 0);
-  const lines = texts(advanceYears(FIXTURE, save, "ch05", { activities: ["martial", "martial", "martial"], offer: false }));
-  assert.ok(lines.some((text) => text.includes(event!.intro)));
-  assert.ok(lines.some((text) => text.startsWith(`${event!.name} 판정`)));
+  const kinds = new Set<number>();
+  for (let seed = 1; seed <= 600; seed++) {
+    const event = smallEventAt(seed, "ch07", 0);
+    if (event) {
+      events++;
+      kinds.add(event.kind);
+    }
+  }
+  assert.ok(events > 140 && events < 220, `≈30% of 600, got ${events}`);
+  assert.equal(kinds.size, 10);
 });
 
-test("transition is deterministic for a seed", () => {
-  const one = at(newSave({ seed: 77 }), "ch04", 1393);
-  const two = JSON.parse(JSON.stringify(one)) as PlayerSave;
-  const choice = { activities: ["commerce", "network", "mountain"], offer: true };
-  assert.deepEqual(advanceYears(FIXTURE, one, "ch05", choice), advanceYears(FIXTURE, two, "ch05", choice));
-  assert.deepEqual(one, two);
+/** A seed whose first token leaving `chapter` rolls event `kind` and later tokens are quiet. */
+function seedFor(chapter: ChapterId, kind: number, tokens: number): number {
+  for (let seed = 1; ; seed++) {
+    if (smallEventAt(seed, chapter, 0)?.kind !== kind) continue;
+    let quiet = true;
+    for (let index = 1; index < tokens; index++) if (smallEventAt(seed, chapter, index)) quiet = false;
+    if (quiet) return seed;
+  }
+}
+
+test("small event effects: plague, portrait, old friend, ginseng, procession", () => {
+  const run = (kind: number, activity: string, setup?: (save: PlayerSave) => void) => {
+    const save = at(newSave({ seed: seedFor("ch04", kind, 2) }), "ch04", 1418);
+    save.identity = { kind: "descendant", startYear: 1418, startAge: Math.round(apparentAge(1418)) };
+    setup?.(save);
+    const lines = go(save, "ch05", { activities: [activity, "train"] });
+    return { save, lines };
+  };
+  assert.equal(run(0, "train").save.lifeEnd, 1860, "역병: 천수 −1");
+  const nursed = run(0, "charity", (save) => { save.points.money = 500; });
+  assert.equal(nursed.save.lifeEnd, 1861);
+  assert.equal(nursed.save.points.virtue, 90, "구휼 중의 역병: 공덕 +30 instead");
+  assert.ok(run(5, "train").save.suspicion >= 10, "화원의 초상화: 의심도 +10");
+  assert.equal(run(6, "train").save.bonds["han_house"], 10);
+  assert.equal(run(8, "seclusion").save.inventory["ginseng"], 1, "산삼 while in the mountains");
+  assert.equal(run(8, "study").save.points.money, 100, "elsewhere: 전 +50");
+  const escort = run(9, "train");
+  assert.equal(escort.save.points.merit, 20);
+  assert.equal(escort.save.favor["court_ch04"], 3);
+  assert.ok(escort.lines.some((text) => text.startsWith("왕실 행차 호위")));
 });
 
-test("salary, 공신전 and promotion under the outgoing regime", () => {
-  const save = saveAt("ch04", 1418, "ch05", 1);
+test("processing order: salary before activities, wash before the years, vouch and offering", () => {
+  const save = ending("ch04", 1413);
+  save.rank = 2;
+  save.points.money = 100;
+  save.flags["vouch"] = true;
+  save.points.virtue = 300;
+  save.suspicion = 50;
+  const lines = go(save, "ch05", { activities: ["charity", "train"], wash: "descendant", newName: "이덕수", offer: true });
+  assert.equal(save.points.virtue, 60, "salary 80 made the charity affordable; 300 + 60 − 300 offered");
+  assert.equal(save.identity.startYear, 1413, "the wash happens before the years pass");
+  assert.equal(save.flags["tutorialWashUsed"], true, "the ch04 tutorial wash was free");
+  assert.equal(save.suspicion, 0, "10 after the wash − 10 for the vouch; a fresh face does not grow for years");
+  assert.equal(save.offeredThisChapter, 0, "counters reset after the offering");
+  assert.equal(save.lifeEnd, 1864);
+  const order = ["녹봉", "1번째 세월", "신분 세탁", "동료 보증", "노인성 제단", "의심도", "국운 이월"].map((prefix) =>
+    lines.findIndex((text) => text.startsWith(prefix)));
+  assert.ok(order.every((index, position) => index > 0 && (position === 0 || index > order[position - 1]!)), `order ${order.join(",")}`);
+});
+
+test("노인성 감응 when leaving ch03", () => {
+  const save = ending("ch03");
+  save.flags["virtueEarned"] = 600;
+  const lines = go(save, "ch04", { activities: ["train"] });
+  assert.equal(save.lifeEnd, 1867);
+  assert.ok(lines.some((text) => text.startsWith("노인성 감응 — 천수 +6년")));
+});
+
+test("salary: 40×rank, none in exile or after a dismissal; promotion under the outgoing court", () => {
+  const save = ending("ch04");
   save.rank = 5;
-  save.meritSubject = 2;
   save.points.merit = 150;
-  const lines = advanceYears(FIXTURE, save, "ch05", { activities: ["martial"], offer: false });
-  assert.equal(save.points.money, 50 + 5 * 40 + 200);
-  assert.ok(texts(lines).includes("녹봉 400전 (공신전 200전 포함)"));
+  go(save, "ch05", { activities: ["train", "train"] });
+  assert.equal(save.points.money, 50 + 200);
   assert.equal(save.rank, 6);
 
-  const senior = saveAt("ch04", 1418, "ch05", 1);
-  senior.rank = 13;
-  senior.points.merit = 400;
-  advanceYears(FIXTURE, senior, "ch05", { activities: ["martial"], offer: false });
-  assert.equal(senior.rank, 13, "당상관 needs ruling favor ≥ 30");
-  const favored = saveAt("ch04", 1418, "ch05", 1);
-  favored.rank = 13;
-  favored.points.merit = 350;
-  favored.favor["bangwon"] = 30;
-  advanceYears(FIXTURE, favored, "ch05", { activities: ["martial"], offer: false });
-  assert.equal(favored.rank, 14);
+  const exiled = ending("ch04");
+  exiled.rank = 5;
+  exiled.exile = "jeju";
+  go(exiled, "ch05", { activities: ["train", "train"] });
+  assert.equal(exiled.points.money, 50);
 
-  const dismissed = saveAt("ch04", 1418, "ch05", 1);
+  const dismissed = ending("ch04");
   dismissed.rank = 5;
   dismissed.flags["salarySuspended"] = true;
-  advanceYears(FIXTURE, dismissed, "ch05", { activities: ["martial"], offer: false });
+  go(dismissed, "ch05", { activities: ["train", "train"] });
   assert.equal(dismissed.points.money, 50);
   assert.equal(dismissed.flags["salarySuspended"], undefined);
+
+  const senior = ending("ch04");
+  senior.rank = 13;
+  senior.points.merit = 350;
+  go(senior, "ch05", { activities: ["train", "train"] });
+  assert.equal(senior.rank, 13, "당상관 needs court favor ≥ 30");
+  const favored = ending("ch04");
+  favored.rank = 13;
+  favored.points.merit = 350;
+  favored.favor["court_ch04"] = 30;
+  go(favored, "ch05", { activities: ["train", "train"] });
+  assert.equal(favored.rank, 14);
 });
 
-test("nation carry-over: hist[next] + clamp(0.8·(cur − hist[cur]), ±20) + long flags", () => {
-  const save = saveAt("ch04", 1418, "ch05", 1);
-  save.nation = { defense: 60, finance: 0, people: 40, diplomacy: 100, reform: 30 };
-  save.longFlags["hopae"] = { key: "defense", add: 2 };
-  save.longFlags["hangul"] = { key: "people", add: 2 };
+test("carry-over §5.6.2: hist[next] + clamp(0.8·(end − hist − F), ±20) + F", () => {
+  const save = ending("ch04");
+  save.nation = { defense: 60, finance: 0, people: 42, diplomacy: 100, reform: 44 };
+  save.longFlags["sabyeong_reform"] = { key: "defense", add: 2 };
+  save.longFlags["hangul_teach"] = { key: "people", add: 2 };
   assert.deepEqual(carryNation(FIXTURE, save, "ch05"), {
-    defense: 55 + 12 + 2,
+    defense: 55 + Math.round(0.8 * (60 - 50 - 2)) + 2,
     finance: 50 - 20,
     people: 50 + 0 + 2,
     diplomacy: 50 + 20,
-    reform: 45 + Math.round(-1.6),
+    reform: Math.round(55 - 0.8),
   });
-  advanceYears(FIXTURE, save, "ch05", { activities: ["martial"], offer: false });
-  assert.deepEqual(save.nation, { defense: 69, finance: 30, people: 52, diplomacy: 70, reform: 43 });
+  // A long flag is a fixed bonus: carried twice it never compounds.
+  const flagged = ending("ch04");
+  flagged.nation = { ...FIXTURE.chapters.ch04.hist };
+  flagged.longFlags["sabyeong_reform"] = { key: "defense", add: 2 };
+  flagged.nation.defense += 2;
+  go(flagged, "ch05", { activities: ["train", "train"] });
+  assert.equal(flagged.nation.defense, 57);
+  flagged.identity = { kind: "descendant", startYear: flagged.year, startAge: Math.round(apparentAge(flagged.year)) };
+  flagged.seed = quietSeed("ch05");
+  go(flagged, "ch06", { activities: ["train", "train", "train"] });
+  assert.equal(flagged.nation.defense, 52, "hist 50 + 2, not more");
 
-  const late = saveAt("ch13", 1862, "ch14", 1);
+  const late = ending("ch13");
   late.infiltration = 5;
-  advanceYears(FIXTURE, late, "ch14", { activities: ["martial"], offer: false });
+  go(late, "ch14", { activities: ["train"] });
   assert.equal(late.infiltration, 5, "infiltration carries from CH14 on");
-  const early = saveAt("ch04", 1418, "ch05", 1);
+  const early = ending("ch04");
   early.infiltration = 5;
-  advanceYears(FIXTURE, early, "ch05", { activities: ["martial"], offer: false });
+  go(early, "ch05", { activities: ["train"] });
   assert.equal(early.infiltration, 0, "no infiltration before CH14");
 });
 
-test("chapter counters reset and the year jumps to the next chapter", () => {
-  const save = saveAt("ch04", 1418, "ch05", 1);
+test("chapter counters reset (incl. aligned = null and per-chapter flags)", () => {
+  const save = ending("ch04");
   save.step = 2;
   save.objectives = { o1: 3 };
   save.longevityUses = 2;
   save.offeredThisChapter = 5;
   save.position = { x: 10, y: 20 };
+  save.aligned = "bangwon";
+  save.flags["freeReviveUsed"] = true;
+  save.flags["escaped"] = true;
   save.exile = "jeju";
-  advanceYears(FIXTURE, save, "ch05", { activities: ["martial"], offer: false });
+  go(save, "ch05", { activities: ["train"] });
   assert.equal(save.chapter, "ch05");
   assert.equal(save.year, 1419);
   assert.equal(save.step, 0);
@@ -190,130 +268,121 @@ test("chapter counters reset and the year jumps to the next chapter", () => {
   assert.equal(save.longevityUses, 0);
   assert.equal(save.offeredThisChapter, 0);
   assert.equal(save.position, undefined);
+  assert.equal(save.aligned, null);
+  assert.equal(save.flags["freeReviveUsed"], undefined);
+  assert.equal(save.flags["escaped"], undefined);
   assert.equal(save.exile, "jeju", "the session starts the chapter at the exile site");
 });
 
-test("successor factions inherit half the favor; a sole heir inherits alignment", () => {
-  const save = saveAt("ch02", 1387, "ch03", 1);
-  save.favor["yi"] = 40;
-  save.aligned = "yi";
-  advanceYears(FIXTURE, save, "ch03", { activities: ["martial"], offer: false });
-  assert.equal(save.favor["founders"], 20);
-  assert.equal(save.aligned, "founders");
-  const next = saveAt("ch03", 1392, "ch04", 1);
-  next.favor["founders"] = 50;
-  next.aligned = "founders";
-  advanceYears(FIXTURE, next, "ch04", { activities: ["martial"], offer: false });
-  assert.equal(next.favor["jeong"], 25);
-  assert.equal(next.favor["bangwon"], 25);
-  assert.equal(next.aligned, "founders", "two heirs: the choice is the player's");
+test("successor factions inherit half the favor", () => {
+  const save = ending("ch03");
+  save.favor = { yi: 40, radical: 30, court_goryeo: 20 };
+  go(save, "ch04", { activities: ["train"] });
+  assert.equal(save.favor["bangwon"], 20);
+  assert.equal(save.favor["jeongdojeon"], 15);
+  assert.equal(save.favor["court_ch04"], 10);
+});
+
+test("suspicion 70–89 at a transition flags an inquiry; ≥ 90 forces a wash", () => {
+  const watched = ending("ch05");
+  watched.suspicion = 75;
+  const lines = go(watched, "ch06", { activities: ["train"] });
+  assert.equal(watched.flags["inquiry"], true);
+  assert.ok(lines.some((text) => text.startsWith("사헌부")));
+
+  const exposed = ending("ch05");
+  exposed.suspicion = 95;
+  exposed.points.money = 1000;
+  exposed.bonds["kim_jongseo"] = 60;
+  go(exposed, "ch06", { activities: ["train", "train", "train"] });
+  assert.equal(exposed.identity.kind, "forced");
+  assert.equal(exposed.points.money, 300);
+  assert.equal(exposed.rank, 0);
+  assert.equal(exposed.lifeEnd, 1859);
+  assert.equal(exposed.bonds["kim_jongseo"], 30);
+  assert.equal(exposed.suspicion, 0);
+  assert.equal(exposed.flags["inquiry"], undefined);
+});
+
+test("offering and the last grace (next chapter from 1776)", () => {
+  const save = ending("ch12");
+  save.lifeEnd = 1850;
+  save.points.virtue = 350;
+  save.points.fame = 30;
+  assert.equal(yearsPlan(FIXTURE, save, "ch13").canOffer, 13);
+  const lines = go(save, "ch13", { activities: ["train"], offer: true });
+  assert.equal(save.lifeEnd, 1863);
+  assert.equal(save.graceUsed, true);
+  assert.equal(save.points.virtue, 0, "grace consumes all remaining virtue");
+  assert.equal(save.points.fame, 20);
+  assert.ok(lines.some((text) => text.startsWith("노인성의 마지막 은혜")));
+
+  const before = ending("ch11");
+  before.lifeEnd = 1850;
+  before.points.virtue = 300;
+  assert.equal(yearsPlan(FIXTURE, before, "ch12").canOffer, 3, "ch12 starts 1659: no grace yet");
+});
+
+test("passing lifeEnd hands the run to a successor", () => {
+  const save = ending("ch04");
+  save.lifeEnd = 1418;
+  save.rank = 9;
+  const lines = go(save, "ch05", { activities: ["train"] });
+  assert.equal(save.identity.kind, "successor");
+  assert.equal(save.lifeEnd, 1479);
+  assert.equal(save.rank, 4);
+  assert.ok(lines.some((text) => text.startsWith("천수가 다했다")));
+  const suspicion = save.suspicion;
+  advanceStepYear(FIXTURE, save, 1450);
+  assert.equal(save.suspicion, suspicion, "a successor ages honestly");
+});
+
+test("era gear (§5.9) is granted when better than what is equipped", () => {
+  const save = ending("ch08");
+  const lines = go(save, "ch09", { activities: ["train"] });
+  assert.deepEqual(save.equipment, { weapon: "ssangsudo", armor: "gyeongbeongap" });
+  assert.equal(save.inventory["ssangsudo"], 1);
+  assert.ok(lines.some((text) => text.startsWith("시대 지급품")));
+  const strong = ending("ch01");
+  strong.inventory["empire_sabre"] = 1;
+  strong.equipment.weapon = "empire_sabre";
+  go(strong, "ch02", { activities: ["train"] });
+  assert.equal(strong.equipment.weapon, "empire_sabre", "never downgrades");
 });
 
 test("yearsPlan lists activities, washes, advice and offering", () => {
-  const quietChapter = at(newSave(), "ch04", 1418);
-  const plan = yearsPlan(FIXTURE, quietChapter, "ch05");
+  const save = at(newSave(), "ch04", 1418);
+  const plan = yearsPlan(FIXTURE, save, "ch05");
   assert.equal(plan.type, "years");
   assert.deepEqual(plan.activities.map((activity) => activity.id), [
-    "martial", "mountain", "commerce", "office", "study", "charity", "network", "disciples",
+    "train", "seclusion", "commerce", "office", "study", "charity", "network", "disciple",
   ]);
   assert.equal(plan.activities.find((activity) => activity.id === "office")?.disabled, "관직이 없다");
   assert.ok(plan.activities.find((activity) => activity.id === "charity")?.disabled);
-  assert.deepEqual(plan.washes.map((wash) => wash.id), ["descendant", "monk", "merchant", "exam"], "no 전사 위장 without a war");
-  assert.ok(plan.washes.find((wash) => wash.id === "descendant")?.disabled?.includes("300"));
-  assert.equal(plan.washes.find((wash) => wash.id === "monk")?.disabled, undefined);
+  assert.ok(plan.activities.find((activity) => activity.id === "disciple")?.disabled);
+  assert.deepEqual(plan.washes.map((wash) => wash.id), ["descendant", "monk", "merchant", "exam"], "ch04 is not a war chapter");
+  assert.equal(plan.washes.find((wash) => wash.id === "descendant")?.disabled, undefined, "the tutorial wash is free");
+  assert.ok(plan.washes.find((wash) => wash.id === "descendant")?.desc.startsWith("비용 면제"));
   assert.equal(plan.washAdvised, false);
   assert.equal(plan.canOffer, 0);
 
   const war = at(newSave(), "ch02", 1387);
-  war.points.money = 5000;
   war.points.virtue = 820;
   war.suspicion = 61;
   const warPlan = yearsPlan(FIXTURE, war, "ch03");
   assert.deepEqual(warPlan.washes.map((wash) => wash.id), ["descendant", "fakeDeath", "monk", "merchant", "exam"]);
-  assert.equal(warPlan.washes.find((wash) => wash.id === "exam")?.disabled?.includes("1402"), true);
+  assert.ok(warPlan.washes.find((wash) => wash.id === "exam")?.disabled?.includes("1402"));
+  assert.ok(warPlan.washes.find((wash) => wash.id === "descendant")?.disabled?.includes("300"));
   assert.equal(warPlan.washAdvised, true);
   assert.equal(warPlan.canOffer, 5);
-  assert.equal(warPlan.virtue, 820);
 });
 
-test("a chosen wash happens after the transition; an unaffordable one is refused", () => {
-  const save = saveAt("ch04", 1418, "ch05", 1);
-  save.points.money = 1000;
-  save.suspicion = 70;
-  const lines = advanceYears(FIXTURE, save, "ch05", { activities: ["martial"], wash: "exam", newName: "윤무영", offer: false });
-  assert.equal(save.name, "윤무영");
-  assert.equal(save.identity.kind, "exam");
-  assert.equal(save.identity.startYear, 1419);
-  assert.equal(save.rank, 1);
-  assert.equal(save.suspicion, 10);
-  assert.ok(texts(lines).some((text) => text.includes("윤무영")));
-
-  const poor = saveAt("ch04", 1418, "ch05", 1);
-  const refused = advanceYears(FIXTURE, poor, "ch05", { activities: ["martial"], wash: "merchant", offer: false });
-  assert.equal(poor.name, "강휘");
-  assert.ok(texts(refused).some((text) => text.startsWith("신분 세탁 불가")));
-});
-
-test("exposure at a transition forces a wash", () => {
-  const save = saveAt("ch04", 1418, "ch05", 1);
-  save.suspicion = 95;
-  save.points.money = 1000;
-  save.bonds["clerk"] = 60;
-  const lines = advanceYears(FIXTURE, save, "ch05", { activities: ["martial"], offer: false });
-  assert.equal(save.identity.kind, "forced");
-  assert.equal(save.points.money, 300);
-  assert.equal(save.rank, 0);
-  assert.equal(save.lifeEnd, 1859);
-  assert.equal(save.bonds["clerk"], 30);
-  assert.equal(save.record.washes, 1);
-  assert.ok(texts(lines).some((text) => text.includes("정체가 드러났다")));
-});
-
-test("offering at the transition and 노인성의 마지막 은혜 from CH14", () => {
-  const before = saveAt("ch12", 1775, "ch13", 1);
-  before.lifeEnd = 1850;
-  before.points.virtue = 300;
-  assert.equal(yearsPlan(FIXTURE, before, "ch13").canOffer, 3, "no grace before CH14");
-
-  const save = saveAt("ch13", 1862, "ch14", 1);
-  save.lifeEnd = 1855;
-  save.points.virtue = 300;
-  assert.equal(yearsPlan(FIXTURE, save, "ch14").canOffer, 13);
-  const lines = advanceYears(FIXTURE, save, "ch14", { activities: ["martial"], offer: true });
-  assert.equal(save.lifeEnd, 1868);
-  assert.equal(save.graceUsed, true);
-  assert.equal(save.points.virtue, 0);
-  assert.equal(save.offeredThisChapter, 3, "the transition offering counts toward the new chapter");
-  assert.equal(save.identity.kind, "descendant", "the hero lives on");
-  assert.ok(texts(lines).some((text) => text.startsWith("노인성의 마지막 은혜")));
-  const again = saveAt("ch14", 1881, "ch15", 1);
-  again.graceUsed = true;
-  again.lifeEnd = 1870;
-  assert.equal(yearsPlan(FIXTURE, again, "ch15").canOffer, 0, "grace is once per character");
-});
-
-test("passing lifeEnd hands the run to a successor (stats 70%, rank 50%, bonds 80%)", () => {
-  const save = saveAt("ch04", 1418, "ch05", 1);
-  save.lifeEnd = 1418;
-  save.stats = { power: 20, agility: 6, body: 15, spirit: 5, wit: 11, tact: 9 };
-  save.rank = 9;
-  save.bonds["disciple"] = 50;
-  const lines = advanceYears(FIXTURE, save, "ch05", { activities: ["martial"], offer: false });
-  assert.equal(save.identity.kind, "successor");
-  assert.deepEqual(save.successor, { generation: 1 });
-  assert.deepEqual(save.stats, { power: 14, agility: 5, body: 10, spirit: 5, wit: 7, tact: 6 });
-  assert.equal(save.rank, 4);
-  assert.equal(save.bonds["disciple"], 40);
-  assert.equal(save.lifeEnd, 1419 + 55);
-  assert.equal(save.year, 1419);
-  assert.notEqual(save.name, "강휘");
-  assert.equal(save.identities.at(-1)?.kind, "successor");
-  assert.ok(save.chronicle.at(-1)?.text.includes("유지를 잇는다"));
-  assert.ok(texts(lines).some((text) => text.startsWith("천수가 다했다")));
-  // A successor does not age suspiciously.
-  const suspicion = save.suspicion;
-  advanceStepYear(FIXTURE, save, 1450);
-  assert.equal(save.suspicion, suspicion);
+test("transition is deterministic for a seed", () => {
+  const one = at(newSave({ seed: 77 }), "ch07", 1574);
+  const two = JSON.parse(JSON.stringify(one)) as PlayerSave;
+  const choice = { activities: ["commerce", "network", "seclusion", "train", "study"], offer: true };
+  assert.deepEqual(advanceYears(FIXTURE, one, "ch08", choice), advanceYears(FIXTURE, two, "ch08", choice));
+  assert.deepEqual(one, two);
 });
 
 test("advanceStepYear grows suspicion inside a chapter", () => {
@@ -321,7 +390,7 @@ test("advanceStepYear grows suspicion inside a chapter", () => {
   save.rank = 3;
   advanceStepYear(FIXTURE, save, 1387);
   assert.equal(save.year, 1387);
-  assert.ok(save.suspicion > 10 && save.suspicion < 25, `first rumours by 1387: ${save.suspicion}`);
+  assert.ok(save.suspicion > 3 && save.suspicion < 15, `first whispers by 1387: ${save.suspicion}`);
   assert.deepEqual(advanceStepYear(FIXTURE, save, 1380), [], "never moves backwards");
   assert.equal(save.year, 1387);
 });

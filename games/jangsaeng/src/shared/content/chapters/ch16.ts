@@ -1,6 +1,6 @@
 // CH16 · 1896~1910 · 제국의 마지막 14년 — 최종 정산.
-// B9 만민공동회(연설 카드 셋 중 둘 성공), B10 재정 일원화(재정 45), B11 중립 실효(B7 + 국방 55),
-// B12a 열강 사전 외교(외교 60 + B7/B11), B12b 중명전 수호(국방 60일 때만 열리는 대체역사 방어전),
+// B9 만민공동회(연설 카드 셋 중 둘 성공), B10 재정 일원화(재정 42), B11 중립 실효(B7 + 국방 55),
+// B12a 열강 사전 외교(외교 52, 거중조정 시 47 + B7/B11), B12b 중명전 수호(국방 60일 때만 열리는 대체역사 방어전),
 // B12c 군대 해산 저지(B12b + 승리 + 민심 55), 13도 창의군 서울 진공(국운에 따라 아군 규모 3단계).
 // 마지막 단계가 끝나면 엔진이 엔딩을 계산한다. 사실 기준: E101~E113, E117, 분기 B9~B12.
 import type { BattleDef, ChapterDef, Cond, Effect } from "../schema.ts";
@@ -313,9 +313,9 @@ export const ch16: ChapterDef = {
         ],
       },
       victory: [
-        { k: "nation", key: "defense", add: 2 },
+        { k: "nation", key: "defense", add: 4 },
         { k: "exp", add: 2000 },
-        { k: "toast", text: "교련관이 웃었다. '그 칼, 시위대에 가르쳐 주시오.'", tone: "good" },
+        { k: "toast", text: "교련관이 웃었다. '그 칼, 시위대에 가르쳐 주시오.' 시위대 교련이 단단해졌다.", tone: "good" },
       ],
       defeat: [{ k: "toast", text: "교련관이 손을 내밀었다. '한 판 더.'", tone: "info" }],
     },
@@ -342,7 +342,7 @@ export const ch16: ChapterDef = {
       ],
       allies: [{ sprite: "soldier_empire", name: "시위대", count: 6 }],
       victory: [
-        { k: "nation", key: "defense", add: 3 },
+        { k: "nation", key: "defense", add: 4 },
         { k: "nation", key: "diplomacy", add: 2 },
         { k: "point", point: "honor", add: 10 },
         { k: "exp", add: 2800 },
@@ -623,7 +623,7 @@ export const ch16: ChapterDef = {
           text: "원수부의 군제를 맡겠습니다.",
           hint: "국방 ▲ · 황실 총애 ▲ · 품계 +1",
           effects: [
-            { k: "nation", key: "defense", add: 2 },
+            { k: "nation", key: "defense", add: 4 },
             { k: "favor", faction: "hwangsil", add: 10 },
             { k: "rank", add: 1 },
           ],
@@ -670,13 +670,13 @@ export const ch16: ChapterDef = {
           id: "gate",
           text: "\"절영도는 부산의 문입니다. 땅 한 뼘을 빌려주면 문을 통째로 내주는 것입니다.\"",
           hint: "지략 판정",
-          effects: speech(1, "ch16_b9_s1_wit", "wit", 35, "\"옳소!\" 함성이 종로를 덮었다."),
+          effects: speech(1, "ch16_b9_s1_wit", "wit", 40, "\"옳소!\" 함성이 종로를 덮었다."),
         },
         {
           id: "fair",
           text: "\"러시아만이 아닙니다. 어느 나라에도 이 땅을 빌려주지 맙시다.\"",
           hint: "처세 판정",
-          effects: speech(1, "ch16_b9_s1_tact", "tact", 40, "어깨를 맞댄 사람들이 고개를 끄덕였다."),
+          effects: speech(1, "ch16_b9_s1_tact", "tact", 45, "어깨를 맞댄 사람들이 고개를 끄덕였다."),
         },
         {
           id: "burn",
@@ -699,13 +699,13 @@ export const ch16: ChapterDef = {
           id: "list",
           text: "넘어간 광산과 철도의 이름을 하나하나 읽어 내려간다.",
           hint: "지략 판정",
-          effects: speech(2, "ch16_b9_s2_wit", "wit", 35, "이름 하나가 불릴 때마다 탄식이 터졌다."),
+          effects: speech(2, "ch16_b9_s2_wit", "wit", 40, "이름 하나가 불릴 때마다 탄식이 터졌다."),
         },
         {
           id: "story",
           text: "\"임진년에 의병은 제 땅의 길을 알아서 이겼습니다. 이제 그 길을 남이 놓고 있습니다.\"",
           hint: "기백 판정",
-          effects: speech(2, "ch16_b9_s2_spirit", "spirit", 35, "늙은이들이 눈시울을 붉혔다."),
+          effects: speech(2, "ch16_b9_s2_spirit", "spirit", 45, "늙은이들이 눈시울을 붉혔다."),
         },
         {
           id: "throne",
@@ -728,13 +728,13 @@ export const ch16: ChapterDef = {
           id: "council",
           text: "\"중추원의 절반을 백성이 뽑게 합시다. 황제의 권한과 다투자는 것이 아닙니다.\"",
           hint: "지략 판정",
-          effects: speech(3, "ch16_b9_s3_wit", "wit", 35, "대신석에서도 고개를 끄덕이는 이가 있었다."),
+          effects: speech(3, "ch16_b9_s3_wit", "wit", 40, "대신석에서도 고개를 끄덕이는 이가 있었다."),
         },
         {
           id: "together",
           text: "\"오백 년 동안 이 나라를 지킨 것은 이름 없는 사람들이었습니다.\"",
           hint: "기백 판정",
-          effects: speech(3, "ch16_b9_s3_spirit", "spirit", 35, "긴 침묵 뒤에 박수가 쏟아졌다."),
+          effects: speech(3, "ch16_b9_s3_spirit", "spirit", 45, "긴 침묵 뒤에 박수가 쏟아졌다."),
         },
         {
           id: "republic",
@@ -765,7 +765,7 @@ export const ch16: ChapterDef = {
                 { k: "branch", id: "B9", ok: true },
                 { k: "nation", key: "people", add: 8 },
                 { k: "nation", key: "diplomacy", add: 4 },
-                { k: "nation", key: "finance", add: 4 },
+                { k: "nation", key: "finance", add: 5 },
                 { k: "nation", key: "infiltration", add: -5 },
                 { k: "favor", faction: "hwangsil", add: -15 },
                 { k: "favor", faction: "dongnip", add: 20 },
@@ -806,7 +806,7 @@ export const ch16: ChapterDef = {
           text: "측량대를 지키겠소.",
           hint: "재정 ▲ · 민심 ▲",
           effects: [
-            { k: "nation", key: "finance", add: 4 },
+            { k: "nation", key: "finance", add: 5 },
             { k: "nation", key: "people", add: 1 },
             { k: "flag", flag: "ch16_yangjeon" },
           ],
@@ -838,9 +838,9 @@ export const ch16: ChapterDef = {
         {
           id: "unify",
           text: "두 곳간을 하나로 합쳐 상비군과 해안 포대에 쓰십시오.",
-          hint: "B10 조건: 재정 45 · 국방 +10 · 황실 총애 ▼",
-          requires: minNation("finance", 45),
-          lockedText: "재정 45 이상이어야 합칠 곳간이 있다",
+          hint: "B10 조건: 재정 42 · 국방 +10 · 황실 총애 ▼",
+          requires: minNation("finance", 42),
+          lockedText: "재정 42 이상이어야 합칠 곳간이 있다",
           effects: [
             { k: "branch", id: "B10", ok: true },
             { k: "nation", key: "defense", add: 10 },
@@ -891,6 +891,7 @@ export const ch16: ChapterDef = {
               then: [
                 { k: "branch", id: "B11", ok: true },
                 { k: "nation", key: "diplomacy", add: 3 },
+                { k: "nation", key: "defense", add: 2 },
                 { k: "toast", text: "B11 성공 — 열강 공사관이 중립을 확인했다. 시위대가 도성 문으로 간다.", tone: "epic" },
               ],
               else: [
@@ -970,7 +971,7 @@ export const ch16: ChapterDef = {
         {
           id: "go",
           text: "공사관마다 줄을 대고, 밀약의 정보를 맞바꾸겠소.",
-          hint: "B12a 조건: 외교 60 (거중조정 문구 확보 시 55) + B7 또는 B11",
+          hint: "B12a 조건: 외교 52 (거중조정 문구 확보 시 47) + B7 또는 B11",
           effects: [
             {
               k: "if",
@@ -981,8 +982,8 @@ export const ch16: ChapterDef = {
                   {
                     k: "any",
                     of: [
-                      minNation("diplomacy", 60),
-                      { k: "all", of: [minNation("diplomacy", 55), { k: "flag", flag: "ch15_geojung" }] },
+                      minNation("diplomacy", 52),
+                      { k: "all", of: [minNation("diplomacy", 47), { k: "flag", flag: "ch15_geojung" }] },
                     ],
                   },
                 ],

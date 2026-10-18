@@ -1,6 +1,6 @@
 // CH15 · 1882~1895 · 정변과 갑오년 — 분기 집중 구간.
-// B5 군란 예방(재정 35), B6 온건 개혁 연합(개혁 45)과 톈진조약 경고, B7 중립화 외교(외교 50),
-// B8 차병 반대·폐정 개혁(민심 45 + 톈진 경고) — 실패 시에만 경복궁 수비 서바이벌.
+// B5 군란 예방(재정 35), B6 온건 개혁 연합(개혁 45)과 톈진조약 경고, B7 중립화 외교(외교 48, 국방 40이면 42),
+// B8 차병 반대·폐정 개혁(민심 43 + 톈진 경고) — 실패 시에만 경복궁 수비 서바이벌.
 // 우금치·을미사변은 전투가 아닌 절제된 서사이며 보상과 잇지 않는다. 을미의병은 일본군 수비대와 싸운다.
 // 사실 기준: E093~E100, E118, 분기 B5~B8.
 import type { ChapterDef, Cond, Effect } from "../schema.ts";
@@ -396,13 +396,14 @@ export const ch15: ChapterDef = {
         {
           id: "pay",
           text: "국고를 열어 밀린 녹봉부터 주고, 군영의 처우를 고르게 하십시오.",
-          hint: "B5 조건: 재정 35 · 재정 −4 · 군란 예방",
+          hint: "B5 조건: 재정 35 · 재정 −4 · 국방 ▲ · 군란 예방",
           requires: { k: "nation", key: "finance", min: 35 },
           lockedText: "재정 35 이상이어야 지급할 수 있다",
           effects: [
             { k: "branch", id: "B5", ok: true },
             { k: "nation", key: "finance", add: -4 },
             { k: "nation", key: "people", add: 3 },
+            { k: "nation", key: "defense", add: 2 },
             { k: "nation", key: "reform", add: 2 },
             { k: "nation", key: "diplomacy", add: 2 },
             { k: "chronicle", text: "1882년 6월, 밀린 녹봉이 지급되었다. 군란은 일어나지 않았다." },
@@ -593,7 +594,7 @@ export const ch15: ChapterDef = {
               id: "ch15_tianjin_elders",
               label: "원로 설득",
               stat: "tact",
-              base: 30,
+              base: 40,
               per: 1.2,
               success: [
                 { k: "flag", flag: "ch15_tianjin_warned" },
@@ -716,20 +717,21 @@ export const ch15: ChapterDef = {
         {
           id: "neutral",
           text: "열강의 보장을 받는 중립을 국책으로 삼으십시오.",
-          hint: "B7 조건: 외교 50 (국방 40이면 외교 45) · 효과는 국방이 받쳐야 산다",
+          hint: "B7 조건: 외교 48 (국방 40이면 외교 42) · 효과는 국방이 받쳐야 산다",
           effects: [
             {
               k: "if",
               cond: {
                 k: "any",
                 of: [
-                  { k: "nation", key: "diplomacy", min: 50 },
-                  { k: "all", of: [{ k: "nation", key: "diplomacy", min: 45 }, { k: "nation", key: "defense", min: 40 }] },
+                  { k: "nation", key: "diplomacy", min: 48 },
+                  { k: "all", of: [{ k: "nation", key: "diplomacy", min: 42 }, { k: "nation", key: "defense", min: 40 }] },
                 ],
               },
               then: [
                 { k: "branch", id: "B7", ok: true },
-                { k: "nation", key: "diplomacy", add: 3 },
+                { k: "nation", key: "diplomacy", add: 2 },
+                { k: "longFlag", flag: "neutral_policy", key: "diplomacy", add: 3 },
                 { k: "nation", key: "infiltration", add: -5 },
                 { k: "chronicle", text: "1887년, 조선 중립화가 국책이 되었다. 각국 공사관에 공문이 돌았다." },
                 { k: "toast", text: "B7 성공 — 국제 승인의 기반이 생겼다. 국방이 받쳐 줘야 효과가 난다.", tone: "epic" },
@@ -819,11 +821,11 @@ export const ch15: ChapterDef = {
         {
           id: "refuse",
           text: "청병을 부르지 마십시오. 제가 전주로 내려가 폐정 개혁을 약속하고 화약을 맺겠습니다.",
-          hint: "B8 조건: 민심 45 + 톈진 경고 · 성공 시 민심 ▲▲",
+          hint: "B8 조건: 민심 43 + 톈진 경고 · 성공 시 민심 ▲▲",
           effects: [
             {
               k: "if",
-              cond: { k: "all", of: [{ k: "nation", key: "people", min: 45 }, { k: "flag", flag: "ch15_tianjin_warned" }] },
+              cond: { k: "all", of: [{ k: "nation", key: "people", min: 43 }, { k: "flag", flag: "ch15_tianjin_warned" }] },
               then: [
                 { k: "branch", id: "B8", ok: true },
                 { k: "nation", key: "people", add: 8 },

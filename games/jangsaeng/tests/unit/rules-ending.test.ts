@@ -32,7 +32,18 @@ test("skilled play (GDD): S ≈ 83.7 → N1", () => {
   assert.equal(ending.breakdown[5]?.label, "분기 성공 9개 × 3");
 });
 
-test("N1 also needs defense ≥ 60, B11 or B12b, and B12c", () => {
+test("§8.3 N1 boundary: 60/60/45/58/55, 10 branches, infiltration 20, P 2 → S ≈ 82.4, N1", () => {
+  // Failed: B1, B2, B3 (no weight) and B8 (+20).
+  const save = finalSave([60, 60, 45, 58, 55], ["B4", "B5", "B6", "B7", "B9", "B10", "B11", "B12a", "B12b", "B12c"], 2);
+  assert.equal(finalInfiltration(save), 20);
+  const ending = computeEnding(FIXTURE, save);
+  assert.equal(ending.score, 82.35);
+  assert.equal(ending.nation, "N1");
+});
+
+test("N1 needs defense ≥ 60, B12b and B12c (§8.2)", () => {
+  const withoutB12b: BranchId[] = ["B1", "B4", "B6", "B7", "B8", "B11", "B12a", "B12c", "B9", "B10"];
+  assert.equal(computeEnding(FIXTURE, finalSave([90, 90, 90, 90, 90], withoutB12b, 5)).nation, "N2", "B11 alone is not enough");
   const branches: BranchId[] = ["B1", "B4", "B6", "B7", "B8", "B11", "B12a", "B12b", "B12c"];
   assert.equal(computeEnding(FIXTURE, finalSave([59, 62, 50, 65, 60], branches, 3)).nation, "N2");
   assert.equal(computeEnding(FIXTURE, finalSave([65, 62, 50, 65, 60], branches.filter((id) => id !== "B12c"), 3)).nation, "N2");
@@ -106,13 +117,16 @@ test("personal endings in priority order", () => {
   assert.equal(personal((save) => { save.successor = { generation: 1 }; save.rank = 18; save.points.honor = 99; }), "P4");
   assert.equal(personal((save) => { save.rank = 16; save.points.honor = 50; save.suspicion = 69; }), "P1");
   assert.equal(personal((save) => { save.rank = 16; save.points.honor = 50; save.suspicion = 70; }), "P0");
-  assert.equal(personal((save) => { save.bonds = { a: 60, b: 70, c: 80, d: 90 }; }), "P3");
-  assert.equal(personal((save) => { save.flags["disciples"] = 3; }), "P3");
-  assert.equal(personal((save) => { save.record.washes = 4; save.rank = 6; save.points.virtue = 600; }), "P2");
+  const sixBonds = { a: 60, b: 70, c: 80, d: 90, han_house: 60, baek_house: 61 };
+  assert.equal(personal((save) => { save.bonds = sixBonds; save.flags["school"] = true; save.flags["discipleXp"] = 4; }), "P3");
+  assert.equal(personal((save) => { save.bonds = sixBonds; save.flags["school"] = true; save.flags["discipleXp"] = 3; }), "P0", "제자 세대 2");
+  assert.equal(personal((save) => { save.bonds = { a: 60, b: 70, c: 80, d: 90, e: 99 }; save.flags["school"] = true; save.flags["discipleXp"] = 9; }), "P0", "five bonds");
+  assert.equal(personal((save) => { save.record.washes = 4; save.rank = 6; save.points.virtue = 2500; }), "P2");
   assert.equal(
-    personal((save) => { save.record.washes = 4; save.rank = 2; save.points.virtue = 0; save.flags["virtueEarned"] = 900; }),
+    personal((save) => { save.record.washes = 4; save.rank = 2; save.points.virtue = 0; save.flags["virtueEarned"] = 2600; }),
     "P2",
     "virtue offered for lifespan still counts as earned",
   );
-  assert.equal(personal((save) => { save.record.washes = 4; save.rank = 7; save.points.virtue = 600; }), "P0");
+  assert.equal(personal((save) => { save.record.washes = 4; save.rank = 6; save.points.virtue = 2499; }), "P0");
+  assert.equal(personal((save) => { save.record.washes = 4; save.rank = 7; save.points.virtue = 3000; }), "P0");
 });

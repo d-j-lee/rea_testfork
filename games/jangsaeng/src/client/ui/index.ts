@@ -11,7 +11,7 @@ import type { Input, UiCommand } from "../input.ts";
 import { chapterCard } from "./chapter-card.ts";
 import { button, h } from "./dom.ts";
 import { endingScreen } from "./ending.ts";
-import { Hud } from "./hud.ts";
+import { Hud, isCompact } from "./hud.ts";
 import { createLoading, type LoadingScreen } from "./loading.ts";
 import { commandTab, MenuBook } from "./menus/index.ts";
 import { paperPanel } from "./panel.ts";
@@ -146,15 +146,18 @@ export function createUi(deps: UiDeps): Ui {
     }
     if (!inGame || ending || card || title || loading) return;
     if (prompt.open || years.open) return;
-    if (hud.drawer && (cmd === "menu" || cmd === "chat")) {
-      if (cmd === "menu" || hud.drawer !== "chat") hud.closeDrawer();
-      if (cmd === "chat") hud.chat.open();
+    if (cmd === "chat") {
+      if (menu.open) return;
+      if (isCompact() && hud.drawer !== "chat") {
+        hud.closeDrawer();
+        hud.toggleDrawer("chat");
+      }
+      hud.chat.open();
       return;
     }
-    if (hud.drawer) hud.closeDrawer();
-    if (cmd === "chat") {
-      if (!menu.open) hud.chat.open();
-      return;
+    if (hud.drawer) {
+      hud.closeDrawer();
+      if (cmd === "menu") return;
     }
     if (cmd === "menu" && menu.open) {
       menu.close();
@@ -221,7 +224,7 @@ export function createUi(deps: UiDeps): Ui {
 
   input.onCommand(command);
   window.addEventListener("keydown", (e) => {
-    if (isTypingTarget(e.target) || e.defaultPrevented) return;
+    if (isTypingTarget(e.target) || e.repeat) return;
     if (prompt.open && !card && !menu.open && prompt.handleKey(e)) {
       e.preventDefault();
       return;

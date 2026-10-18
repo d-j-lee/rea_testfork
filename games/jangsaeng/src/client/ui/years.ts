@@ -119,6 +119,7 @@ export class YearsPlanner {
     const track = h("ol", { class: "yr-track", "aria-label": "10년 단위 세월" });
     const cards = h("div", { class: "yr-acts", role: "radiogroup", "aria-label": "활동" });
     const projection = h("div", { class: "yr-proj" });
+    const summary = h("p", { class: "yr-summary", "aria-live": "polite" });
     const renderTrack = () => {
       track.replaceChildren(
         ...chosen.map((id, i) => {
@@ -176,6 +177,12 @@ export class YearsPlanner {
       const axis = Math.max(FINAL_YEAR, end) - AWAKENING_YEAR;
       const at = (y: number) => ratio(y - AWAKENING_YEAR, axis).toFixed(4);
       const short = FINAL_YEAR - end;
+      summary.replaceChildren(
+        h("span", { class: "st-k" }, "천수"),
+        `${end}년`,
+        h("b", { class: "good" }, offer && plan.canOffer > 0 ? ` +${plan.canOffer}` : ""),
+        short > 0 ? h("span", { class: "yr-short-chip" }, `${FINAL_YEAR}까지 −${short}년`) : h("span", { class: "yr-ok-chip" }, `${FINAL_YEAR}까지 닿는다`),
+      );
       projection.replaceChildren(
         h("p", null,
           h("span", { class: "st-k" }, "천수"), ` ${end}년까지`,
@@ -260,7 +267,7 @@ export class YearsPlanner {
     }, { class: "btn btn-primary btn-wide", "data-action": "years-confirm" });
 
     return paperPanel(
-      { title: `세월이 흐른다 · ${plan.fromYear} → ${plan.toYear}`, kicker: p.title || "세월 흐르기", glyph: "年", class: "years-panel", footer: confirm },
+      { title: `세월이 흐른다 · ${plan.fromYear} → ${plan.toYear}`, kicker: p.title || "세월 흐르기", glyph: "年", class: "years-panel", footer: h("div", { class: "yr-foot" }, summary, confirm) },
       h("div", { class: "yr-grid" },
       h("div", { class: "yr-main" },
       p.body.length ? h("div", { class: "yr-body" }, ...p.body.map((t) => h("p", null, t))) : null,

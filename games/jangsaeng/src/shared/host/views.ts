@@ -9,7 +9,7 @@ import {
   evalCond,
   expToNext,
   heroSprite,
-  purgeRisk,
+  purgeRiskShown,
   rankName,
   suspicionBand,
 } from "../rules/index.ts";
@@ -25,14 +25,25 @@ import {
   type SelfView,
 } from "../types.ts";
 
+/** The three fictional houses that carry bonds across generations (GDD §5.8.2). */
 export const BOND_NAMES: Readonly<Record<string, string>> = {
-  smith: "대장장이 석가",
-  merchant: "개성 송상 백가",
-  monk: "보현사 노승",
-  clerk: "한양 아전 문가",
-  interpreter: "사역원 역관 홍가",
-  disciple: "무가 제자 계보",
+  han_house: "한씨 가문",
+  baek_house: "개성 송상 백가",
+  hong_house: "사역원 역관 홍가",
 };
+
+let npcNames: Map<string, string> | null = null;
+
+/** Display name for a bond id: a house, or a person from any chapter. */
+function bondName(content: ContentIndex, id: string): string {
+  if (BOND_NAMES[id]) return BOND_NAMES[id] as string;
+  if (!npcNames) {
+    npcNames = new Map();
+    for (const chapter of Object.values(content.chapters))
+      for (const npc of chapter.npcs) if (!npcNames.has(npc.id)) npcNames.set(npc.id, npc.name);
+  }
+  return npcNames.get(id) ?? id;
+}
 
 export function chapterView(chapter: ChapterDef): ChapterView {
   return {
@@ -56,7 +67,6 @@ export function promptView(
   save: PlayerSave,
   prompt: PromptDef,
 ): PromptView {
-  const exact = save.stats.wit >= 30;
   const options = [];
   for (const option of prompt.options) {
     const allowed = evalCond(content, save, option.requires);
@@ -64,12 +74,7 @@ export function promptView(
     const view: PromptView["options"][number] = { id: option.id, text: option.text };
     if (option.hint) view.hint = option.hint;
     if (!allowed) view.disabled = option.lockedText ?? "조건이 맞지 않는다";
-    if (option.risk) {
-      const value = purgeRisk(content, save, option.risk, option.effects);
-      view.risk = exact
-        ? { value: Math.round(value), exact: true }
-        : { value: Math.round(value / 10) * 10, exact: false };
-    }
+    if (option.risk) view.risk = purgeRiskShown(content, save, option.risk, option.effects);
     options.push(view);
   }
   const view: PromptView = {
@@ -121,7 +126,6 @@ export function selfView(content: ContentIndex, save: PlayerSave, context: SelfC
     if (faction.desc) view.desc = faction.desc;
     return view;
   });
-  const npcNames = new Map(chapter.npcs.map((npc) => [npc.id, npc.name]));
   const skills = [...new Set([...save.skills])].flatMap((skillId) => {
     const skill = content.skills[skillId];
     if (!skill) return [];
@@ -210,7 +214,7 @@ export function selfView(content: ContentIndex, save: PlayerSave, context: SelfC
       .filter(([, value]) => value > 0)
       .map(([bondId, value]) => ({
         id: bondId,
-        name: BOND_NAMES[bondId] ?? npcNames.get(bondId) ?? bondId,
+        name: bondName(content, bondId),
         value: Math.round(value),
       })),
     channel: context.channel,

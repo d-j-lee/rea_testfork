@@ -39,7 +39,7 @@ test("stat, point, exp, nation and longFlag effects", () => {
   assert.equal(save.flags["virtueEarned"], 60);
   assert.equal(save.level, 3);
   assert.equal(out.levelsGained, 2);
-  assert.equal(save.nation.defense, 43);
+  assert.equal(save.nation.defense, 46, "+3 now and +3 from the long flag, applied immediately");
   assert.equal(save.nation.people, 100);
   assert.equal(save.infiltration, 0, "the meter stays within 0..100");
   assert.equal(nationValue(save, "infiltration"), 0);
@@ -57,7 +57,7 @@ test("favor, align, bond, rank, suspicion and life effects clamp and describe", 
     { k: "favor", faction: "yi", add: 15 },
     { k: "favor", faction: "choe", add: -500 },
     { k: "align", faction: "yi" },
-    { k: "bond", npc: "smith", add: 150 },
+    { k: "bond", npc: "han_house", add: 150 },
     { k: "rank", add: 2 },
     { k: "rank", set: 40 },
     { k: "suspicion", add: 8 },
@@ -68,7 +68,7 @@ test("favor, align, bond, rank, suspicion and life effects clamp and describe", 
   assert.equal(save.favor["yi"], 25, "origin +10 then +15");
   assert.equal(save.favor["choe"], -100);
   assert.equal(save.aligned, "yi");
-  assert.equal(save.bonds["smith"], 100);
+  assert.equal(save.bonds["han_house"], 100);
   assert.equal(save.rank, 18);
   assert.equal(save.suspicion, 0);
   assert.equal(save.lifeEnd, 1862);
@@ -77,7 +77,7 @@ test("favor, align, bond, rank, suspicion and life effects clamp and describe", 
   const lines = texts(out.lines);
   assert.ok(lines.includes("이성계파 총애 +15"));
   assert.ok(lines.includes("최영파 총애 −100"));
-  assert.ok(lines.includes("대장장이 석가 인연 +100"));
+  assert.ok(lines.includes("한씨 궁수 가문 인연 +100"));
   assert.ok(lines.includes("의심도 +8"));
   assert.ok(lines.includes("천수 −2년"));
   assert.ok(lines.includes("천수 +3년"));
@@ -114,6 +114,7 @@ test("flag, branch, title, meritSubject, chronicle and toast effects", () => {
   applyEffects(FIXTURE, save, [{ k: "title", title: "개국공신 2등" }]);
   assert.equal(save.titles.length, 2, "content's own title for the grade is not duplicated");
   assert.equal(save.meritSubject, 2);
+  assert.equal(save.flags["renowned"], true, "공신 책록 makes the identity renowned");
   assert.equal(save.rank, 13, "2등 공신 → 단계 13");
   assert.deepEqual(save.chronicle.at(-1), { year: 1392, text: "조선이 열리다." });
   assert.deepEqual(out.toasts, [{ text: "개국!", tone: "epic" }, { text: "알림", tone: "info" }]);
@@ -241,6 +242,7 @@ test("battleResult records wins and grants +2 years once for a 대첩", () => {
   assert.deepEqual(save.battlesWon, ["hwangsan"]);
   assert.equal(save.points.merit, 50);
   assert.ok(texts(first.lines).includes("천수 +2년"));
+  assert.equal(save.flags["renowned"], true, "a 대전 victory makes the identity renowned");
   battleResult(FIXTURE, save, HWANGSAN, true);
   assert.equal(save.lifeEnd, 1863, "only the first victory extends life");
   assert.equal(save.points.merit, 100);
@@ -263,7 +265,7 @@ test("conditions: ranges, logic, flags, branches, items and battles", () => {
   assert.equal(ok({ k: "stat", stat: "wit", max: 24 }), false);
   assert.equal(ok({ k: "favor", faction: "yi", min: 10, max: 10 }), true);
   assert.equal(ok({ k: "favor", faction: "nobody", max: 0 }), true, "missing favor is 0");
-  assert.equal(ok({ k: "bond", npc: "smith", min: 1 }), false);
+  assert.equal(ok({ k: "bond", npc: "han_house", min: 1 }), false);
   assert.equal(ok({ k: "year", min: 1361, max: 1364 }), true);
   assert.equal(ok({ k: "lifeEnd", min: 1910 }), false);
   assert.equal(ok({ k: "nation", key: "infiltration", min: 15 }), true, "failed B4 adds 15");

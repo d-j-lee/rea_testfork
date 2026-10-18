@@ -727,7 +727,8 @@ export const ch14: ChapterDef = {
               cond: TWO_OF_THREE,
               then: [
                 { k: "branch", id: "B4", ok: true },
-                { k: "nation", key: "finance", add: 5 },
+                { k: "nation", key: "finance", add: 3 },
+                { k: "longFlag", flag: "b4_clauses", key: "finance", add: 3 },
                 { k: "chronicle", text: "1876년, 강화도조약의 조항 둘 이상을 바로잡았다." },
                 { k: "toast", text: "B4 성공 — 경제 침투의 통로가 좁아졌다. 재정 ▲", tone: "epic" },
               ],

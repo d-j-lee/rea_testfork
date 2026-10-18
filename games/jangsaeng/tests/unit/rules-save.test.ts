@@ -51,8 +51,9 @@ test("demo presets give a sane save for every chapter", () => {
     assert.equal(save.level, chapter.level[0], where);
     assert.equal(statTotal(save), 30 + 6 + 2 * (save.level - 1), `${where}: base + origin + 2/level`);
     assert.equal(save.freePoints, 0, where);
-    assert.ok(save.lifeEnd >= save.year + 30, `${where}: lifeEnd ${save.lifeEnd}`);
-    assert.equal(save.lifeEnd, Math.max(1861 + 4 * (chapter.order - 1), chapter.years[0] + 30), where);
+    assert.ok(save.lifeEnd >= save.year + 60, `${where}: lifeEnd ${save.lifeEnd}`);
+    assert.equal(save.lifeEnd, Math.max(1861 + 4 * (chapter.order - 1), chapter.years[0] + 60), where);
+    assert.equal(save.flags["school"] === true, chapter.order > 4, `${where}: school founded in ch04`);
     assert.equal(save.points.money, 150 * chapter.order, where);
     assert.equal(save.points.merit, 25 * save.rank, `${where}: merit matches rank, no instant promotion`);
     assert.equal(save.points.virtue, 60 * chapter.order, where);
@@ -84,6 +85,7 @@ test("demo presets give a sane save for every chapter", () => {
   }
   assert.equal(newSave({ demoChapter: "ch04" }).meritSubject, 2);
   assert.equal(newSave({ demoChapter: "ch04" }).rank, 14);
+  assert.equal(newSave({ demoChapter: "ch04" }).flags["renowned"], true);
   assert.equal(newSave({ demoChapter: "ch01" }).rank, 0);
   assert.ok(newSave({ demoChapter: "ch16" }).record.washes >= 4, "about one wash per 120 years");
   assert.deepEqual(newSave({ demoChapter: "ch16" }).equipment, { weapon: "jangyong_hwando", armor: "jangyong_armor" }, "ERA_GEAR: empire gear from 1897");
@@ -94,7 +96,7 @@ test("demo presets also work with the shipped content", () => {
   for (const id of CHAPTER_IDS) {
     const save = createSave(CONTENT, { token: "t", name: "강휘", variant: "m", origin: "northeast", seed: 5, demoChapter: id });
     assert.equal(save.chapter, id);
-    assert.ok(save.lifeEnd >= save.year + 30);
+    assert.ok(save.lifeEnd >= save.year + 60);
     assert.notEqual(migrateSave(CONTENT, JSON.parse(JSON.stringify(save))), null);
   }
 });
