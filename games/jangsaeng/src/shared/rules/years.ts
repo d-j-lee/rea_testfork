@@ -7,6 +7,7 @@ import { applyEffectsInto, emptyOutcome } from "./effects.ts";
 import {
   BAND_NAMES,
   changeSuspicion,
+  cleanName,
   growSuspicion,
   suggestName,
   suspicionBand,
@@ -415,7 +416,7 @@ export function advanceYears(content: ContentIndex, save: PlayerSave, next: Chap
     const blocked = washBlocker(save, choice.wash);
     if (blocked) lines.push(line(`신분 세탁 불가 — ${blocked}`, "bad"));
     else {
-      const name = choice.newName?.trim() || plannedName(save, next);
+      const name = cleanName(choice.newName) || plannedName(save, next);
       lines.push(...washIdentity(content, save, choice.wash, name));
     }
   }

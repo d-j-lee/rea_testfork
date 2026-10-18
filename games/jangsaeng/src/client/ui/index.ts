@@ -131,9 +131,9 @@ export function createUi(deps: UiDeps): Ui {
   // The passage roll starts with the confirm, so the planner stays open (held
   // toasts, paused input) from the plan until the roll ends; nothing else
   // re-syncs when the roll finishes, so its end does.
-  const years: YearsPlanner = new YearsPlanner(audio, (plan) => {
+  const years = new YearsPlanner(audio, (plan, passage) => {
     deps.send({ t: "years", ...plan });
-    void years.playPassage().then(sync);
+    void passage.then(sync);
     sync();
   }, reduced);
   const menu = new MenuBook({
@@ -250,7 +250,7 @@ export function createUi(deps: UiDeps): Ui {
     }
     if (p.kind === "years") {
       prompt.close();
-      years.show(p, hud.self?.variant ?? "m");
+      years.show(p);
     } else {
       years.close();
       prompt.show(p);

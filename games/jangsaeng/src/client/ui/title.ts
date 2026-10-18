@@ -108,7 +108,7 @@ export function createTitle(
           finish({ mode: saved.mode, resume: true, name: saved.name, variant: "m", origin: "northeast" });
         }, true)
       : null,
-    menuItem("새로 시작", `${arc.from}년, 노인성의 밤에서`, "new", openCreation, !saved),
+    menuItem("새로 시작", `${arc.from}년, ${arc.opening}에서`, "new", openCreation, !saved),
     menuItem("시연 모드", `${arc.count}개 장 중 하나로 바로`, "demo", openDemo),
     menuItem("게임 소개", "무엇을 하는 게임인가", "pitch", openPitch),
     menuItem("설정", "소리 · 터치 · 움직임", "settings", openSettings),

@@ -10,7 +10,7 @@ import type { PromptView, YearsPlanView } from "../../shared/types.ts";
 import { AWAKENING_YEAR, FINAL_YEAR } from "../../shared/types.ts";
 import type { AudioEngine } from "../audio/types.ts";
 import { button, h, ratio, wait } from "./dom.ts";
-import { suggestName, validateName, WASH_GLYPH } from "./labels.ts";
+import { validateName, WASH_GLYPH } from "./labels.ts";
 import { paperPanel } from "./panel.ts";
 
 interface YearsSubmit {
@@ -25,7 +25,7 @@ interface YearsSubmit {
 const WASH_IDS: readonly string[] = ["descendant", "fakeDeath", "monk", "merchant", "exam"];
 const isWash = (id: string): id is WashMethod => WASH_IDS.includes(id);
 /** How far the year counter moves: the panel's kicker and the roll show the same span. */
-const rollSpan = (from: number, to: number): string => `${from} → ${to}`;
+const rollSpan = (from: number, to: number): string => `${from}년 → ${to}년`;
 
 /**
  * Called once per confirmed plan. `passage` is the year-counter roll the
@@ -41,7 +41,6 @@ export class YearsPlanner {
   readonly #reduced: () => boolean;
   #prompt: PromptView | null = null;
   #rolling = false;
-  #passage: Promise<void> = Promise.resolve();
 
   constructor(audio: AudioEngine, submit: YearsSubmitHandler, reduced: () => boolean) {
     this.#audio = audio;
@@ -58,20 +57,12 @@ export class YearsPlanner {
     if (!this.#rolling) this.el.replaceChildren();
   }
 
-  show(p: PromptView, variant: "m" | "f"): void {
+  show(p: PromptView): void {
     const plan = p.data?.type === "years" ? p.data : null;
     if (!plan) return;
     this.#prompt = p;
-    this.el.replaceChildren(this.#build(p, plan, variant));
+    this.el.replaceChildren(this.#build(p, plan));
     this.#audio.sfx("ui_open");
-  }
-
-  /**
-   * Transitional until index.ts awaits the `passage` its submit callback
-   * receives: the roll the last confirm started (already settled when none).
-   */
-  playPassage(): Promise<void> {
-    return this.#passage;
   }
 
   /** Rolls the year counter over the planner; the planner is cleared after unless a new years card came. */
@@ -105,7 +96,7 @@ export class YearsPlanner {
     }
   }
 
-  #build(p: PromptView, plan: YearsPlanView, variant: "m" | "f"): HTMLElement {
+  #build(p: PromptView, plan: YearsPlanView): HTMLElement {
     const tokens = Math.max(1, plan.tokens);
     const chosen: string[] = Array.from({ length: tokens }, (_, i) => plan.suggested.activities[i] ?? plan.suggested.activities[0] ?? "");
     let current = 0;
@@ -118,7 +109,7 @@ export class YearsPlanner {
       class: "text-input",
       type: "text",
       maxlength: "12",
-      value: plan.suggestedName ?? suggestName(variant),
+      value: plan.suggestedName,
       "aria-label": "새 이름",
     });
     const nameHint = h("p", { class: "field-hint" }, "새 신분으로 쓸 이름 (2–12자)");
@@ -295,8 +286,8 @@ export class YearsPlanner {
       confirm.disabled = true;
       this.#audio.sfx("choice");
       // The roll starts here, before the plan leaves, so the host's answer finds it running.
-      this.#passage = this.#roll(plan.fromYear, plan.toYear);
-      this.#submit({ prompt: p.id, activities: [...chosen], wash: wash ?? undefined, name, offer, grace }, this.#passage);
+      const passage = this.#roll(plan.fromYear, plan.toYear);
+      this.#submit({ prompt: p.id, activities: [...chosen], wash: wash ?? undefined, name, offer, grace }, passage);
     }, { class: "btn btn-primary btn-wide", "data-action": "years-confirm" });
 
     // Title: the host's card title. Kicker: how far the counter moves (the roll's span).

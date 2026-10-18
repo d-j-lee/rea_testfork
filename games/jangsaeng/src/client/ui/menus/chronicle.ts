@@ -18,10 +18,10 @@ export function chronicleList(entries: readonly ChronicleEntry[], cls = ""): HTM
     "ol",
     { class: `chron ${cls}` },
     ...entries.map((e) =>
-      h("li", { class: `chron-item tone-${e.tone ?? "info"}${e.alt ? " alt" : ""}` },
+      h("li", { class: `chron-item tone-${e.tone ?? "info"}` },
         h("span", { class: "chron-year" }, String(e.year)),
         h("span", { class: "chron-text" },
-          e.alt ? h("span", { class: "hn-tag chron-alt", title: "게임 속 대체역사" }, "대체역사") : null,
+          e.alt ? h("span", { class: "chron-alt", title: "게임 속 대체역사" }, "대체역사") : null,
           e.alt ? " " : null,
           e.text))),
   );
@@ -33,7 +33,7 @@ export function historyNotes(notes: readonly HistoryNote[]): HTMLElement {
     "ul",
     { class: "history-notes" },
     ...notes.map((note) =>
-      h("li", { class: `note-${note.kind}${note.kind === "fact" ? " fact" : " interp"}` },
+      h("li", { class: `note-${note.kind}` },
         h("span", { class: "hn-tag" }, NOTE_LABELS[note.kind]),
         note.text)),
   );

@@ -260,7 +260,9 @@ function parse(content: ContentIndex, raw: unknown): PlayerSave | null {
     save.inventory = {};
     for (const [stored, count] of Object.entries(numberRecord(raw.inventory, 0, 9999))) {
       const id = RENAMED_ITEMS.get(stored) ?? stored;
-      if (content.items[id] && count > 0) save.inventory[id] = Math.min(9999, (save.inventory[id] ?? 0) + count);
+      const held = save.inventory[id] ?? 0;
+      // A renamed key item merges with the new id instead of doubling it.
+      if (content.items[id] && count > 0) save.inventory[id] = Math.min(9999, RENAMED_ITEMS.has(stored) ? Math.max(held, count) : held + count);
     }
   }
   const equipment = isRecord(raw.equipment) ? raw.equipment : {};

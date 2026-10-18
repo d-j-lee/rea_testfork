@@ -299,6 +299,28 @@ test("who fights a battle: everyone at its ring who still has it to fight, count
   assert.deepEqual(world.battleParticipants(), [passing.id]);
 });
 
+test("enemies hunt and defeat counts only those on the battle's ground, not someone waiting at its ring", () => {
+  const { world, log } = makeWorld("ground");
+  const ring = world.arenaOf("waves");
+  assert.ok(ring);
+  const starter = spec(ring.x, ring.y, { derived: { ...DERIVED, maxHp: 100_000 } });
+  const waiting = spec(ring.x - ring.radius - 4, ring.y, { derived: { ...DERIVED, maxHp: 100_000 } });
+  for (const s of [starter, waiting]) world.addPlayer(s);
+  world.startBattle("waves", starter.id);
+  run(world, 0.1);
+  assert.deepEqual(world.battleParticipants(), [starter.id, waiting.id]);
+  const hunted = world.entityIds()
+    .map((id) => world.inspect(id))
+    .filter((e) => e?.kind === "enemy")
+    .map((e) => e?.target);
+  assert.ok(hunted.length > 0);
+  assert.ok(hunted.every((target) => target !== waiting.id), "no wave enemy picks the one off the ground");
+  // The one on the ground falls past their timer: the battle is lost although the other stands outside.
+  world.damage(starter.id, 1_000_000);
+  run(world, 30);
+  assert.equal(log.battles.at(-1)?.result, "defeat");
+});
+
 test("one owner for where a battle is fought: arenaOf before and during the battle", () => {
   const { world } = makeWorld("arena-of");
   const before = world.arenaOf("boss");

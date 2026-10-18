@@ -409,3 +409,14 @@ test("narration names a chapter's 공동 실록 by its title", () => {
         for (const match of line.matchAll(/공동 실록 '([^']+)'/g))
           assert.equal(match[1], chapter.worldEvent?.title, `${chapter.id} ${step.id}`);
 });
+
+test("content flags stay out of the namespaces the host and rules keep for themselves", () => {
+  // migrate.ts converts and removes 'pending:*' flags of old saves; the others are per-chapter counters.
+  const reserved = ["pending:", "completed:", "reviveVirtue:", "worldEventVirtue:", "infiltration:", "check:"];
+  const problems: string[] = [];
+  for (const chapter of Object.values(CHAPTERS))
+    for (const { where, effects } of effectLists(chapter))
+      for (const effect of walkEffects(effects))
+        if (effect.k === "flag" && reserved.some((prefix) => effect.flag.startsWith(prefix))) problems.push(`${chapter.id} ${where}: ${effect.flag}`);
+  assert.deepEqual(problems, []);
+});

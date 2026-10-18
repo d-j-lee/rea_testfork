@@ -116,7 +116,7 @@ export function selfRevive(save: PlayerSave): Line[] {
   save.record.selfRevives += 1;
   if (save.flags["freeReviveUsed"] !== true) {
     save.flags["freeReviveUsed"] = true;
-    return [line("스스로 일어서다 — 이번 시대 첫 소생은 천수를 쓰지 않는다", "info")];
+    return [line("스스로 일어서다 — 이번 장의 첫 소생은 천수를 쓰지 않는다", "info")];
   }
   changeLife(save, -1);
   return [line("스스로 일어서다 — 천수 −1년", "bad")];

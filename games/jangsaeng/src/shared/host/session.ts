@@ -412,7 +412,8 @@ export class Session {
       if (objective.onComplete?.length) this.#apply(objective.onComplete);
       // A solemn objective (history card, tragedy, finale) is not an achievement.
       if (!objective.optional && !objective.solemn) {
-        this.send({ t: "toast", text: `목표 달성 — ${objective.text}`, tone: "good" });
+        const alt = objective.kind === "battle" && this.chapter.battles.some((battle) => battle.id === objective.target && battle.alt);
+        this.send({ t: "toast", text: `목표 달성 — ${objective.text}${alt ? " · 대체역사" : ""}`, tone: "good" });
         this.#fxSelf("sfx", "quest");
       }
       this.#refreshObjectives();
@@ -660,7 +661,7 @@ export class Session {
     this.#heldBattles = [];
     for (const battleId of held) {
       this.#forget({ kind: "battle", id: battleId });
-      // A refusal (another battle is on) leaves the battle objective to start on foot.
+      // A refusal (another battle is on, or the player is down) leaves the battle objective to start on foot.
       channel.startBattle(battleId, this, true);
     }
   }
@@ -948,7 +949,8 @@ export class Session {
    * carries the presenter onto its ground (World.arrivalSpot), a press at it
    * (World.atBattle) starts it, and the next press wins it. A presenter lying
    * down rises first (자력 소생, as they would); a battle the world cannot
-   * start because another holds it is won outright, without the refusal toast.
+   * start because another holds it is still reached first, and the next press
+   * wins it outright, without the refusal toast.
    */
   #demoSkip(): void {
     const active = this.#active;

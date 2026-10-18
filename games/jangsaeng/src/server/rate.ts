@@ -1,7 +1,9 @@
 // Per-connection message rate gate over fixed one-second windows. It reads
 // messages as host/parse.ts parsed them (null: malformed), never the raw
-// JSON. Over the budget it drops only an input heartbeat that repeats what
-// the host already holds from this connection, so dropping loses nothing:
+// JSON. Over the budget it drops only an input heartbeat that repeats the
+// last input this gate passed (the host may have reset its own copy, e.g. to
+// idle while a card is open; that bounded case resolves when the window
+// rolls over). Dropping therefore loses no press or release:
 //  - the sim acts on button changes (sim/player.ts applyInput: attack and
 //    dodge on the press, the bow draws on the press and shoots on the
 //    release), so an input whose attack, shoot or dodge differs from the

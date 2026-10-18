@@ -1,6 +1,7 @@
 // New character: name, body variant with a live sprite preview, origin. One screen.
 import { ORIGINS } from "../../shared/content/people.ts";
 import { POINT_NAMES, STAT_NAMES, type OriginId, type PointKey, type StatKey } from "../../shared/content/schema.ts";
+import { AWAKENING_YEAR } from "../../shared/types.ts";
 import type { AudioEngine } from "../audio/types.ts";
 import { button, h } from "./dom.ts";
 import { suggestName, validateName } from "./labels.ts";
@@ -110,7 +111,7 @@ export function creationPanel(
   });
 
   return paperPanel(
-    { title: "새 장생인", kicker: "1361년 겨울 · 개경", glyph: "生", onClose: handlers.onBack, class: "create-panel", footer: start },
+    { title: "새 장생인", kicker: `${AWAKENING_YEAR}년 겨울 · 개경`, glyph: "生", onClose: handlers.onBack, class: "create-panel", footer: start },
     h(
       "div",
       { class: "create-grid" },

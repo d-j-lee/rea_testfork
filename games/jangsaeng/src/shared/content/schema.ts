@@ -202,6 +202,8 @@ export interface PromptDef {
   options: readonly OptionDef[];
   /** Montage cards use a compact card layout. */
   style?: "story" | "card" | "history";
+  /** A counterfactual scene a won branch opens: shown with the 대체역사 tag. */
+  alt?: true;
 }
 
 // ── World population ─────────────────────────────────────────────────────

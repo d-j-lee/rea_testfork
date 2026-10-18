@@ -9,13 +9,16 @@ const PREFIX = "jangsaeng:v1:";
 let storage: Storage | null | undefined;
 const memory = new Map<string, string>();
 
+/**
+ * localStorage when it can be read. A full quota still reads, so saved
+ * profiles and settings stay available; each write that fails falls back to
+ * memory on its own (writeKey).
+ */
 function backend(): Storage | null {
   if (storage !== undefined) return storage;
   try {
     const candidate = globalThis.localStorage;
-    const probe = `${PREFIX}probe`;
-    candidate.setItem(probe, "1");
-    candidate.removeItem(probe);
+    candidate.getItem(`${PREFIX}probe`);
     storage = candidate;
   } catch {
     storage = null;

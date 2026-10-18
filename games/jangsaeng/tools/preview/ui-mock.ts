@@ -207,8 +207,8 @@ export const DEATH_PROMPT: PromptView = {
 export const YEARS_PROMPT: PromptView = {
   id: "p-years",
   kind: "years",
-  title: "세월 흐르기",
-  body: ["태종의 치세가 저물고 세종이 즉위한다. 새 이름: 윤현"],
+  title: "세월이 흐른다",
+  body: ["다음 시대: 세종의 시대 — 태종의 치세가 저물고 세종이 즉위한다"],
   options: [],
   data: {
     type: "years",
@@ -238,6 +238,7 @@ export const YEARS_PROMPT: PromptView = {
     virtue: 140,
     canOffer: 3,
     suggested: { activities: ["study", "study"], offer: true },
+    suggestedName: "윤현",
   },
 };
 

@@ -143,9 +143,10 @@ try {
     const grid = await t.page.evaluate(() => ({
       cards: document.querySelectorAll(".demo-card").length,
       firstYear: (document.querySelector(".demo-years")?.textContent ?? "").split("–")[0],
+      firstTitle: document.querySelector(".demo-title")?.textContent ?? "",
     }));
     check("title: 시연 모드 names as many chapters as the demo grid lists", grid.cards > 0 && desc.demo === `${grid.cards}개 장 중 하나로 바로`, JSON.stringify({ desc, grid }));
-    check("title: 새로 시작 starts in the first chapter's year", desc.new === `${grid.firstYear}년, 노인성의 밤에서`, JSON.stringify({ desc, grid }));
+    check("title: 새로 시작 starts in the first chapter's year", desc.new === `${grid.firstYear}년, ${grid.firstTitle}에서`, JSON.stringify({ desc, grid }));
     await t.close();
   }
   {

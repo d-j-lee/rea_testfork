@@ -5,6 +5,7 @@ import { test } from "node:test";
 import { CHAPTERS } from "../../src/shared/content/index.ts";
 import { BRANCH_IDS } from "../../src/shared/content/schema.ts";
 import { BRANCH_LABELS } from "../../src/shared/rules/index.ts";
+import { AWAKENING_YEAR, FINAL_YEAR } from "../../src/shared/types.ts";
 import { ALL_BRANCHES, BRANCH_YEARS, chapterArc, chapterMeta, greatBattleTitles, PITCH_BATTLES } from "../../src/client/ui/chapters.ts";
 
 test("the pitch names its 대전 by their content titles (남한산성 is a 농성, 정족산성 a 전투)", () => {
@@ -47,7 +48,7 @@ test("the demo grid tags each branch chapter with the branches the rules decide 
 
 test("the title and the pitch name the arc the registry holds: every chapter, first start to last end", () => {
   // The title menu reads "1361년, 노인성의 밤에서" and "16개 장 중 하나로 바로" from this.
-  assert.deepEqual(chapterArc(), { count: 16, from: 1361, to: 1910 });
-  assert.deepEqual(chapterArc([chapterMeta("ch09"), chapterMeta("ch10")]), { count: 2, from: CHAPTERS.ch09.years[0], to: CHAPTERS.ch10.years[1] });
+  assert.deepEqual(chapterArc(), { count: 16, from: AWAKENING_YEAR, to: FINAL_YEAR, opening: CHAPTERS.ch01.title });
+  assert.deepEqual(chapterArc([chapterMeta("ch09"), chapterMeta("ch10")]), { count: 2, from: CHAPTERS.ch09.years[0], to: CHAPTERS.ch10.years[1], opening: CHAPTERS.ch09.title });
   assert.throws(() => chapterArc([]));
 });

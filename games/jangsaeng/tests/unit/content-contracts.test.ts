@@ -142,5 +142,19 @@ test("joining the 의병 dresses the hero as one until the chapter ends", () => 
     const joined = save("m", chapter);
     applyEffects(CONTENT, joined, option(promptId, optionId).effects);
     assert.equal(joined.flags["righteous"], true, `${promptId}.${optionId}`);
+    if (joined.identity.kind !== "monk") assert.equal(heroSprite(joined), "hero_righteous", `${promptId}.${optionId} shows`);
   }
+});
+
+test("counterfactual cards carry the 대체역사 tag as data and say what really happened", async () => {
+  const { promptView } = await import("../../src/shared/host/views.ts");
+  const altCards = Object.values(CHAPTERS).flatMap((chapter) => chapter.prompts.filter((prompt) => prompt.alt));
+  assert.ok(altCards.length >= 10, `alt cards: ${altCards.length}`);
+  for (const card of altCards) {
+    assert.ok(card.body.some((line) => line.includes("실제 역사")), `${card.id} states the real history beside the scene`);
+    assert.equal(promptView(CONTENT, save("m", "ch16"), card).alt, true, `${card.id} view`);
+  }
+  // A real-history card that only adds a clarification stays untagged.
+  const gukchae = CHAPTERS.ch16.prompts.find((prompt) => prompt.id === "p_gukchae");
+  assert.ok(gukchae && !gukchae.alt);
 });

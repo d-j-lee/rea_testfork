@@ -188,7 +188,7 @@ export class Channel {
     if (started) {
       for (const bot of this.bots.values()) bot.onBattleStart();
       for (const member of this.sessions.values())
-        member.send({ t: "toast", text: `${def.title}${def.subtitle ? ` — ${def.subtitle}` : ""}`, tone: "epic" });
+        member.send({ t: "toast", text: `${def.title}${def.subtitle ? ` — ${def.subtitle}` : ""}${def.alt ? " · 대체역사" : ""}`, tone: "epic" });
       if (def.intro?.length)
         for (const line of def.intro) this.#broadcast({ t: "chat", from: def.title, text: line, kind: "system" });
     }
@@ -236,6 +236,8 @@ export class Channel {
 
   #celebrate(def: BattleDef): void {
     this.addWorldEvent(def.great ? 3 : 1);
+    // A battle with its own outcome label (a covered retreat) is not cheered as a win.
+    if (def.victoryLabel) return;
     for (const bot of this.bots.values()) bot.onVictory();
   }
 

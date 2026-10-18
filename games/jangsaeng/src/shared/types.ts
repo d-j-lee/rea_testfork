@@ -231,6 +231,8 @@ export interface PromptView {
   speaker?: { name: string; sprite?: CharacterSprite; historical?: boolean };
   body: string[];
   options: PromptOptionView[];
+  /** A counterfactual scene (대체역사 tag). */
+  alt?: boolean;
   year?: number;
   /** Extra structured payload for special prompts (years planner, results). */
   data?: YearsPlanView | ResultView;
@@ -276,10 +278,9 @@ export interface YearsPlanView {
   /**
    * The name a wash takes unless the player writes another: the planner's name
    * field starts with it, and the rules use it when the plan sends no valid
-   * name. The host always sets it (rules yearsPlan); it is optional only until
-   * the preview mock (tools/preview/ui-mock.ts) carries it.
+   * name (rules yearsPlan).
    */
-  suggestedName?: string;
+  suggestedName: string;
 }
 
 export interface ResultView {

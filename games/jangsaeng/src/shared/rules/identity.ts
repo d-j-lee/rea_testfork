@@ -116,7 +116,8 @@ export function suggestName(save: PlayerSave, salt: string): string {
   return candidate;
 }
 
-function cleanName(name: string | undefined): string {
+/** The one cleanup a chosen name gets (control characters out, trimmed, at most 16). */
+export function cleanName(name: string | undefined): string {
   return (name ?? "").replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, 16);
 }
 

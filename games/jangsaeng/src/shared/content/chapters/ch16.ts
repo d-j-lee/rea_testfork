@@ -579,7 +579,7 @@ export const ch16: ChapterDef = {
       radius: 8,
       kind: "survive",
       timeLimit: 80,
-      // The campaign failed: holding out covers the vanguard's retreat, it wins nothing.
+      // The campaign failed: holding out covers the vanguard's retreat; it wins no ground.
       victoryLabel: "선발대가 고개를 넘었다",
       music: "resistance",
       weather: "snow",
@@ -925,6 +925,7 @@ export const ch16: ChapterDef = {
       id: "p_neutral_ok",
       title: "문 앞에 멈춘 군대",
       style: "history",
+      alt: true,
       body: [
         "일본군 선발대는 도성 밖에서 멈춰 섰다. 한일의정서는 맺어지지 않았다.",
         "실제 역사에서 일본군은 1904년 2월 서울을 점령하고 2월 23일 한일의정서를, 8월에 제1차 한일협약을 강요했다.",
@@ -1069,6 +1070,7 @@ export const ch16: ChapterDef = {
       id: "p_jungmyeong_ok",
       title: "도장이 찍히지 않은 새벽",
       style: "history",
+      alt: true,
       body: [
         "대신들은 끝내 끌려 나오지 않았다. 조약은 성립하지 않았다.",
         "실제 역사에서는 11월 18일 새벽 을사늑약이 강제로 성립했고, 1906년 2월 통감부가 설치되었다.",
@@ -1100,6 +1102,7 @@ export const ch16: ChapterDef = {
       id: "p_after_jungmyeong",
       title: "1906년의 압박",
       style: "history",
+      alt: true,
       body: [
         "늑약이 없는 대한제국에 일본은 차관을 들이밀고, 군대를 국경 너머에 세워 두었다.",
         "의병들은 해산하지 않았다. 고을마다 훈련하는 장정이 늘었다.",
@@ -1212,6 +1215,7 @@ export const ch16: ChapterDef = {
       id: "p_seoul_full",
       title: "동대문의 아침",
       style: "history",
+      alt: true,
       body: [
         "해산되지 않은 군대와 13도의 의진이 같은 아침에 닿았다. 수비대는 용산으로 물러났다.",
         "실제 역사에서는 1908년 1월 허위의 선발대가 동대문 밖 30리까지 나아갔으나 본대가 제때 닿지 못해 밀려났다.",
@@ -1223,8 +1227,9 @@ export const ch16: ChapterDef = {
       id: "p_seoul_mid",
       title: "삼십 리",
       style: "history",
+      alt: true,
       body: [
-        "당신과 함께 닿은 의진은 동대문 밖 삼십 리에서 수비대 진지 하나를 뚫었다. 그러나 다른 도의 의진은 끝내 고개를 넘지 못했다.",
+        "당신과 함께 온 의진은 동대문 밖 삼십 리에서 수비대 진지 하나를 뚫었다. 그러나 다른 도의 의진은 끝내 고개를 넘지 못했다.",
         "실제 역사에서도 13도 창의군은 연락과 집결이 어긋나 서울에 닿지 못했다. 총대장 이인영은 부친상으로 고향에 돌아갔다.",
         "당신이 이어 온 사람들만큼, 조금 더 멀리 갔다.",
       ],
@@ -1272,6 +1277,7 @@ export const ch16: ChapterDef = {
       id: "p_1909_alt",
       title: "1909년",
       style: "history",
+      alt: true,
       body: [
         "통감부가 서지 않은 대한제국은 여전히 제 법정과 제 군대를 가졌다.",
         "실제 역사에서는 이해 7월 기유각서로 대한제국의 사법권과 감옥 사무가 일본에 넘어갔다.",
@@ -1377,8 +1383,7 @@ export const ch16: ChapterDef = {
       id: "s10",
       year: 1905,
       narration: [
-        "1905년 2월, 일본은 독도를 시마네현에 편입한다고 고시했다. 대한제국은 1900년 칙령 제41호로 울도군이 석도를 관할하게 한 바 있으며, 1906년 이를 알고 부정하는 지령을 냈다.",
-        "칙령의 '석도'를 독도로 보는 것은 한국 정부의 공식 입장이며, 일본은 다르게 주장한다.",
+        "1905년 2월, 일본은 독도를 시마네현에 편입한다고 고시했다.",
         "여름, 열강 사이에 밀약의 소문이 돈다.",
       ],
       objectives: [
@@ -1480,7 +1485,7 @@ export const ch16: ChapterDef = {
   ],
   worldEvent: {
     title: "백성의 공론",
-    desc: "백성이 스스로 모여 나라 일을 논하고 힘을 보탠다. 그 뜻이 쌓일수록 나라를 지키러 나설 사람이 늘어난다.",
+    desc: "백성이 스스로 모여 나랏일을 논하고 힘을 보탠다. 그 뜻이 쌓일수록 나라를 지키러 나설 사람이 늘어난다.",
     goal: 120,
   },
   companions: 12,

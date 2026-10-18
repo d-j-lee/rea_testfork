@@ -100,8 +100,12 @@ test("heroSprite follows era, rank, identity and disguise", () => {
   save.identity.kind = "monk";
   assert.equal(heroSprite(save), "hero_hermit");
   save.flags["righteous"] = true;
+  assert.equal(heroSprite(save), "hero_hermit", "a 승병 keeps the robe");
+  save.identity.kind = "birth";
   assert.equal(heroSprite(save), "hero_righteous");
   save.year = 1900;
+  assert.equal(heroSprite(save), "hero_righteous", "the 의병's dress over an officer's rank");
+  delete save.flags["righteous"];
   assert.equal(heroSprite(save), "hero_modern");
 });
 

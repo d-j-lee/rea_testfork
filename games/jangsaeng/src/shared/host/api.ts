@@ -5,6 +5,13 @@
 import type { PlayerSave } from "../types.ts";
 import type { ServerMsg } from "../protocol.ts";
 
+/**
+ * ◇ companions per era channel. Battles are tuned for this many beside one
+ * person (offline play and the demo), and the server uses it unless BOTS says
+ * otherwise; fewer companions make the 대전 much harder for a lone player.
+ */
+export const DEFAULT_COMPANIONS = 8;
+
 export type HostMode = "online" | "offline";
 
 export interface ConnectionMeta {
@@ -37,7 +44,7 @@ export interface HostOptions {
   readonly mode: HostMode;
   readonly store: ProfileStore;
   readonly clock: HostClock;
-  /** Simulated companions per active channel (offline default > 0). */
+  /** Simulated companions per active channel (DEFAULT_COMPANIONS unless set). */
   readonly botsPerChannel: number;
   /** Max real players per era channel shard before a new shard opens. */
   readonly channelCapacity?: number;

@@ -96,6 +96,20 @@ function muster(sim: Sim, b: BattleRuntime): void {
 }
 
 /**
+ * The participants standing on the battle's ground. Someone mustered at the
+ * ring who has not stepped onto it is counted for scaling and resolved with
+ * the battle, but enemies do not hunt them and they cannot hold off a defeat
+ * from outside. Falls back to every participant while nobody stands on it.
+ */
+function onGround(sim: Sim, b: BattleRuntime): number[] {
+  const inside = b.participants.filter((id) => {
+    const a = sim.actors.get(id);
+    return a !== undefined && onArena(b.arena, a.x, a.y);
+  });
+  return inside.length > 0 ? inside : b.participants;
+}
+
+/**
  * A defend post's HP: the written HP for each attacker multiple it faces
  * (countScale), times √hpScale for their longer lives. The attackers' HP
  * pool grows by countScale·hpScale while the party cutting through it grows
@@ -335,6 +349,7 @@ function spawnWave(sim: Sim, b: BattleRuntime, index: number): void {
     .filter((g) => g.def !== undefined);
   const total = groups.reduce((s, g) => s + g.count, 0);
   const used = new Set<number>();
+  const targets = onGround(sim, b);
   let k = 0;
   for (const g of groups) {
     const def = g.def;
@@ -346,7 +361,7 @@ function spawnWave(sim: Sim, b: BattleRuntime, index: number): void {
         a.en.state = "alert";
         a.en.alertUntil = sim.time + 0.3;
         a.markUntil = sim.time + 0.9;
-        a.en.target = b.defendId >= 0 ? b.defendId : (b.participants[k % Math.max(1, b.participants.length)] ?? b.starter);
+        a.en.target = b.defendId >= 0 ? b.defendId : (targets[k % Math.max(1, targets.length)] ?? b.starter);
       }
       w.ids.push(a.id);
       b.enemies.push(a.id);
@@ -420,7 +435,9 @@ export function tickBattle(sim: Sim): void {
     }
   }
   b.morale = Math.max(0, b.morale);
-  if (b.morale <= 0 && !b.routed) {
+  // A named commander holds the line: a battle with a boss routs only once the boss has fallen.
+  const commanderStands = b.def.boss !== undefined && !b.bossDead;
+  if (b.morale <= 0 && !b.routed && !commanderStands) {
     b.routed = true;
     for (const id of b.enemies) {
       const a = sim.actors.get(id);
@@ -439,7 +456,7 @@ export function tickBattle(sim: Sim): void {
  * them on the arena's rim, still fighting (rimRevival).
  */
 function lost(sim: Sim, b: BattleRuntime): boolean {
-  const fighters = b.participants.map((id) => sim.actors.get(id)).filter((a): a is Actor => a?.pl != null);
+  const fighters = onGround(sim, b).map((id) => sim.actors.get(id)).filter((a): a is Actor => a?.pl != null);
   if (fighters.length === 0 || fighters.every(isDowned)) return true;
   const humans = fighters.filter((a) => a.kind === "player");
   return humans.length > 0 && humans.every((a) => isDowned(a) && sim.time >= (a.pl?.downEnd ?? 0));

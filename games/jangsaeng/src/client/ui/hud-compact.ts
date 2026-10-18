@@ -79,7 +79,7 @@ export class CompactRow {
     const cur = pending.find((o) => !o.optional) ?? pending[0];
     // The device-neutral instruction comes first so truncation cuts the control names, not the task.
     const keys = cur ? inputHintText(cur.hint, touchInput()) : "";
-    const text = cur ? `${cur.optional ? "선택 · " : ""}${cur.text}${keys ? ` · ${keys}` : ""}` : "";
+    const text = cur ? `${cur.optional ? "선택 · " : ""}${cur.alt ? "대체역사 · " : ""}${cur.text}${keys ? ` · ${keys}` : ""}` : "";
     setText(this.#text, cur ? text : self.objectives.length ? "이 단계의 목표를 모두 마쳤다" : "지금은 정해진 목표가 없다");
     setText(this.#prog, cur?.progress ? `${cur.progress[0]}/${cur.progress[1]}` : pending.length > 1 ? `+${pending.length - 1}` : "");
     toggle(this.#strip, "done", !cur);

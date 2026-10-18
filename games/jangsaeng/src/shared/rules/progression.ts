@@ -78,11 +78,15 @@ export function derived(content: ContentIndex, save: PlayerSave): Derived {
   };
 }
 
-/** Sprite for the hero from era, rank, identity and disguise. */
+/**
+ * Sprite for the hero from identity, cause, era, rank and disguise. A monk
+ * keeps the robe (승병 fought in it); a hero who joined the 의병 wears its
+ * dress over any rank; after 1895 an officer wears modern uniform.
+ */
 export function heroSprite(save: PlayerSave): CharacterSprite {
-  if (save.year >= 1895 && save.rank >= 1) return "hero_modern";
-  if (save.flags["righteous"] !== undefined && save.flags["righteous"] !== false) return "hero_righteous";
   if (save.identity.kind === "monk") return "hero_hermit";
+  if (save.flags["righteous"] !== undefined && save.flags["righteous"] !== false) return "hero_righteous";
+  if (save.year >= 1895 && save.rank >= 1) return "hero_modern";
   if (save.identity.kind === "merchant" || (save.rank === 0 && save.year >= 1392)) return "hero_disguise";
   if (save.rank >= SENIOR_RANK) return "hero_official";
   if (save.year < 1392) return save.level < 8 ? "hero_youth" : "hero_goryeo_officer";

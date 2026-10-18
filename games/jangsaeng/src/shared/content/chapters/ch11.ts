@@ -204,7 +204,7 @@ export const ch11: ChapterDef = {
       great: true,
       music: "siege",
       weather: "snow",
-      defend: { name: "성첩의 화톳불", sprite: "campfire", hp: 1000 },
+      defend: { name: "성첩의 화톳불", sprite: "campfire", hp: 1400 },
       intro: [
         "눈이 무릎까지 쌓였다. 성첩의 군사들이 언 손을 화톳불에 녹인다.",
         "불이 꺼지면 사람이 얼어 죽는다. 화톳불을 지켜라.",

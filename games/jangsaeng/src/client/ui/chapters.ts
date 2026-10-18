@@ -86,11 +86,11 @@ export function allChapters(): ChapterMeta[] {
  * first chapter's start to the last chapter's end (the title and the pitch
  * name these).
  */
-export function chapterArc(chapters: readonly ChapterMeta[] = allChapters()): { count: number; from: number; to: number } {
+export function chapterArc(chapters: readonly ChapterMeta[] = allChapters()): { count: number; from: number; to: number; opening: string } {
   const first = chapters[0];
   const last = chapters[chapters.length - 1];
   if (!first || !last) throw new Error("the content registry has no chapters");
-  return { count: chapters.length, from: first.years[0], to: last.years[1] };
+  return { count: chapters.length, from: first.years[0], to: last.years[1], opening: first.title };
 }
 
 /** The historical 대전 the pitch screen names (presenter choice, by battle id). */

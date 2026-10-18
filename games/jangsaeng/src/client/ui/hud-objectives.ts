@@ -13,12 +13,12 @@ import { ObjectiveCues } from "./objective-cues.ts";
  * objective's own device-neutral text.
  */
 const INPUT_HINT_TEXT: Readonly<Record<InputHint, { keys: string; touch: string }>> = {
-  move: { keys: "이동: WASD·방향키", touch: "이동: 화면 왼쪽을 끌어서" },
+  move: { keys: "이동: WASD·방향키", touch: "이동: 화면 왼쪽 끌기" },
   interact: { keys: "말 걸기: E", touch: "말 걸기: 手(행동) 버튼" },
   attack: { keys: "공격: J·Space·클릭", touch: "공격: 劍 버튼" },
   bow: { keys: "활: K·우클릭", touch: "활: 弓 버튼" },
   roll: { keys: "구르기: Shift·L", touch: "구르기: 轉 버튼" },
-  skill: { keys: "기술: 1·2·3", touch: "기술: 기술 칸 1·2·3" },
+  skill: { keys: "기술: 1·2·3", touch: "기술: 1·2·3 칸" },
 };
 
 /** The settings store publishes the active input mode on <html data-touch>. */
@@ -80,7 +80,7 @@ export class ObjectiveTracker {
         o.alt ? h("span", { class: "hn-tag obj-alt", title: "게임 속 대체역사" }, "대체역사") : null,
         o.alt ? " " : null,
         o.text,
-        keys ? h("small", { class: "obj-site obj-keys" }, keys) : null,
+        keys ? h("small", { class: "obj-keys" }, keys) : null,
         o.siteName && !o.done ? h("small", { class: "obj-site" }, o.siteName) : null),
       progress,
       o.done ? h("span", { class: "sr-only" }, "완료") : null,

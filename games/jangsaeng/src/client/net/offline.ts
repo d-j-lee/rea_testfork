@@ -4,7 +4,7 @@
 // 이어하기 (resume): the last token and a profile summary per mode.
 
 import { createGameHost } from "../../shared/host/host.ts";
-import type { GameHost, ProfileStore } from "../../shared/host/api.ts";
+import { DEFAULT_COMPANIONS, type GameHost, type ProfileStore } from "../../shared/host/api.ts";
 import type { PlayerSave } from "../../shared/types.ts";
 import { connectLoopback, type Transport } from "./transport.ts";
 import { isRecord, readJson, readKey, removeKey, writeKey } from "../storage.ts";
@@ -140,7 +140,7 @@ export function startOffline(log: (line: string) => void, onFatal: (reason: stri
     mode: "offline",
     store,
     clock: { now: () => performance.now() },
-    botsPerChannel: 8,
+    botsPerChannel: DEFAULT_COMPANIONS,
     log,
   });
   let logged = false;

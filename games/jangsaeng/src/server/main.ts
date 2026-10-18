@@ -1,13 +1,13 @@
 // Online server: serves the built client and runs the authoritative game host
 // behind a WebSocket endpoint at /ws.
-//   PORT (8080)  HOST (0.0.0.0)  DATA_DIR (./data)  BOTS (2)  SEED (jangsaeng)
+//   PORT (8080)  HOST (0.0.0.0)  DATA_DIR (./data)  BOTS (DEFAULT_COMPANIONS, 8)  SEED (jangsaeng)
 import { createServer } from "node:http";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { performance } from "node:perf_hooks";
 import { WebSocketServer, type RawData } from "ws";
 import { createGameHost } from "../shared/host/host.ts";
-import type { HostConnection } from "../shared/host/api.ts";
+import { DEFAULT_COMPANIONS, type HostConnection } from "../shared/host/api.ts";
 import { parseClientMsg } from "../shared/host/parse.ts";
 import { createStaticHandler } from "./static.ts";
 import { ABUSE_FACTOR, RateGate } from "./rate.ts";
@@ -26,7 +26,7 @@ const host = createGameHost({
   mode: "online",
   store,
   clock: { now: () => performance.now() },
-  botsPerChannel: Number(process.env.BOTS ?? 2),
+  botsPerChannel: Number(process.env.BOTS ?? DEFAULT_COMPANIONS),
   channelCapacity: 40,
   log,
 });

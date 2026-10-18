@@ -1033,6 +1033,9 @@ html[data-layout="compact"] .hud[data-drawer="chat"] .chat-toggle { display: non
 }
 @media (max-height: 500px) {
   html[data-layout="compact"] { --mm: 84px; --row2: 72px; }
+  html[data-layout="compact"] .downed { padding-top: calc(var(--g) + var(--sat) + var(--row2) + 8px); }
+  html[data-layout="compact"] .dn-title { font-size: 40px; }
+  html[data-layout="compact"] .dn-line { font-size: 32px; }
   html[data-layout="compact"] .hud-cbar { right: auto; width: min(340px, 44vw); }
   html[data-layout="compact"] .hud-crow { right: auto; width: min(340px, 44vw); }
   html[data-layout="compact"] .mm-meta { display: none; }

@@ -647,6 +647,7 @@ export const ch13: ChapterDef = {
       id: "p_end_ok",
       title: "고쳐 쓴 장부",
       style: "history",
+      alt: true,
       body: [
         "이정청은 문을 닫지 않았다. 고을마다 환곡 장부가 다시 쓰였다.",
         "모든 것이 바뀌지는 않았다. 그러나 이듬해 장터의 쌀값은 조금 내려갔다.",

@@ -69,6 +69,7 @@ export function promptView(
     options,
     year: save.year,
   };
+  if (prompt.alt) view.alt = true;
   if (prompt.speaker) {
     view.speaker = { name: prompt.speaker.name };
     if (prompt.speaker.sprite) view.speaker.sprite = prompt.speaker.sprite;
