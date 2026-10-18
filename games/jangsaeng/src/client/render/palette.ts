@@ -56,6 +56,23 @@ export const NATURE = {
   roadDark: "#a8885c",
   deck: "#9a6b3f",
   deckDark: "#6f4a2a",
+  // World art (terrain and architecture); appended by the world renderer.
+  pine: "#2f5535",
+  pineDark: "#1b3423",
+  pineTrunk: "#7b4a31",
+  granite: "#9e998e",
+  graniteDark: "#6a675f",
+  roofTile: "#373e48",
+  roofTileLight: "#56606b",
+  plaster: "#ebe3d0",
+  timber: "#6e4529",
+  dancheongGreen: "#3a8a6c",
+  dancheongRed: "#a8322c",
+  mudWall: "#ae9068",
+  riceGold: "#c8a841",
+  azalea: "#c4507e",
+  maple: "#b54d32",
+  ice: "#c4d8e2",
 } as const;
 
 /** Team tints used for name plates and minimap markers. */
