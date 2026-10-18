@@ -12,7 +12,6 @@ import type {
   ObjectiveDef,
   PromptDef,
   StepDef,
-  WashMethod,
 } from "../content/schema.ts";
 import type { GameMap } from "../map/generate.ts";
 import type { ClientMsg, PlayerAction, ServerMsg } from "../protocol.ts";
@@ -34,7 +33,11 @@ import {
   useLongevity,
   yearsPlan,
   type EffectOutcome,
+  type YearsChoice,
 } from "../rules/index.ts";
+import { LONGEVITY_MAX_PER_CHAPTER, longevityBlocker, reviveVirtue, worldEventVirtue } from "../rules/lifespan.ts";
+import { ZEITGEIST_MAX } from "../rules/nation.ts";
+import { numberFlag } from "../rules/util.ts";
 import type { PlayerInput, PlayerSpec } from "../sim/world.ts";
 import type { Marker, ObjectiveView, PlayerSave, PromptView, ResultView } from "../types.ts";
 import type { Channel } from "./channel.ts";
@@ -51,7 +54,10 @@ export interface SessionServices {
   log(line: string): void;
 }
 
-/** `year`: the story year when the card was raised (shown on it even if the step moves on first). */
+/**
+ * `year`: the story year when the card was raised (shown on it even if the step moves on first).
+ * `pending`: the save flag that keeps this card across a reload (see PENDING).
+ */
 type Queued = (
   | { type: "def"; id: string; onDone?: () => void }
   | { type: "notice"; id: string; title: string; body: string[]; onDone?: () => void }
@@ -59,9 +65,24 @@ type Queued = (
   | { type: "years"; id: string; next: ChapterId }
   | { type: "escape"; id: string }
   | { type: "inquiry"; id: string }
-) & { year?: number };
+) & { year?: number; pending?: string };
 
 type Active = Queued & { view: PromptView };
+
+/**
+ * Story work the session holds for later and cannot rebuild from the step:
+ * prompts raised by effects, 사사 escape cards and battles waiting behind a
+ * card. Each is a save flag `pending:<kind>:<ref>` until it is shown or
+ * started, so a reload (tab refresh, reconnect) resumes it. Prompt objectives,
+ * talk prompts and the years card are rebuilt from the step instead, and the
+ * 사헌부 card from flag `inquiry`.
+ */
+const PENDING = "pending:";
+type PendingKind = "def" | "escape" | "battle";
+const pendingKey = (kind: PendingKind, ref: string): string => `${PENDING}${kind}:${ref}`;
+
+/** Demo skip moves the presenter only when the next objective is farther than this (tiles). */
+const DEMO_NEAR = 8;
 
 const IDLE_INPUT: PlayerInput = {
   mx: 0,
@@ -93,7 +114,8 @@ export class Session {
   #chatRefill = 0;
   #denyTimer = 0;
   #talkCounter = 0;
-  #ended = false;
+  /** Battles started by story effects while a card was up; they start when the queue drains. */
+  #heldBattles: string[] = [];
   /** While > 0, queued prompts are not shown (keeps result cards first). */
   #hold = 0;
   #refreshing = false;
@@ -138,10 +160,13 @@ export class Session {
     this.send({ t: "enter", you: this.id, chapter: chapterView(this.chapter), channel: channel.label });
     this.#queue = [];
     this.#active = null;
+    this.#heldBattles = [];
     if (this.save.ending) {
       this.#sendEnding();
       return;
     }
+    this.#restorePending();
+    this.#raiseInquiry();
     const enteredFlag = `entered:${this.chapter.id}`;
     if (!this.save.flags[enteredFlag]) {
       this.save.flags[enteredFlag] = true;
@@ -151,14 +176,38 @@ export class Session {
         this.save.chronicle.push({ year: this.save.year, text: "유배지에서 새 시대를 맞았다.", tone: "bad" });
         this.save.exile = undefined;
       }
-      if (this.save.flags.inquiry) this.#enqueue({ type: "inquiry", id: serial("inquiry") });
       this.#enterStep(0, true);
     } else {
       this.#resumeStep();
     }
     channel.updateStep();
+    // Nothing queued: battles restored from the save start now.
+    if (!this.save.ending) this.#showNext();
     this.#markSelf();
     this.persist();
+  }
+
+  /** Rebuilds the cards and held battles the save still owes (PENDING). */
+  #restorePending(): void {
+    for (const key of Object.keys(this.save.flags)) {
+      if (!key.startsWith(PENDING)) continue;
+      const rest = key.slice(PENDING.length);
+      const cut = rest.indexOf(":");
+      const kind = rest.slice(0, cut);
+      const ref = rest.slice(cut + 1);
+      if (this.save.flags[key] !== true || cut <= 0 || !ref) delete this.save.flags[key];
+      else if (kind === "def") this.#enqueue({ type: "def", id: ref, pending: key });
+      else if (kind === "escape") this.#enqueue({ type: "escape", id: `escape:${ref}`, pending: key });
+      else if (kind === "battle") this.#heldBattles.push(ref);
+      else delete this.save.flags[key];
+    }
+  }
+
+  /** The 사헌부 card while flag `inquiry` stands (set by rules settleSuspicion), once in the queue. */
+  #raiseInquiry(): void {
+    if (this.save.flags.inquiry !== true) return;
+    if (this.#active?.type === "inquiry" || this.#queue.some((item) => item.type === "inquiry")) return;
+    this.#enqueue({ type: "inquiry", id: serial("inquiry") });
   }
 
   close(): void {
@@ -170,7 +219,8 @@ export class Session {
   // ── Inbound messages ───────────────────────────────────────────────────
 
   receive(message: ClientMsg): void {
-    if (this.#ended && message.t !== "chat" && message.t !== "ping") return;
+    // A settled run accepts no more changes, also after a reload.
+    if (this.save.ending && message.t !== "chat" && message.t !== "ping") return;
     switch (message.t) {
       case "input":
         this.#input(message);
@@ -220,13 +270,9 @@ export class Session {
     world.setInput(this.id, input);
   }
 
+  /** Refuses slot 5 with the rule's reason (the sim slot is disabled by #refreshEntity too). */
   #longevityAllowed(): boolean {
-    const reason =
-      this.save.longevityUses >= 3
-        ? "이 시대에는 더 이상 노인성 일섬을 쓸 수 없다 (3/3)."
-        : this.save.lifeEnd <= this.save.year
-          ? "남은 천수가 없다."
-          : null;
+    const reason = longevityBlocker(this.save);
     if (reason && this.#denyTimer <= 0) {
       this.#denyTimer = 2;
       this.send({ t: "toast", text: reason, tone: "warn" });
@@ -256,17 +302,21 @@ export class Session {
     }
     this.save.step = index;
     if (fresh) this.save.objectives = {};
+    const yearBefore = this.save.year;
     const passing = advanceStepYear(this.content, this.save, step.year);
-    if (passing.length) {
-      this.#refreshEntity();
-      this.#enqueue({ type: "result", id: serial("result"), title: `${step.year}년`, lines: passing });
-    }
+    if (this.save.year !== yearBefore) this.#refreshEntity();
+    if (passing.length) this.#enqueue({ type: "result", id: serial("result"), title: `${step.year}년`, lines: passing });
+    this.#raiseInquiry();
     if (step.narration?.length)
       this.#enqueue({ type: "notice", id: serial("narration"), title: `${step.year}년`, body: [...step.narration] });
     if (step.onEnter?.length) this.#apply(step.onEnter);
-    this.#armObjectives(step);
-    this.channel?.updateStep();
-    this.#checkStep();
+    // An onEnter effect or an auto objective may already have moved the story on;
+    // the nested #enterStep then did the rest for the later step.
+    if (this.save.step === index) this.#armObjectives(step);
+    if (this.save.step === index) {
+      this.channel?.updateStep();
+      this.#checkStep();
+    }
     this.#markSelf();
     this.persist();
   }
@@ -278,7 +328,7 @@ export class Session {
       return;
     }
     this.#armObjectives(step);
-    this.#checkStep();
+    if (this.step === step) this.#checkStep();
   }
 
   /** Opens prompt objectives and completes auto/collect ones. */
@@ -288,8 +338,11 @@ export class Session {
       if (objective.kind === "auto") this.#completeObjective(objective.id);
       else if (objective.kind === "prompt" && objective.target) {
         const target = objective.target;
-        if (!this.#queue.some((item) => item.type === "def" && item.id === target) && this.#active?.id !== target)
-          this.#enqueue({ type: "def", id: target, onDone: () => this.#completeObjective(objective.id) });
+        const onDone = () => this.#completeObjective(objective.id);
+        // The same card may already wait as a pending effect prompt: it then completes the objective too.
+        const waiting = [this.#active, ...this.#queue].find((item) => item?.type === "def" && item.id === target);
+        if (waiting?.type === "def") waiting.onDone ??= onDone;
+        else this.#enqueue({ type: "def", id: target, onDone });
       } else if (objective.kind === "collect") this.#checkCollect(objective);
     }
   }
@@ -343,6 +396,8 @@ export class Session {
   }
 
   #checkStep(): void {
+    // Past the last step the chapter is complete; only #chapterComplete presents what follows.
+    if (!this.step) return;
     const required = this.#visibleObjectives().filter((objective) => !objective.optional);
     if (required.every((objective) => this.#isDone(objective))) this.#enterStep(this.save.step + 1, true);
   }
@@ -353,21 +408,34 @@ export class Session {
     if (have >= (objective.count ?? 1)) this.#completeObjective(objective.id);
   }
 
+  /**
+   * The story ran past the last step. The step index stays there (one past the
+   * last), so a resume lands here again: the completion is recorded once
+   * (flag `completed:<chapter>`), and only presenting what follows — the years
+   * card, or the ending after the last chapter — repeats.
+   */
   #chapterComplete(): void {
+    this.save.step = this.chapter.steps.length;
+    const completed = `completed:${this.chapter.id}`;
+    if (this.save.flags[completed] !== true) {
+      this.save.flags[completed] = true;
+      this.save.chronicle.push({
+        year: this.save.year,
+        text: `「${this.chapter.title}」의 시대를 살아냈다.`,
+        tone: "good",
+      });
+    }
     const next = nextChapter(this.chapter.id);
-    this.save.chronicle.push({
-      year: this.save.year,
-      text: `「${this.chapter.title}」의 시대를 살아냈다.`,
-      tone: "good",
-    });
-    if (next) this.#enqueue({ type: "years", id: serial("years"), next });
-    else this.#finish();
+    if (!next) this.#finish();
+    else if (this.#active?.type !== "years" && !this.#queue.some((item) => item.type === "years"))
+      this.#enqueue({ type: "years", id: serial("years"), next });
     this.persist();
   }
 
+  /** Settles the run once; a settled save is never judged again. */
   #finish(): void {
+    if (this.save.ending) return;
     this.save.ending = computeEnding(this.content, this.save);
-    this.#ended = true;
     this.persist();
     this.#sendEnding();
   }
@@ -454,19 +522,42 @@ export class Session {
   onRevived(byName: string | null): void {
     if (byName === null) {
       for (const line of selfRevive(this.save)) this.send({ t: "toast", text: line.text, tone: "warn" });
+      this.#refreshEntity();
     } else this.send({ t: "toast", text: `${byName}의 도움으로 일어섰다.`, tone: "good" });
     this.#markSelf();
   }
 
   onRevivedOther(): void {
+    if (this.save.ending) return;
     this.save.record.revivesGiven++;
+    const virtue = reviveVirtue(this.save);
+    if (virtue > 0) this.send({ t: "toast", text: `동료를 일으켜 세웠다 — 공덕 +${virtue}`, tone: "good" });
+    this.#markSelf();
+  }
+
+  /** The channel's 공동 실록 is complete with this session in it: 시대정신 once per chapter, 공덕 by the rules. */
+  onWorldEventComplete(title: string): void {
+    if (this.save.ending) return;
+    const gains: string[] = [];
+    const counted = `zeitgeist:${this.save.chapter}`;
+    if (this.save.flags[counted] !== true) {
+      this.save.flags[counted] = true;
+      this.save.flags.zeitgeist = Math.min(ZEITGEIST_MAX, numberFlag(this.save, "zeitgeist") + 1);
+      gains.push("시대정신 +1");
+    }
+    const virtue = worldEventVirtue(this.save);
+    if (virtue > 0) gains.push(`공덕 +${virtue}`);
+    this.send({ t: "toast", text: `공동 실록 「${title}」 달성${gains.length ? ` — ${gains.join(" · ")}` : ""}`, tone: "epic" });
+    this.#markSelf();
+    this.persist();
   }
 
   onLongevity(): void {
     if (!useLongevity(this.save)) return;
+    this.#refreshEntity();
     this.send({
       t: "toast",
-      text: `천수 1년을 태웠다 — 노인성 일섬 (${this.save.longevityUses}/3)`,
+      text: `천수 1년을 태웠다 — 노인성 일섬 (${this.save.longevityUses}/${LONGEVITY_MAX_PER_CHAPTER})`,
       tone: "epic",
     });
     this.#markSelf();
@@ -486,13 +577,46 @@ export class Session {
     while (this.#queue.length) {
       const item = this.#queue.shift() as Queued;
       const view = this.#viewFor(item);
-      if (!view) continue;
+      if (!view) {
+        if (item.pending) delete this.save.flags[item.pending];
+        continue;
+      }
       view.year = item.year ?? this.save.year;
       this.#active = { ...item, view };
       this.send({ t: "prompt", prompt: view });
       return;
     }
+    // The cards are read: battles that story effects started behind them begin now.
+    this.#startHeldBattles();
     this.send({ t: "prompt", prompt: null });
+  }
+
+  /** A card is up, about to be, or a choice is resolving: the player cannot fight yet. */
+  #busy(): boolean {
+    return this.#active !== null || this.#hold > 0 || this.#queue.length > 0;
+  }
+
+  /** Starts a story battle now, or holds it until the card queue drains (#showNext). */
+  #startOrHoldBattle(battleId: string): void {
+    if (!this.#busy()) {
+      this.channel?.startBattle(battleId, this, true);
+      return;
+    }
+    if (this.#heldBattles.includes(battleId)) return;
+    this.#heldBattles.push(battleId);
+    this.save.flags[pendingKey("battle", battleId)] = true;
+  }
+
+  #startHeldBattles(): void {
+    const channel = this.channel;
+    if (!channel || this.#heldBattles.length === 0) return;
+    const held = this.#heldBattles;
+    this.#heldBattles = [];
+    for (const battleId of held) {
+      delete this.save.flags[pendingKey("battle", battleId)];
+      // A refusal (another battle is on) leaves the battle objective to start on foot.
+      channel.startBattle(battleId, this, true);
+    }
   }
 
   #viewFor(item: Queued): PromptView | null {
@@ -590,6 +714,7 @@ export class Session {
       return;
     }
     this.#active = null;
+    if (active.pending) delete this.save.flags[active.pending];
     this.#hold++;
     try {
       switch (active.type) {
@@ -600,10 +725,12 @@ export class Session {
         case "result":
           active.onDone?.();
           break;
-        case "years":
-          // Plain "confirm" without a plan: the default activity for every token.
-          this.#years({ t: "years", prompt: promptId, activities: [], offer: false }, active);
+        case "years": {
+          // Plain "confirm" (or a demo skip): the plan the rules suggest.
+          const suggested = active.view.data?.type === "years" ? active.view.data.suggested : { activities: [], offer: false };
+          this.#years({ t: "years", prompt: promptId, activities: suggested.activities, offer: suggested.offer }, active);
           break;
+        }
         case "escape":
           this.#resolveEscape(optionId);
           break;
@@ -685,33 +812,23 @@ export class Session {
       this.#enqueue({ type: "result", id: serial("result"), title: "사헌부의 조사", lines: outcome.lines }, true);
   }
 
+  /**
+   * Runs the passage of years. The plan goes to the rules as sent: they own
+   * which activity runs for a missing, unknown or blocked token and whether a
+   * wash is allowed, and say so in the result lines.
+   */
   #years(message: Extract<ClientMsg, { t: "years" }>, fallback?: Active): void {
     const active = fallback ?? this.#active;
     if (!active || active.type !== "years" || active.view.id !== message.prompt) return;
     this.#active = null;
-    const plan = active.view.data?.type === "years" ? active.view.data : null;
-    const tokens = plan?.tokens ?? 1;
-    const allowed = new Set(
-      (plan?.activities ?? []).filter((activity) => !activity.disabled).map((activity) => activity.id),
-    );
-    const fallbackActivity = allowed.has("martial") ? "martial" : ([...allowed][0] ?? "martial");
-    const activities = Array.from({ length: tokens }, (_, index) => {
-      const wanted = message.activities[index];
-      return wanted && allowed.has(wanted) ? wanted : fallbackActivity;
-    });
-    let wash: WashMethod | undefined;
-    if (message.wash && plan?.washes.some((method) => method.id === message.wash && !method.disabled))
-      wash = message.wash;
-    const name = message.name ? sanitizeName(message.name) : null;
-    const choice: Parameters<typeof advanceYears>[3] = { activities, offer: message.offer };
-    if (wash) {
-      choice.wash = wash;
-      choice.newName = name ?? suggestName(this.save, active.next);
+    const choice: YearsChoice = { activities: [...message.activities], offer: message.offer };
+    if (message.wash) {
+      choice.wash = message.wash;
+      choice.newName = (message.name ? sanitizeName(message.name) : null) ?? suggestName(this.save, active.next);
     }
     const lines = advanceYears(this.content, this.save, active.next, choice);
     this.#fxSelf("sfx", "years_pass");
     this.persist();
-    this.#active = null;
     this.#enqueue({
       type: "result",
       id: serial("result"),
@@ -757,6 +874,7 @@ export class Session {
   #use(itemId: string): void {
     const result = useItem(this.content, this.save, itemId);
     if (!result.ok) return;
+    if (result.life) this.#refreshEntity();
     if (result.heal) this.channel?.world.heal(this.id, result.heal);
     for (const line of result.lines)
       this.send({ t: "toast", text: line.text, tone: result.life ? "epic" : "info" });
@@ -776,29 +894,81 @@ export class Session {
     this.send({ t: "toast", text: `역마를 달려 ${site.name}에 닿았다.`, tone: "info" });
   }
 
+  /**
+   * Demo mode's 건너뛰기, for this session only: answers the open card with its
+   * first option (the years card with the suggested plan), wins a battle this
+   * player is in, or completes the next objective — and then carries the
+   * presenter (and the companions) to the objective after it. A battle
+   * objective far away first moves the presenter to its ring, so the fight
+   * starts in view; the next press wins it.
+   */
   #demoSkip(): void {
-    if (this.#active) {
-      const option = this.#active.view.options.find((candidate) => !candidate.disabled);
-      if (this.#active.type === "years")
-        this.#years({ t: "years", prompt: this.#active.view.id, activities: [], offer: true });
-      else if (option) this.#choose(this.#active.view.id, option.id);
+    const active = this.#active;
+    if (active) {
+      const option = active.view.options.find((candidate) => !candidate.disabled);
+      if (option) this.#choose(active.view.id, option.id);
       return;
     }
-    const world = this.channel?.world;
-    const battle = world?.battleView();
-    if (battle && world) {
+    const channel = this.channel;
+    const world = channel?.world;
+    if (!channel || !world) return;
+    const battle = world.battleView();
+    if (battle && (world.battleParticipants().includes(this.id) || this.#openObjective("battle", battle.id))) {
       const def = this.chapter.battles.find((candidate) => candidate.id === battle.id);
-      world.abortBattle();
-      if (def) this.channel?.endBattle(def, "victory");
+      if (def) channel.skipBattle(this, def);
+      this.#moveToNextObjective();
       return;
     }
-    const objective = this.#visibleObjectives().find((candidate) => !this.#isDone(candidate) && !candidate.optional);
+    const objective = this.#nextObjective();
     if (!objective) return;
-    if (objective.kind === "talk" && objective.target) this.onTalk(objective.target);
-    else if (objective.kind === "battle" && objective.target) {
+    if (objective.kind === "battle" && objective.target) {
       const def = this.chapter.battles.find((candidate) => candidate.id === objective.target);
-      if (def) this.channel?.endBattle(def, "victory");
-    } else this.#completeObjective(objective.id);
+      if (!def || this.#moveToObjective(objective)) return;
+      channel.skipBattle(this, def);
+    } else if (objective.kind === "talk" && objective.target) this.onTalk(objective.target);
+    else this.#completeObjective(objective.id);
+    this.#moveToNextObjective();
+  }
+
+  /** The first required objective of the step still open. */
+  #nextObjective(): ObjectiveDef | undefined {
+    return this.#visibleObjectives().find((candidate) => !this.#isDone(candidate) && !candidate.optional);
+  }
+
+  #openObjective(kind: ObjectiveDef["kind"], target: string): ObjectiveDef | undefined {
+    return this.#visibleObjectives().find(
+      (candidate) => candidate.kind === kind && candidate.target === target && !this.#isDone(candidate),
+    );
+  }
+
+  #moveToNextObjective(): void {
+    const objective = this.#nextObjective();
+    if (objective) this.#moveToObjective(objective);
+  }
+
+  /**
+   * Teleports the player (and the companions) to where `objective` is played —
+   * beside its NPC or place, or at the edge of its battle ring — when that is
+   * more than DEMO_NEAR tiles away. Returns whether it moved.
+   */
+  #moveToObjective(objective: ObjectiveDef): boolean {
+    const channel = this.channel;
+    const world = channel?.world;
+    const status = world?.playerStatus(this.id);
+    if (!channel || !world || !status || status.downed !== null) return false;
+    let spot: { x: number; y: number } | null = null;
+    if (objective.kind === "battle") {
+      const def = this.chapter.battles.find((candidate) => candidate.id === objective.target);
+      const centre = def ? channel.battleCentre(def) : null;
+      if (def && centre) spot = { x: centre.x, y: centre.y + def.radius + 2 };
+    } else {
+      const place = this.#objectivePlace(objective).place;
+      if (place) spot = { x: place.x, y: place.y + 1.5 };
+    }
+    if (!spot || Math.hypot(spot.x - status.x, spot.y - status.y) <= DEMO_NEAR) return false;
+    world.teleport(this.id, spot.x, spot.y);
+    channel.catchUpCompanions(spot.x, spot.y);
+    return true;
   }
 
   // ── Effects ────────────────────────────────────────────────────────────
@@ -818,7 +988,7 @@ export class Session {
     if (outcome.washed)
       this.send({ t: "toast", text: `이제부터 이름은 ${this.save.name}.`, tone: "info" });
     this.#refreshEntity();
-    for (const prompt of outcome.prompts) this.#enqueue({ type: "def", id: prompt });
+    for (const prompt of outcome.prompts) this.#queuePending("def", prompt);
     for (const objective of outcome.objectives) this.#completeObjective(objective);
     if (outcome.goto) {
       const site = this.#services.map.sites.find((candidate) => candidate.id === outcome.goto?.site);
@@ -828,14 +998,27 @@ export class Session {
       }
     }
     if (outcome.worldEvent) this.channel?.addWorldEvent(outcome.worldEvent);
-    for (const battleId of outcome.battles) this.channel?.startBattle(battleId, this, true);
-    if (outcome.escape) this.#enqueue({ type: "escape", id: serial("escape") }, true);
+    if (outcome.escape) this.#queuePending("escape", `${this.save.chapter}:${this.save.year}`);
+    for (const battleId of outcome.battles) this.#startOrHoldBattle(battleId);
     if (!collectLines) outcome.lines.length = 0;
     this.#markSelf();
     return outcome;
   }
 
-  /** Pushes level/derived/sprite/skills/name to the world entity. */
+  /**
+   * Queues a card the step cannot rebuild and keeps it in the save until it is
+   * answered (PENDING): an effect's prompt, or the 사사 escape card (front).
+   */
+  #queuePending(kind: "def" | "escape", ref: string): void {
+    const key = pendingKey(kind, ref);
+    const id = kind === "escape" ? `escape:${ref}` : ref;
+    if ([this.#active, ...this.#queue].some((item) => item?.type === kind && item.id === id)) return;
+    this.save.flags[key] = true;
+    if (kind === "escape") this.#enqueue({ type: "escape", id, pending: key }, true);
+    else this.#enqueue({ type: "def", id, pending: key });
+  }
+
+  /** Pushes level/derived/sprite/skills/name and the 노인성 일섬 gate to the world entity. */
   #refreshEntity(): void {
     const world = this.channel?.world;
     if (!world) return;
@@ -848,6 +1031,7 @@ export class Session {
       derived: derived(this.content, this.save),
       skills: [...this.save.skillSlots],
     });
+    world.setLongevityEnabled(this.id, longevityBlocker(this.save) === null);
   }
 
   #title(): string {
@@ -865,6 +1049,7 @@ export class Session {
       level: this.save.level,
       derived: derived(this.content, this.save),
       skills: [...this.save.skillSlots],
+      longevityEnabled: longevityBlocker(this.save) === null,
       x,
       y,
     };
@@ -923,9 +1108,33 @@ export class Session {
     }
   }
 
-  #objectiveViews(): ObjectiveView[] {
+  /** Where an objective is played (marker, demo skip): its NPC, place or battle ring, and the site it names. */
+  #objectivePlace(objective: ObjectiveDef): { place: { x: number; y: number } | null; siteId: string | undefined } {
     const channel = this.channel;
     const world = channel?.world;
+    let place: { x: number; y: number } | null = null;
+    let siteId = objective.site;
+    if (world && objective.target) {
+      if (objective.kind === "talk") place = world.npcPosition(objective.target);
+      else if (objective.kind === "reach") {
+        place = world.sitePosition(objective.target);
+        siteId = objective.target;
+      } else if (objective.kind === "battle") {
+        const def = this.chapter.battles.find((candidate) => candidate.id === objective.target);
+        if (def) {
+          place = channel?.battleCentre(def) ?? null;
+          siteId = def.site;
+        }
+      }
+    }
+    if (!place && siteId && world) place = world.sitePosition(siteId);
+    if (place && objective.offset && !(objective.kind === "talk")) {
+      place = { x: place.x + objective.offset[0], y: place.y + objective.offset[1] };
+    }
+    return { place, siteId };
+  }
+
+  #objectiveViews(): ObjectiveView[] {
     return this.#visibleObjectives().map((objective) => {
       const view: ObjectiveView = {
         id: objective.id,
@@ -935,25 +1144,7 @@ export class Session {
       };
       if ((objective.count ?? 1) > 1)
         view.progress = [this.save.objectives[objective.id] ?? 0, objective.count ?? 1];
-      let place: { x: number; y: number } | null = null;
-      let siteId = objective.site;
-      if (world && objective.target) {
-        if (objective.kind === "talk") place = world.npcPosition(objective.target);
-        else if (objective.kind === "reach") {
-          place = world.sitePosition(objective.target);
-          siteId = objective.target;
-        } else if (objective.kind === "battle") {
-          const def = this.chapter.battles.find((candidate) => candidate.id === objective.target);
-          if (def) {
-            place = channel?.battleCentre(def) ?? null;
-            siteId = def.site;
-          }
-        }
-      }
-      if (!place && siteId && world) place = world.sitePosition(siteId);
-      if (place && objective.offset && !(objective.kind === "talk")) {
-        place = { x: place.x + objective.offset[0], y: place.y + objective.offset[1] };
-      }
+      const { place, siteId } = this.#objectivePlace(objective);
       if (place) {
         view.x = place.x;
         view.y = place.y;

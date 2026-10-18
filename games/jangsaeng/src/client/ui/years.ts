@@ -1,7 +1,8 @@
-// Passage of years (prompt kind "years"): one activity per 10-year token,
-// optional identity wash with a new name, the 노인성 offering and a lifespan
-// projection. Confirming sends { t: "years" }; the passage then rolls the
-// year counter when the host answers.
+// Passage of years (prompt kind "years"): one activity per token of the era
+// (spans and heading come from the host's plan), optional identity wash with a
+// new name, the 노인성 offering and a lifespan projection. The planner starts
+// from the plan's suggestion. Confirming sends { t: "years" }; the passage then
+// rolls the year counter when the host answers.
 import type { WashMethod } from "../../shared/content/schema.ts";
 import type { PromptView, YearsPlanView } from "../../shared/types.ts";
 import { AWAKENING_YEAR, FINAL_YEAR } from "../../shared/types.ts";
@@ -95,12 +96,10 @@ export class YearsPlanner {
 
   #build(p: PromptView, plan: YearsPlanView, variant: "m" | "f"): HTMLElement {
     const tokens = Math.max(1, plan.tokens);
-    const firstOk = plan.activities.find((a) => !a.disabled)?.id ?? plan.activities[0]?.id ?? "";
-    const chosen: string[] = Array.from({ length: tokens }, () => firstOk);
+    const chosen: string[] = Array.from({ length: tokens }, (_, i) => plan.suggested.activities[i] ?? plan.suggested.activities[0] ?? "");
     let current = 0;
     let wash: WashMethod | null = null;
-    let offer = false;
-    const span = (plan.toYear - plan.fromYear) / tokens;
+    let offer = plan.suggested.offer && plan.canOffer > 0;
     const nameInput = h("input", {
       class: "text-input",
       type: "text",
@@ -116,7 +115,7 @@ export class YearsPlanner {
       nameHint.classList.toggle("bad", !!err);
     });
 
-    const track = h("ol", { class: "yr-track", "aria-label": "10년 단위 세월" });
+    const track = h("ol", { class: "yr-track", "aria-label": "세월 마디" });
     const cards = h("div", { class: "yr-acts", role: "radiogroup", "aria-label": "활동" });
     const projection = h("div", { class: "yr-proj" });
     const summary = h("p", { class: "yr-summary", "aria-live": "polite" });
@@ -124,8 +123,7 @@ export class YearsPlanner {
       track.replaceChildren(
         ...chosen.map((id, i) => {
           const act = plan.activities.find((a) => a.id === id);
-          const y0 = Math.round(plan.fromYear + span * i);
-          const y1 = Math.round(plan.fromYear + span * (i + 1));
+          const range = plan.spans[i];
           return h("li", null,
             h("button", {
               type: "button",
@@ -137,7 +135,7 @@ export class YearsPlanner {
                 this.#audio.sfx("ui_click");
               },
             },
-            h("span", { class: "yr-range" }, `${y0}–${y1}`),
+            range ? h("span", { class: "yr-range" }, `${range.from}–${range.to}`) : null,
             h("strong", null, act?.name ?? "—")));
         }),
       );
@@ -225,9 +223,9 @@ export class YearsPlanner {
     };
     const offerBtn = h("button", {
       type: "button",
-      class: "yr-offer",
+      class: `yr-offer${offer ? " on" : ""}`,
       role: "switch",
-      "aria-checked": "false",
+      "aria-checked": String(offer),
       disabled: plan.canOffer <= 0,
       onclick: () => {
         offer = !offer;
@@ -250,7 +248,7 @@ export class YearsPlanner {
     };
     renderAll();
 
-    const confirm = button(`세월을 보낸다 · ${plan.toYear - plan.fromYear}년`, () => {
+    const confirm = button(`세월을 보낸다 · ${plan.toYear}년으로`, () => {
       if (wash && validateName(nameInput.value)) {
         this.#audio.sfx("denied");
         nameInput.focus();
@@ -271,7 +269,7 @@ export class YearsPlanner {
       h("div", { class: "yr-grid" },
       h("div", { class: "yr-main" },
       p.body.length ? h("div", { class: "yr-body" }, ...p.body.map((t) => h("p", null, t))) : null,
-      h("h3", { class: "sub-title" }, `10년마다 무엇을 하며 지낼까 · ${tokens}마디`),
+      h("h3", { class: "sub-title" }, plan.summary),
       track,
       cards),
       h("div", { class: "yr-side" },

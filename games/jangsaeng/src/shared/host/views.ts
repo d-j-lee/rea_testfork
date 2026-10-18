@@ -8,11 +8,14 @@ import {
   derived,
   evalCond,
   expToNext,
+  finalInfiltration,
   heroSprite,
+  nationValue,
   purgeRiskShown,
   rankName,
   suspicionBand,
 } from "../rules/index.ts";
+import { bondName } from "../rules/util.ts";
 import type { PlayerStatus, World } from "../sim/world.ts";
 import {
   FINAL_YEAR,
@@ -24,26 +27,6 @@ import {
   type PromptView,
   type SelfView,
 } from "../types.ts";
-
-/** The three fictional houses that carry bonds across generations (GDD §5.8.2). */
-export const BOND_NAMES: Readonly<Record<string, string>> = {
-  han_house: "한씨 가문",
-  baek_house: "개성 송상 백가",
-  hong_house: "사역원 역관 홍가",
-};
-
-let npcNames: Map<string, string> | null = null;
-
-/** Display name for a bond id: a house, or a person from any chapter. */
-function bondName(content: ContentIndex, id: string): string {
-  if (BOND_NAMES[id]) return BOND_NAMES[id] as string;
-  if (!npcNames) {
-    npcNames = new Map();
-    for (const chapter of Object.values(content.chapters))
-      for (const npc of chapter.npcs) if (!npcNames.has(npc.id)) npcNames.set(npc.id, npc.name);
-  }
-  return npcNames.get(id) ?? id;
-}
 
 export function chapterView(chapter: ChapterDef): ChapterView {
   return {
@@ -112,7 +95,7 @@ export function selfView(content: ContentIndex, save: PlayerSave, context: SelfC
   const stats = derived(content, save);
   const status = context.status;
   const { grade, office } = rankName(save.rank, save.year);
-  const nation: Record<NationMeter, number> = { ...save.nation, infiltration: save.infiltration };
+  const nation: Record<NationMeter, number> = { ...save.nation, infiltration: nationValue(save, "infiltration") };
   const ruling = chapter.ruling;
   const factions = chapter.factions.map((faction) => {
     const view: SelfView["factions"][number] = {
@@ -228,6 +211,12 @@ export function selfView(content: ContentIndex, save: PlayerSave, context: SelfC
   return view;
 }
 
+/**
+ * The settled 1910 numbers, read from the save the ending was computed on
+ * (the session accepts no changes after save.ending): the score as decided,
+ * the final infiltration that the breakdown charged, and every branch that
+ * was not won shown as failed — the same reading rules/nation.ts settles with.
+ */
 export function endingView(content: ContentIndex, save: PlayerSave): EndingView | null {
   const ending = save.ending;
   if (!ending) return null;
@@ -236,13 +225,13 @@ export function endingView(content: ContentIndex, save: PlayerSave): EndingView 
   return {
     nation: { id: nation.id, title: nation.title, body: [...nation.body] },
     personal: { id: personal.id, title: personal.title, body: [...personal.body] },
-    score: Math.round(ending.score * 10) / 10,
+    score: ending.score,
     breakdown: ending.breakdown.map((entry) => ({ ...entry })),
-    nationValues: { ...save.nation, infiltration: save.infiltration },
+    nationValues: { ...save.nation, infiltration: finalInfiltration(save) },
     branches: (Object.keys(BRANCH_LABELS) as (keyof typeof BRANCH_LABELS)[]).map((branch) => ({
       id: branch,
       label: BRANCH_LABELS[branch],
-      ok: save.branches[branch] ?? null,
+      ok: save.branches[branch] === true,
     })),
     identities: save.identities.map((record) => ({ ...record })),
     lifeline: {

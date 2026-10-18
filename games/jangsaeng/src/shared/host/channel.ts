@@ -2,7 +2,7 @@
 // and simulated companions. Routes world hooks to sessions and fans out
 // snapshots, effects, chat and the shared 공동 실록 gauge.
 import type { ContentIndex } from "../content/index.ts";
-import type { BattleDef, ChapterDef, EnemyDef } from "../content/schema.ts";
+import type { BattleDef, ChapterDef, ChapterId, EnemyDef } from "../content/schema.ts";
 import type { GameMap } from "../map/generate.ts";
 import type { ServerMsg } from "../protocol.ts";
 import { createRng, type Rng } from "../rng.ts";
@@ -25,6 +25,11 @@ const FX_RADIUS = 30;
 /** Snapshot cadence in ticks: 20 Hz in-page (free), 10 Hz over the network. */
 const SNAP_EVERY = { offline: 1, online: 2 } as const;
 
+/** Shard key: `ch04#2` for real saves, `ch04#demo1` for demo-preset characters. */
+export function channelKey(chapter: ChapterId, shard: number, demo: boolean): string {
+  return `${chapter}#${demo ? "demo" : ""}${shard}`;
+}
+
 export class Channel {
   readonly key: string;
   readonly label: string;
@@ -41,11 +46,12 @@ export class Channel {
   #simulatedTimer = 20;
   #worldEventDone = false;
 
-  constructor(services: ChannelServices, chapter: ChapterDef, shard: number) {
+  /** `demo`: a shard for demo-preset characters only, so a demo never shares a world with real saves. */
+  constructor(services: ChannelServices, chapter: ChapterDef, shard: number, demo = false) {
     this.#services = services;
     this.chapter = chapter;
-    this.key = `${chapter.id}#${shard}`;
-    this.label = `${chapter.title} · ${shard}채널`;
+    this.key = channelKey(chapter.id, shard, demo);
+    this.label = `${chapter.title} · ${demo ? "시연 " : ""}${shard}채널`;
     this.#rng = createRng(`${services.seed}:${this.key}`);
     this.world = new World({
       content: services.content,
@@ -139,11 +145,20 @@ export class Channel {
     return Math.round(total / Math.max(1, this.sessions.size));
   }
 
+  /** Hands the world every member's step, so each person keeps the NPCs and spawns their own step needs. */
   updateStep(): void {
-    let maxStep = 0;
-    for (const session of this.sessions.values()) maxStep = Math.max(maxStep, session.save.step);
-    const step = this.chapter.steps[Math.min(maxStep, this.chapter.steps.length - 1)];
-    if (step) this.world.setStep(step.id);
+    const last = this.chapter.steps.length - 1;
+    const steps: string[] = [];
+    for (const session of this.sessions.values()) {
+      const step = this.chapter.steps[Math.min(session.save.step, last)];
+      if (step) steps.push(step.id);
+    }
+    if (steps.length) this.world.setStep(...steps);
+  }
+
+  /** Moves the companions next to (x, y) after a story jump. */
+  catchUpCompanions(x: number, y: number): void {
+    for (const bot of this.bots.values()) bot.catchUp(x, y);
   }
 
   // ── Battles ────────────────────────────────────────────────────────────
@@ -166,7 +181,7 @@ export class Channel {
     const status = this.world.playerStatus(session.id);
     if (fromStory && centre && status && Math.hypot(centre.x - status.x, centre.y - status.y) > def.radius) {
       this.world.teleport(session.id, centre.x, centre.y + Math.min(3, def.radius / 2));
-      for (const bot of this.bots.values()) bot.catchUp(centre.x, centre.y);
+      this.catchUpCompanions(centre.x, centre.y);
     }
     const started = this.world.startBattle(battleId, session.id);
     if (started) {
@@ -179,28 +194,40 @@ export class Channel {
     return started;
   }
 
-  /** Resolves a battle for sessions bound to it (world end or demo skip). */
-  endBattle(def: BattleDef, result: "victory" | "defeat", participants?: readonly number[]): void {
+  /** Resolves a finished world battle for the sessions that fought it or stood by its ring. */
+  #onBattleEnd(battleId: string, result: "victory" | "defeat", participants: readonly number[]): void {
+    const def = this.chapter.battles.find((candidate) => candidate.id === battleId);
+    if (!def) return;
     const centre = this.battleCentre(def);
     for (const session of this.sessions.values()) {
       const status = this.world.playerStatus(session.id);
       const near =
         centre && status ? Math.hypot(centre.x - status.x, centre.y - status.y) <= def.radius + 12 : false;
-      const others = participants
-        ? participants.filter((id) => id !== session.id).length
-        : this.bots.size + this.sessions.size - 1;
-      if (participants?.includes(session.id) || near || !participants)
-        session.onBattleEnd(def, result, others);
+      if (participants.includes(session.id) || near)
+        session.onBattleEnd(def, result, participants.filter((id) => id !== session.id).length);
     }
-    if (result === "victory") {
-      this.addWorldEvent(def.great ? 3 : 1);
-      for (const bot of this.bots.values()) bot.onVictory();
-    }
+    if (result === "victory") this.#celebrate(def);
   }
 
-  #onBattleEnd(battleId: string, result: "victory" | "defeat", participants: readonly number[]): void {
-    const def = this.chapter.battles.find((candidate) => candidate.id === battleId);
-    if (def) this.endBattle(def, result, participants);
+  /**
+   * Demo skip: `session` alone wins `def`. The shared battle is called off only
+   * when no other human fights in it; otherwise it runs on, and its real end is
+   * resolved for everyone still in it (victory rewards are first-win only).
+   */
+  skipBattle(session: Session, def: BattleDef): void {
+    const running = this.world.battleView()?.id === def.id;
+    const fighters = running ? this.world.battleParticipants() : [];
+    const others = running ? fighters.filter((id) => id !== session.id).length : this.bots.size;
+    const humans = fighters.filter((id) => id !== session.id && this.sessions.has(id));
+    const ends = !running || humans.length === 0;
+    if (running && ends) this.world.abortBattle();
+    session.onBattleEnd(def, "victory", others);
+    if (ends) this.#celebrate(def);
+  }
+
+  #celebrate(def: BattleDef): void {
+    this.addWorldEvent(def.great ? 3 : 1);
+    for (const bot of this.bots.values()) bot.onVictory();
   }
 
   #onKill(enemy: EnemyDef, level: number, boss: boolean, killers: readonly number[]): void {
@@ -233,14 +260,7 @@ export class Channel {
     this.worldEventProgress = Math.min(event.goal, this.worldEventProgress + amount);
     if (this.worldEventProgress >= event.goal) {
       this.#worldEventDone = true;
-      for (const session of this.sessions.values()) {
-        const flags = session.save.flags;
-        if (!flags[`zeitgeist:${this.chapter.id}`]) {
-          flags[`zeitgeist:${this.chapter.id}`] = true;
-          flags.zeitgeist = Math.min(5, Number(flags.zeitgeist ?? 0) + 1);
-        }
-        session.send({ t: "toast", text: `공동 실록 「${event.title}」 달성 — 시대정신 +1`, tone: "epic" });
-      }
+      for (const session of this.sessions.values()) session.onWorldEventComplete(event.title);
       this.#system(`공동 실록 「${event.title}」이(가) 완성되었다.`);
     }
   }

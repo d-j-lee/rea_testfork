@@ -2,14 +2,13 @@
 // fixed-step clock. Runs identically in the Node server and in the browser
 // (offline mode).
 import { CONTENT, type ContentIndex } from "../content/index.ts";
-import type { ChapterId } from "../content/schema.ts";
 import { generateMap, type GameMap } from "../map/generate.ts";
 import { PROTOCOL_VERSION, type ClientMsg, type ServerMsg } from "../protocol.ts";
 import { hashString } from "../rng.ts";
 import { createSave, migrateSave } from "../rules/index.ts";
 import type { PlayerSave } from "../types.ts";
 import type { ConnectionMeta, GameHost, HostConnection, HostOptions, HostStats } from "./api.ts";
-import { Channel } from "./channel.ts";
+import { Channel, channelKey } from "./channel.ts";
 import { parseClientMsg, sanitizeName } from "./parse.ts";
 import { Session } from "./session.ts";
 
@@ -148,7 +147,7 @@ class Host implements GameHost {
       resumed,
     });
     this.#log(`${resumed ? "resume" : "new"} ${save.name} @ ${save.chapter}`);
-    this.#channelFor(save.chapter).add(session);
+    this.#channelFor(save).add(session);
     return session;
   }
 
@@ -162,14 +161,19 @@ class Host implements GameHost {
   #relocate(session: Session): void {
     session.channel?.remove(session);
     if (session.closed) return;
-    this.#channelFor(session.save.chapter).add(session);
+    this.#channelFor(session.save).add(session);
   }
 
-  #channelFor(chapterId: ChapterId): Channel {
+  /**
+   * The first shard of the save's chapter with room. Demo-preset characters get
+   * their own shards: a demo's skips and presets never touch a real player's world.
+   */
+  #channelFor(save: PlayerSave): Channel {
+    const chapterId = save.chapter;
     const capacity = this.#options.channelCapacity ?? 40;
     let shard = 1;
     for (;;) {
-      const key = `${chapterId}#${shard}`;
+      const key = channelKey(chapterId, shard, save.demo);
       const existing = this.#channels.get(key);
       if (!existing) {
         const channel = new Channel(
@@ -184,6 +188,7 @@ class Host implements GameHost {
           },
           this.#content.chapters[chapterId],
           shard,
+          save.demo,
         );
         this.#channels.set(key, channel);
         return channel;

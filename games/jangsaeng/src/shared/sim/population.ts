@@ -16,11 +16,14 @@ function stepOrder(sim: Sim, id: string | undefined): number | null {
   return i >= 0 ? i : null;
 }
 
-/** Visible when the current step order lies within [from, until]; unknown bounds do not restrict. */
-export function inWindow(sim: Sim, from: string | undefined, until: string | undefined): boolean {
+/**
+ * Visible when any of `steps` (the step orders the channel's members stand
+ * at) lies within [from, until]; unknown bounds do not restrict.
+ */
+export function inWindow(sim: Sim, steps: readonly number[], from: string | undefined, until: string | undefined): boolean {
   const lo = stepOrder(sim, from);
   const hi = stepOrder(sim, until);
-  return (lo === null || sim.stepIndex >= lo) && (hi === null || sim.stepIndex <= hi);
+  return steps.some((step) => (lo === null || step >= lo) && (hi === null || step <= hi));
 }
 
 export function siteCentre(sim: Sim, siteId: string, offset?: Offset): { x: number; y: number } | null {
@@ -70,10 +73,14 @@ function createNpc(sim: Sim, def: NpcDef): Actor | null {
   return a;
 }
 
-/** Applies step windows to NPCs and spawn groups. */
-export function refreshPopulation(sim: Sim): void {
+/**
+ * Applies step windows to NPCs and spawn groups: one is present while it
+ * belongs to the step of at least one member, so nobody loses an NPC or a
+ * spawn their own step still needs because someone else moved on.
+ */
+export function refreshPopulation(sim: Sim, steps: readonly number[]): void {
   for (const def of sim.chapter.npcs) {
-    const visible = inWindow(sim, def.fromStep, def.untilStep);
+    const visible = inWindow(sim, steps, def.fromStep, def.untilStep);
     const id = sim.npcs.get(def.id);
     const current = id === undefined ? undefined : sim.actors.get(id);
     if (visible && !current) {
@@ -85,7 +92,7 @@ export function refreshPopulation(sim: Sim): void {
     }
   }
   for (const s of sim.spawns) {
-    const active = inWindow(sim, s.def.fromStep, s.def.untilStep);
+    const active = inWindow(sim, steps, s.def.fromStep, s.def.untilStep);
     if (active === s.active) continue;
     s.active = active;
     for (const slot of s.slots) {

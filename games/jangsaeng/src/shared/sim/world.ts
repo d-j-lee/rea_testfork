@@ -62,6 +62,8 @@ export interface PlayerSpec {
   derived: Derived;
   /** Equipped skill ids by slot (index 0 = slot 1). */
   skills: readonly string[];
+  /** Whether slot 5 (노인성 일섬) may fire; default true. The host keeps it current. */
+  longevityEnabled?: boolean;
   /** Spawn position in tiles. */
   x: number;
   y: number;
@@ -141,6 +143,8 @@ export class World {
   readonly #sim: Sim;
   readonly #seen = new Map<number, Set<number>>();
   readonly #query: WorldQuery;
+  /** Step orders the channel's members stand at (NPC and spawn windows). */
+  #steps: readonly number[] = [0];
 
   constructor(options: WorldOptions) {
     const { content, chapter, map, year, seed, hooks } = options;
@@ -173,7 +177,7 @@ export class World {
     };
     this.#sim = sim;
     sim.spawns.push(...makeSpawns(sim));
-    refreshPopulation(sim);
+    refreshPopulation(sim, this.#steps);
     this.#query = makeQuery(sim);
   }
 
@@ -182,15 +186,24 @@ export class World {
     return this.#sim.time;
   }
 
-  /** Chapter step changed for this channel's story phase (NPC/spawn windows). */
-  setStep(stepId: string): void {
+  /**
+   * The story steps the channel's members stand at (one id per member; unknown
+   * ids are ignored). An NPC or spawn group is present while its window holds
+   * any member's step. The map shows the earliest member's year, so the shared
+   * world never runs ahead of anyone's story.
+   */
+  setStep(...stepIds: readonly string[]): void {
     const sim = this.#sim;
-    const index = sim.chapter.steps.findIndex((step) => step.id === stepId);
-    if (index < 0) return;
-    sim.stepIndex = index;
-    const year = sim.chapter.steps[index]?.year;
+    const steps = [...new Set(stepIds.map((id) => sim.chapter.steps.findIndex((step) => step.id === id)))]
+      .filter((index) => index >= 0)
+      .sort((m, n) => m - n);
+    const earliest = steps[0];
+    if (earliest === undefined) return;
+    this.#steps = steps;
+    sim.stepIndex = earliest;
+    const year = sim.chapter.steps[earliest]?.year;
     if (year !== undefined && year !== sim.year) this.setYear(year);
-    refreshPopulation(sim);
+    refreshPopulation(sim, steps);
     flushEvents(sim);
   }
 
@@ -214,6 +227,7 @@ export class World {
     if (existing) removeActor(sim, existing);
     this.#seen.delete(spec.id);
     createPlayer(sim, spec);
+    this.setLongevityEnabled(spec.id, spec.longevityEnabled ?? true);
   }
 
   /** Refresh level/derived/sprite/skills after progression changes. */
@@ -337,6 +351,11 @@ export class World {
     return battleView(this.#sim);
   }
 
+  /** Player ids (humans and companions) taking part in the active battle. */
+  battleParticipants(): number[] {
+    return [...(this.#sim.battle?.participants ?? [])];
+  }
+
   tick(dt: number): void {
     const sim = this.#sim;
     sim.time = Math.round((sim.time + dt) * 1e6) / 1e6;
@@ -453,7 +472,7 @@ export class World {
     flushEvents(sim);
   }
 
-  /** Enables or disables slot 5 (the host enforces 3 uses per chapter). */
+  /** Enables or disables slot 5; the host mirrors rules/lifespan.ts longevityBlocker here. */
   setLongevityEnabled(id: number, enabled: boolean): void {
     const p = this.#sim.players.get(id)?.pl;
     if (p) p.longevityEnabled = enabled;
