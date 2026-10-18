@@ -111,7 +111,12 @@ export interface PurgeSpec {
   intensity: number;
   winner: string | null;
   loser: string | null;
-  /** Player stayed neutral: E −15, gains halved by the caller's effects. */
+  /**
+   * The option stays out of the event: side multiplier 0.6 whatever the
+   * player is aligned with (GDD §5.5.3, rules/politics.ts purgeSide). There
+   * is no flat discount; the 풍향계 shows the resulting risk, so hints should
+   * not promise a number.
+   */
   neutral?: boolean;
   /** Site for exile outcomes. */
   exileSite?: string;

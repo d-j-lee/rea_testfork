@@ -37,7 +37,7 @@ export { applyEffects, battleResult, evalCond, purgeRisk, purgeRiskShown } from 
 export { discipleGeneration, hashRoll, isRenowned, virtueEarned } from "./util.ts";
 
 export type { PurgeResolution, PurgeTerm, PurgeVerdict } from "./politics.ts";
-export { purgeProtection, purgeSide, purgeTerms } from "./politics.ts";
+export { PURGE_SIDE, purgeProtection, purgeSide, purgeTerms } from "./politics.ts";
 
 export type { UseResult } from "./lifespan.ts";
 export {

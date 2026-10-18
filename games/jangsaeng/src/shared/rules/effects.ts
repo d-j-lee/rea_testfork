@@ -105,7 +105,7 @@ export interface EffectOutcome {
   levelsGained: number;
   /** An identity wash happened (session must rename the entity). */
   washed: boolean;
-  /** Purge produced a death sentence crisis: session starts the escape battle. */
+  /** Purge produced a death-sentence crisis: the session shows the 사사 위기 card. */
   escape: boolean;
 }
 
@@ -126,6 +126,31 @@ export function emptyOutcome(): EffectOutcome {
 const MERIT_SUBJECT_RANK: Readonly<Record<1 | 2 | 3 | 4, number>> = { 1: 14, 2: 13, 3: 12, 4: 10 };
 const MAX_DEPTH = 16;
 
+/**
+ * 풍향계 preview probe: the walk stops at the purge with this id and records
+ * the risk that purge would roll against, instead of resolving it.
+ */
+interface PurgeProbe {
+  id: string;
+  risk?: number;
+}
+
+/** Does this effect list (including check/if branches) contain the purge `id`? */
+function reachesPurge(effects: readonly Effect[], id: string): boolean {
+  return effects.some((effect) => {
+    switch (effect.k) {
+      case "purge":
+        return effect.spec.id === id;
+      case "check":
+        return reachesPurge(effect.success, id) || reachesPurge(effect.failure, id);
+      case "if":
+        return reachesPurge(effect.then, id) || reachesPurge(effect.else ?? [], id);
+      default:
+        return false;
+    }
+  });
+}
+
 /** Same wording as the CH03 content titles, so the title is never duplicated. */
 export function meritSubjectTitle(grade: 1 | 2 | 3 | 4): string {
   return grade === 4 ? "원종공신" : `개국공신 ${grade}등`;
@@ -140,7 +165,14 @@ function changePoint(save: PlayerSave, point: keyof PlayerSave["points"], add: n
   return save.points[point] - before;
 }
 
-function applyOne(content: ContentIndex, save: PlayerSave, effect: Effect, out: EffectOutcome, depth: number): void {
+function applyOne(
+  content: ContentIndex,
+  save: PlayerSave,
+  effect: Effect,
+  out: EffectOutcome,
+  depth: number,
+  probe?: PurgeProbe,
+): void {
   const lines = out.lines;
   switch (effect.k) {
     case "stat": {
@@ -272,22 +304,35 @@ function applyOne(content: ContentIndex, save: PlayerSave, effect: Effect, out: 
       out.goto = effect.offset ? { site: effect.site, offset: effect.offset } : { site: effect.site };
       return;
     case "purge": {
+      if (probe && effect.spec.id === probe.id) {
+        probe.risk = computePurgeRisk(save, effect.spec);
+        return;
+      }
       const result = resolvePurge(save, effect.spec);
       lines.push(...result.lines);
       if (result.escape) out.escape = true;
       return;
     }
     case "check": {
+      if (probe) {
+        // When only one outcome leads to the previewed purge, the purge is rolled
+        // only there: walk that side without consulting the hidden check roll.
+        const onSuccess = reachesPurge(effect.success, probe.id);
+        if (onSuccess !== reachesPurge(effect.failure, probe.id)) {
+          applyList(content, save, onSuccess ? effect.success : effect.failure, out, depth + 1, probe);
+          return;
+        }
+      }
       const stat = effect.stat ? save.stats[effect.stat] : 0;
       const chance = Math.round(clamp(effect.base + (effect.per ?? 0) * stat, 5, 95));
       const success = hashRoll(save.seed, effect.id) < chance;
       lines.push(line(`${effect.label} 판정 ${success ? "성공" : "실패"} (${chance}%)`, success ? "good" : "bad"));
       save.flags[`check:${effect.id}`] = success;
-      applyList(content, save, success ? effect.success : effect.failure, out, depth + 1);
+      applyList(content, save, success ? effect.success : effect.failure, out, depth + 1, probe);
       return;
     }
     case "if":
-      applyList(content, save, evalCond(content, save, effect.cond) ? effect.then : (effect.else ?? []), out, depth + 1);
+      applyList(content, save, evalCond(content, save, effect.cond) ? effect.then : (effect.else ?? []), out, depth + 1, probe);
       return;
     case "prompt":
       out.prompts.push(effect.prompt);
@@ -306,9 +351,19 @@ function applyOne(content: ContentIndex, save: PlayerSave, effect: Effect, out: 
   }
 }
 
-function applyList(content: ContentIndex, save: PlayerSave, effects: readonly Effect[], out: EffectOutcome, depth: number): void {
+function applyList(
+  content: ContentIndex,
+  save: PlayerSave,
+  effects: readonly Effect[],
+  out: EffectOutcome,
+  depth: number,
+  probe?: PurgeProbe,
+): void {
   if (depth > MAX_DEPTH) return;
-  for (const effect of effects) applyOne(content, save, effect, out, depth);
+  for (const effect of effects) {
+    if (probe?.risk !== undefined) return;
+    applyOne(content, save, effect, out, depth, probe);
+  }
 }
 
 /** Applies effects in order, mutating `save`. Deterministic for a save seed. */
@@ -323,12 +378,20 @@ export function applyEffectsInto(content: ContentIndex, save: PlayerSave, effect
   applyList(content, save, effects, out, 0);
 }
 
-/** Purge risk R (5..95) for a spec, optionally after hypothetical effects. */
+/**
+ * Purge risk R (5..95) for `spec`. With an option's effects (`preview`) it is
+ * the R that option's purge will roll against: the effects before that purge
+ * run on a clone, the purge itself never resolves there, and a check that
+ * guards it is walked on the side that reaches it. So the 풍향계 equals the
+ * 숙청 판정 line and never reveals a hidden verdict. Without a purge on the
+ * option's path, R after all its effects.
+ */
 export function purgeRisk(content: ContentIndex, save: PlayerSave, spec: PurgeSpec, preview?: readonly Effect[]): number {
   if (!preview || preview.length === 0) return computePurgeRisk(save, spec);
   const hypothetical = cloneSave(save);
-  applyEffects(content, hypothetical, preview);
-  return computePurgeRisk(hypothetical, spec);
+  const probe: PurgeProbe = { id: spec.id };
+  applyList(content, hypothetical, preview, emptyOutcome(), 0, probe);
+  return probe.risk ?? computePurgeRisk(hypothetical, spec);
 }
 
 /** 풍향계 value for an option: exact with 지략 ≥ 30, otherwise a stable ±10 blur. */

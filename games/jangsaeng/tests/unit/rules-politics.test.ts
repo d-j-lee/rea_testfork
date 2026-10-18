@@ -1,10 +1,12 @@
 // Purge risk (GDD §5.5.3): side multiplier, protection, worked examples,
-// 풍향계 blur, determinism and outcome margins.
+// 풍향계 blur and preview, determinism and outcome margins.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { PurgeSpec } from "../../src/shared/content/schema.ts";
+import { CONTENT } from "../../src/shared/content/index.ts";
+import { CHAPTER_IDS, type Effect, type PurgeSpec } from "../../src/shared/content/schema.ts";
 import {
   applyEffects,
+  createSave,
   hashRoll,
   purgeProtection,
   purgeRisk,
@@ -34,7 +36,23 @@ test("side multiplier: 0.3 with the winner, 1.0 with the loser, 0.6 otherwise", 
   assert.equal(purgeSide(save, P1398), 1.0);
   save.aligned = "someone_else";
   assert.equal(purgeSide(save, P1398), 0.6);
-  assert.equal(purgeSide(save, { ...P1398, neutral: true }), 0.6, "the old neutral −15 rule is gone");
+});
+
+test("a neutral option stands aside: 0.6 whatever the player was aligned with, no flat discount", () => {
+  const save = newSave();
+  save.favor = {};
+  save.stats.tact = 5;
+  const neutral: PurgeSpec = { ...P1398, neutral: true };
+  for (const aligned of [null, "bangwon", "jeongdojeon", "someone_else"]) {
+    save.aligned = aligned;
+    assert.equal(purgeSide(save, neutral), 0.6, `aligned ${aligned}`);
+    // 0.6·45 − 5 = 22, the same for preview and roll.
+    assert.equal(purgeRisk(FIXTURE, save, neutral), 22, `aligned ${aligned}`);
+  }
+  // An earlier align in the same chapter does not leak into the neutral option.
+  save.aligned = "jeongdojeon";
+  assert.equal(purgeRisk(FIXTURE, save, P1398), 40, "1.0·45 − 5 for the side that loses");
+  assert.equal(purgeRisk(FIXTURE, save, neutral), 22);
 });
 
 test("protection: 5 per 열전 bond ≥ 60 (max 15) + 5 for 동료 보증; family houses don't count", () => {
@@ -102,6 +120,79 @@ test("preview applies the option's effects to a clone only", () => {
   assert.equal(purgeRisk(FIXTURE, save, P1453, [{ k: "align", faction: "suyang" }, { k: "favor", faction: "suyang", add: 25 }]), 6, "0.3·60 − 7.5 − 5 = 5.5");
   assert.equal(purgeRisk(FIXTURE, save, P1453, [{ k: "align", faction: "kimjongseo" }, { k: "suspicion", add: 15 }]), 59);
   assert.equal(JSON.stringify(save), before, "the real save is untouched");
+});
+
+/** R printed on the 숙청 판정 line of a resolution. */
+function rolledRisk(lines: readonly { text: string }[]): number | undefined {
+  const match = lines.map((entry) => /^숙청 판정 — 위험 (\d+)/.exec(entry.text)).find(Boolean);
+  return match ? Number(match[1]) : undefined;
+}
+
+test("preview equals the R the purge rolls, even when the verdict lowers the rank", () => {
+  // 당상관 (+10) until the verdict demotes: the preview must not apply its own verdict.
+  for (const margin of [5, 20, 40]) {
+    const save = plainSave();
+    save.rank = 14;
+    const { id, roll } = idWithRoll(save, 10, 40);
+    // Neutral plain save at rank 14: R = 0.6·E − 1 + 10.
+    const spec: PurgeSpec = { id, intensity: (roll + margin - 9) / 0.6, winner: null, loser: null };
+    const option: Effect[] = [{ k: "suspicion", add: 8 }, { k: "purge", spec }, { k: "rank", add: -5 }];
+    const preview = purgeRisk(FIXTURE, save, spec, option);
+    const real = JSON.parse(JSON.stringify(save)) as PlayerSave;
+    const out = applyEffects(FIXTURE, real, option);
+    assert.notEqual(real.flags[`purge:${id}`], "survived", `margin ${margin}`);
+    assert.equal(preview, rolledRisk(out.lines), `margin ${margin}: 풍향계 = 숙청 판정 line`);
+    assert.equal(preview, roll + margin + 2, `margin ${margin}: includes the suspicion before the purge, not the rank after`);
+  }
+});
+
+test("preview walks a guarding check on the side that reaches the purge, without its roll", () => {
+  const spec: PurgeSpec = { id: "guarded", intensity: 50, winner: null, loser: null };
+  const option: Effect[] = [
+    {
+      k: "check", id: "guard_check", label: "연판장", base: 50,
+      success: [{ k: "point", point: "honor", add: 10 }],
+      failure: [{ k: "suspicion", add: 20 }, { k: "purge", spec }],
+    },
+  ];
+  const outcomes = new Set<boolean>();
+  for (let seed = 1; seed < 60; seed++) {
+    const save = plainSave();
+    save.seed = seed;
+    const preview = purgeRisk(FIXTURE, save, spec, option);
+    assert.equal(preview, 34, `seed ${seed}: 0.6·50 − 1 + 0.25·20, the same whether the check passes or fails`);
+    const real = JSON.parse(JSON.stringify(save)) as PlayerSave;
+    const out = applyEffects(FIXTURE, real, option);
+    const failed = real.flags["check:guard_check"] === false;
+    outcomes.add(failed);
+    if (failed) assert.equal(rolledRisk(out.lines), preview, `seed ${seed}`);
+    else assert.equal(rolledRisk(out.lines), undefined, `seed ${seed}: no purge on success`);
+  }
+  assert.equal(outcomes.size, 2, "both check outcomes were exercised");
+});
+
+test("every shipped purge option: the 풍향계 equals the R its purge rolls", () => {
+  let compared = 0;
+  for (const chapter of CHAPTER_IDS) {
+    for (const prompt of CONTENT.chapters[chapter].prompts) {
+      for (const option of prompt.options) {
+        if (!option.risk) continue;
+        for (let seed = 1; seed <= 12; seed++) {
+          const save = createSave(CONTENT, { token: "t", name: "강휘", variant: "m", origin: "northeast", seed, demoChapter: chapter });
+          save.stats.wit = 30;
+          // An earlier align in the chapter must not change what a neutral option rolls.
+          if (seed % 3 === 0) save.aligned = option.risk.loser;
+          const shown = purgeRiskShown(CONTENT, save, option.risk, option.effects);
+          const real = JSON.parse(JSON.stringify(save)) as PlayerSave;
+          const rolled = rolledRisk(applyEffects(CONTENT, real, option.effects).lines);
+          if (rolled === undefined) continue;
+          assert.deepEqual(shown, { value: rolled, exact: true }, `${prompt.id}/${option.id} seed ${seed}`);
+          compared++;
+        }
+      }
+    }
+  }
+  assert.ok(compared > 300, `compared ${compared} rolls`);
 });
 
 test("풍향계: exact with 지략 ≥ 30, else a stable ±10 blur", () => {
@@ -188,10 +279,12 @@ test("margin 15–34 exiles (rank −5, life −1, exile site)", () => {
   assert.equal(fallback.exile, "jeju");
 });
 
-test("margin ≥ 35 is a death-sentence crisis handled by an escape battle", () => {
+test("margin ≥ 35 is a death-sentence crisis: the 사사 위기 card offers flight or a plea", () => {
   const save = plainSave();
   const { id, roll } = idWithRoll(save, 10, 50);
   const out = applyEffects(FIXTURE, save, [{ k: "purge", spec: { id, intensity: intensityFor(roll + 35), winner: null, loser: null } }]);
   assert.equal(save.flags[`purge:${id}`], "sentenced");
   assert.equal(out.escape, true);
+  assert.equal(out.lines.at(-1)?.text, "사사의 명 — 담을 넘어 달아날지, 끝까지 결백을 주장할지 정해야 한다");
+  assert.doesNotMatch(JSON.stringify([out.lines, save.chronicle]), /추격/, "no chase battle is promised");
 });
