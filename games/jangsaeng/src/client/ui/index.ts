@@ -71,6 +71,13 @@ export interface Ui {
   frame(info: FrameInfo): void;
   /** A modal (prompt, menu, chat input) is open; gameplay input is paused. */
   readonly blocking: boolean;
+  /**
+   * A modal that holds an offline world still is open: the menu book, a
+   * phone drawer, the chat input or an error. Story cards and the years
+   * planner do not (the host already holds a battle behind them), and the
+   * online world stays live whatever is open (net/offline.ts reads this).
+   */
+  readonly holdsWorld: boolean;
   showError(text: string): void;
 }
 
@@ -191,6 +198,7 @@ export function createUi(deps: UiDeps): Ui {
     },
     onTyping: () => sync(),
     onDrawer: () => sync(),
+    onOverlay: () => sync(),
     openMenu: () => {
       audio.sfx("ui_click");
       if (!prompt.open && !years.open) menu.showLast();
@@ -216,6 +224,10 @@ export function createUi(deps: UiDeps): Ui {
 
   const isBlocking = () =>
     !inGame || !!ending || !!title || !!loading || !!card || prompt.open || years.open || menu.open || hud.chat.typing || !!hud.drawer || !!errorEl;
+  /** The story owns the moment: a chapter card, a story card or the years planner. */
+  const storyOpen = () => !!card || prompt.open || years.open;
+  const holdsWorld = () =>
+    inGame && !ending && !storyOpen() && (menu.open || !!hud.drawer || hud.chat.typing || !!errorEl);
 
   let lastBlocking: boolean | null = null;
   const sync = () => {
@@ -223,8 +235,10 @@ export function createUi(deps: UiDeps): Ui {
     root.classList.toggle("in-game", inGame && !ending);
     root.classList.toggle("modal-open", prompt.open || years.open || menu.open || !!card || !!ending || !!hud.drawer);
     root.classList.toggle("card-open", !!card);
-    // Toasts wait while a full-screen document would sit under them.
-    toasts.hold(!!card || years.open || !!ending);
+    // Toasts never draw over modal UI: while a card, sheet, planner, the menu
+    // book, the 사경 overlay, an error or the ending is up they wait (errors
+    // dock at the bottom) and play once it closes.
+    toasts.hold(storyOpen() || menu.open || hud.downed.active || !!errorEl || !!ending);
     root.dataset.drawer = hud.drawer ?? "";
     if (blocking !== lastBlocking) {
       lastBlocking = blocking;
@@ -372,6 +386,9 @@ export function createUi(deps: UiDeps): Ui {
     },
     get blocking() {
       return isBlocking();
+    },
+    get holdsWorld() {
+      return holdsWorld();
     },
     showError(text) {
       errorEl?.remove();

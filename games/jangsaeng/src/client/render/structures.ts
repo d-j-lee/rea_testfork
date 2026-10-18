@@ -31,7 +31,10 @@ export interface WorldRect {
 /** A drawable with world-space bounds for culling. */
 export interface StructureDrawable extends Drawable {
   readonly structure: Structure | null;
+  /** Conservative culling bounds (before the sprite exists). */
   readonly bounds: WorldRect;
+  /** The sprite's own rectangle (world px): what it hides of anyone behind it. */
+  cover(): WorldRect;
 }
 
 type Art = (variant: number, season: Season) => StructureSprite;
@@ -90,9 +93,9 @@ export class StructureLayer {
   }
 
   /** Drawables whose sprites may intersect the world rectangle. */
-  visible(view: WorldRect, _timeMs: number): Drawable[] {
+  visible(view: WorldRect, _timeMs: number): StructureDrawable[] {
     if (this.#dirty) this.#rebuild();
-    const out: Drawable[] = [];
+    const out: StructureDrawable[] = [];
     for (const d of this.#drawables) {
       const b = d.bounds;
       if (b.x1 < view.x0 || b.y1 < view.y0 || b.x0 > view.x1 || b.y0 > view.y1) continue;
@@ -268,6 +271,17 @@ function footprintBounds(x: number, y: number, w: number, h: number): WorldRect 
   };
 }
 
+/** The sprite rectangle at (wx, wy), measured once its sprite exists (a ship bobs `sway` px lower). */
+function coverOf(ref: SpriteRef, wx: number, wy: number, sway = 0): () => WorldRect {
+  let rect: WorldRect | null = null;
+  return () => {
+    if (rect) return rect;
+    const s = ref();
+    rect = { x0: wx + s.ox, y0: wy + s.oy, x1: wx + s.ox + s.surface.width, y1: wy + s.oy + s.surface.height + sway };
+    return rect;
+  };
+}
+
 function staticDrawable(
   structure: Structure | null,
   ref: SpriteRef,
@@ -280,6 +294,7 @@ function staticDrawable(
     structure,
     sortY,
     bounds,
+    cover: coverOf(ref, wx, wy),
     draw(ctx) {
       const sprite = ref();
       ctx.drawImage(sprite.surface, wx + sprite.ox, wy + sprite.oy);
@@ -295,6 +310,7 @@ function beaconDrawable(structure: Structure, ref: SpriteRef, wx: number, wy: nu
     structure,
     sortY,
     bounds,
+    cover: coverOf(ref, wx, wy),
     draw(ctx, timeMs) {
       const sprite = ref();
       ctx.drawImage(sprite.surface, wx + sprite.ox, wy + sprite.oy);
@@ -323,6 +339,7 @@ function shipDrawable(structure: Structure, ref: SpriteRef, wx: number, wy: numb
     structure,
     sortY,
     bounds,
+    cover: coverOf(ref, wx, wy, 1),
     draw(ctx, timeMs) {
       const sprite = ref();
       const bob = Math.sin(timeMs / 700 + phase) > 0.35 ? 1 : 0;
@@ -345,6 +362,7 @@ function flagDrawable(
     structure,
     sortY,
     bounds,
+    cover: coverOf(ref, wx, wy),
     draw(ctx, timeMs) {
       const sprite = ref();
       const x = wx + sprite.ox;

@@ -22,6 +22,10 @@ const HITSTOP_MAX = 160;
 const SHAPE_LINE = 0;
 const SHAPE_CIRCLE = 1;
 const SHAPE_CONE = 2;
+/** Half-width (world px) of a line telegraph: a 4 px band (a third of the old 12 px bar). */
+const LINE_HALF = 2;
+/** A line's aim guide, near third to far third: it thins out towards the tip. */
+const LINE_GUIDE: readonly string[] = ["rgba(170,24,20,0.13)", "rgba(170,24,20,0.08)", "rgba(170,24,20,0.04)"];
 
 class Tele {
   active = false;
@@ -221,18 +225,23 @@ export class FxRouter {
         ctx.stroke();
         if (flash > 0) wedge(ctx, t.x, t.y, t.r, a0, a1, `rgba(255,230,200,${0.55 * flash})`);
       } else {
+        // Lines (a musket volley, a charge) are thin: a rank of eight
+        // muskets must read as eight aimed lines, not a red wall. A faint
+        // guide thinning out towards the far end shows the aim; the danger
+        // fills in from the shooter as the shot comes due.
         const dx = t.tx - t.x;
         const dy = t.ty - t.y;
         const len = Math.hypot(dx, dy);
         if (len < 1) continue;
-        const w = 6;
-        band(ctx, t.x, t.y, dx, dy, len, w, 1, "rgba(170,24,20,0.18)");
-        band(ctx, t.x, t.y, dx, dy, len, w, k, `rgba(222,40,28,${0.24 + 0.12 * k})`);
-        ctx.strokeStyle = `rgba(255,110,84,${0.55 + 0.35 * pulse})`;
-        ctx.lineWidth = 1;
-        bandPath(ctx, t.x, t.y, dx, dy, len, w, 1);
-        ctx.stroke();
-        if (flash > 0) band(ctx, t.x, t.y, dx, dy, len, w, 1, `rgba(255,230,200,${0.55 * flash})`);
+        for (let s = 0; s < LINE_GUIDE.length; s++) {
+          const from = s / LINE_GUIDE.length;
+          const sx = t.x + dx * from;
+          const sy = t.y + dy * from;
+          band(ctx, sx, sy, dx / LINE_GUIDE.length, dy / LINE_GUIDE.length, len / LINE_GUIDE.length, LINE_HALF, 1, LINE_GUIDE[s] as string);
+        }
+        band(ctx, t.x, t.y, dx, dy, len, LINE_HALF, k, `rgba(222,40,28,${0.12 + 0.12 * k})`);
+        band(ctx, t.x, t.y, dx, dy, len, 0.5, k, `rgba(255,110,84,${0.3 + 0.25 * pulse})`);
+        if (flash > 0) band(ctx, t.x, t.y, dx, dy, len, LINE_HALF, 1, `rgba(255,230,200,${0.35 * flash})`);
       }
     }
     ctx.globalAlpha = prev;

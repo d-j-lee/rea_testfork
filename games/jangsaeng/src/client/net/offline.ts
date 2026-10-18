@@ -6,6 +6,7 @@
 import { createGameHost } from "../../shared/host/host.ts";
 import { DEFAULT_COMPANIONS, type GameHost, type ProfileStore } from "../../shared/host/api.ts";
 import type { PlayerSave } from "../../shared/types.ts";
+import { HostTime } from "./host-time.ts";
 import { connectLoopback, type Transport } from "./transport.ts";
 import { isRecord, readJson, readKey, removeKey, writeKey } from "../storage.ts";
 
@@ -132,14 +133,21 @@ const FATAL_MS = 2000;
 /**
  * Starts the in-page host. Throws when the host cannot be created;
  * `onFatal` reports a host that keeps failing to tick (the session stops).
+ * While `held()` is true the world stands still (HostTime): the UI holds it
+ * while the menu book is open, since nobody else shares this world.
  */
-export function startOffline(log: (line: string) => void, onFatal: (reason: string) => void): OfflineSession {
+export function startOffline(
+  log: (line: string) => void,
+  onFatal: (reason: string) => void,
+  held: () => boolean = () => false,
+): OfflineSession {
   const store = new LocalStorageStore();
+  const time = new HostTime(performance.now());
   const host = createGameHost({
     seed: "jangsaeng",
     mode: "offline",
     store,
-    clock: { now: () => performance.now() },
+    clock: { now: () => time.now },
     botsPerChannel: DEFAULT_COMPANIONS,
     log,
   });
@@ -152,7 +160,7 @@ export function startOffline(log: (line: string) => void, onFatal: (reason: stri
     try {
       // host.tick runs every fixed step due since the last call, so the
       // timer also catches up after background-tab throttling.
-      host.tick(now);
+      host.tick(time.advance(now, held()));
       failingSince = -1;
     } catch (error) {
       if (!logged) console.error("[offline host] tick failed", error);
@@ -178,7 +186,15 @@ export function startOffline(log: (line: string) => void, onFatal: (reason: stri
   };
   window.addEventListener("pagehide", flush);
   document.addEventListener("visibilitychange", onHide);
-  const transport = connectLoopback(host);
+  const loopback = connectLoopback(host);
+  const transport: Transport = {
+    ...loopback,
+    send(message) {
+      // Movement and pings need no answer; anything else is answered in host time.
+      if (message.t !== "input" && message.t !== "ping") time.nudge();
+      loopback.send(message);
+    },
+  };
   const session: OfflineSession = {
     host,
     transport,

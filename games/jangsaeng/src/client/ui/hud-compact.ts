@@ -4,7 +4,7 @@
 import { FINAL_YEAR, type SelfView } from "../../shared/types.ts";
 import { button, h, meter, ratio, setMeter, setText, toggle } from "./dom.ts";
 import { inputHintText, touchInput } from "./hud-objectives.ts";
-import { SUSPICION_BANDS } from "./labels.ts";
+import { lifeWarning, SUSPICION_BANDS } from "./labels.ts";
 
 export type Drawer = "status" | "objectives" | "chat";
 
@@ -42,10 +42,10 @@ export class CompactBar {
     toggle(this.#hp.root, "low", self.hp > 0 && self.hp / Math.max(1, self.maxHp) < 0.3);
     setMeter(this.#en, ratio(self.energy, self.maxEnergy));
     setMeter(this.#st, ratio(self.stamina, 100));
-    const short = self.lifeShortfall > 0;
-    setText(this.#life, short ? `천수 ${self.lifeEnd} −${self.lifeShortfall}` : `천수 ${Math.max(0, self.lifeEnd - self.year)}년`);
-    toggle(this.#life, "short", short);
-    this.#life.title = short ? `이대로면 ${self.lifeEnd}년에 천수가 다한다 · ${FINAL_YEAR}년까지 ${self.lifeShortfall}년 부족` : "";
+    const life = lifeWarning(self);
+    setText(this.#life, life === "ok" ? `천수 ${Math.max(0, self.lifeEnd - self.year)}년` : `천수 ${self.lifeEnd} −${self.lifeShortfall}`);
+    this.#life.dataset.life = life;
+    this.#life.title = life === "ok" ? "" : `이대로면 ${self.lifeEnd}년에 천수가 다한다 · ${FINAL_YEAR}년까지 ${self.lifeShortfall}년 부족`;
     const band = SUSPICION_BANDS[self.suspicionBand];
     setText(this.#susp, band.label);
     this.#susp.title = `의심도 ${Math.round(self.suspicion)} · ${band.label}`;

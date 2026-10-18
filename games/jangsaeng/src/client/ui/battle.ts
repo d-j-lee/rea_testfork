@@ -97,9 +97,17 @@ export class DownedOverlay {
   readonly el: HTMLElement;
   readonly #count = h("span", { class: "dn-count" });
   #endsAt = 0;
-  #on = false;
+  #downed = false;
+  /** The battle the player went down in, while it runs. */
+  #battle = "";
+  /** Nobody can raise the player any more: the down timer ran out, or their battle ended. */
+  #alone = false;
+  #wasActive = false;
+  readonly #onActive: () => void;
 
-  constructor(onRevive: () => void) {
+  /** `onActive`: the full overlay opened or closed (the UI holds toasts under it). */
+  constructor(onRevive: () => void, onActive: () => void) {
+    this.#onActive = onActive;
     // rules/lifespan.ts selfRevive: the first in each chapter is free, then a year each.
     const revive = button(h("span", null, "자력 소생 ", h("small", null, "장마다 첫 소생 무료 · 이후 천수 −1년")), onRevive, { class: "btn btn-danger dn-btn" });
     this.el = h(
@@ -109,25 +117,46 @@ export class DownedOverlay {
         h("p", { class: "dn-title" }, "사경", h("small", null, "死境")),
         h("p", { class: "dn-line" }, this.#count, h("small", null, "초")),
         h("p", { class: "dn-wait" }, "동료를 기다리는 중…"),
+        h("p", { class: "dn-alone" }, "일으켜 줄 이가 없다 — 스스로 일어서야 한다"),
         revive),
     );
   }
 
+  /**
+   * The full 사경 overlay is up (the countdown while others can still help).
+   * Once nobody can — the host's timer ran out or the battle ended — it
+   * closes and only a small self-revive plate stays while the player is down.
+   */
   get active(): boolean {
-    return this.#on;
+    return this.#downed && !this.#alone;
   }
 
+  /** The host's facts decide; the local clock only animates the countdown between them. */
   update(self: SelfView, now: number): void {
-    const d = self.downed;
-    this.#on = !!d && !self.dead;
-    toggle(this.el, "hidden", !this.#on);
-    if (d) this.#endsAt = now + d.secondsLeft * 1000;
+    const d = self.dead ? undefined : self.downed;
+    if (!d) {
+      this.#battle = "";
+      this.#alone = false;
+    } else {
+      if (!this.#downed) this.#battle = self.battle?.id ?? "";
+      // The timer ran out (nobody can raise the player now), or the battle
+      // the player went down in has ended: its result takes over.
+      if (d.secondsLeft <= 0 || (this.#battle && self.battle?.id !== this.#battle)) this.#alone = true;
+      this.#endsAt = now + d.secondsLeft * 1000;
+    }
+    this.#downed = !!d;
+    toggle(this.el, "hidden", !this.#downed);
+    toggle(this.el, "alone", this.#alone);
     this.tick(now);
+    const active = this.active;
+    if (active !== this.#wasActive) {
+      this.#wasActive = active;
+      this.#onActive();
+    }
   }
 
   tick(now: number): void {
-    if (!this.#on) return;
-    const left = Math.max(0, Math.ceil((this.#endsAt - now) / 1000));
-    setText(this.#count, String(left));
+    // Never "0초": the host's own zero closes the countdown.
+    if (this.active) setText(this.#count, String(Math.max(1, Math.ceil((this.#endsAt - now) / 1000))));
   }
 }

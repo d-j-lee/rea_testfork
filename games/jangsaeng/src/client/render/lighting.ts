@@ -1,7 +1,8 @@
 // Screen-space atmosphere drawn after the world: time-of-day grading (dawn,
 // day, dusk, night with a cool vignette) and weather overlays (rain, snow,
 // fog, war smoke). Particles are a pure function of timeMs, batched into a
-// single path per layer, so the pass stays cheap and needs no state.
+// single path per layer, so the pass stays cheap and needs no state; fog and
+// smoke are composed small and stretched in one blit (cloudLayerFor).
 
 import { hash01 } from "./raster.ts";
 
@@ -150,7 +151,34 @@ function tintedFog(color: string): HTMLCanvasElement {
   return canvas;
 }
 
-/** Draws a scrolling, wrapping cloud layer across the screen. */
+/**
+ * Fog and smoke are soft at any resolution, so they are composed on a small
+ * scratch layer (1/CLOUD_DOWN of the screen each way) together with the
+ * vignette, and reach the screen in one stretched blit. Drawing the cloud
+ * textures (and their tint) at full size cost several full-screen smoothed
+ * draws a frame and halved the frame rate on software rendering.
+ */
+const CLOUD_DOWN = 8;
+let cloudScratch: CanvasRenderingContext2D | null = null;
+
+/** The scratch layer sized for a width × height screen, cleared. */
+function cloudLayerFor(width: number, height: number): CanvasRenderingContext2D {
+  const w = Math.max(2, Math.ceil(width / CLOUD_DOWN));
+  const h = Math.max(2, Math.ceil(height / CLOUD_DOWN));
+  if (!cloudScratch) {
+    const ctx = document.createElement("canvas").getContext("2d");
+    if (!ctx) throw new Error("2D canvas is unavailable");
+    cloudScratch = ctx;
+  }
+  const canvas = cloudScratch.canvas;
+  if (canvas.width !== w || canvas.height !== h) {
+    canvas.width = w;
+    canvas.height = h;
+  } else cloudScratch.clearRect(0, 0, w, h);
+  return cloudScratch;
+}
+
+/** Draws a scrolling, wrapping cloud layer across a width × height target. */
 function cloudLayer(ctx: CanvasRenderingContext2D, texture: HTMLCanvasElement, width: number, height: number, ox: number, oy: number, scale: number, alpha: number) {
   const tw = texture.width * scale;
   const th = texture.height * scale;
@@ -189,19 +217,37 @@ export function drawAtmosphere(ctx: CanvasRenderingContext2D, width: number, hei
     ctx.fillRect(0, 0, width, height);
   }
   ctx.globalCompositeOperation = "source-over";
-  // Weather layers.
+  // Vignette: only where it is noticeable (dusk, night, fog, smoke).
+  const v = grade.vignette * intensity + (weather === "fog" || weather === "smoke" ? 0.08 : 0);
+  // Weather layers. Fog and smoke: tint, clouds and vignette on the small
+  // scratch layer (coordinates divided by CLOUD_DOWN), then one blit.
   const area = width * height;
-  if (weather === "fog") {
-    ctx.fillStyle = `rgba(214,220,224,${0.22 * intensity})`;
-    ctx.fillRect(0, 0, width, height);
-    const tex = fog();
-    const scale = Math.max(width / 40, height / 22);
-    cloudLayer(ctx, tex, width, height, t * 0.012 * px, t * 0.002 * px, scale, 0.45 * intensity);
-    cloudLayer(ctx, tex, width, height, -t * 0.02 * px + 300, 120, scale * 0.6, 0.3 * intensity);
-  } else if (weather === "smoke") {
-    const tex = tintedFog("#4a4038");
-    const scale = Math.max(width / 36, height / 20);
-    cloudLayer(ctx, tex, width, height, t * 0.03 * px, -t * 0.01 * px, scale, 0.32 * intensity);
+  if (weather === "fog" || weather === "smoke") {
+    const layer = cloudLayerFor(width, height);
+    const lw = layer.canvas.width;
+    const lh = layer.canvas.height;
+    const d = CLOUD_DOWN;
+    if (weather === "fog") {
+      layer.fillStyle = `rgba(214,220,224,${0.22 * intensity})`;
+      layer.fillRect(0, 0, lw, lh);
+      const tex = fog();
+      const scale = Math.max(width / 40, height / 22) / d;
+      cloudLayer(layer, tex, lw, lh, (t * 0.012 * px) / d, (t * 0.002 * px) / d, scale, 0.45 * intensity);
+      cloudLayer(layer, tex, lw, lh, (-t * 0.02 * px + 300) / d, 120 / d, scale * 0.6, 0.3 * intensity);
+    } else {
+      const tex = tintedFog("#4a4038");
+      const scale = Math.max(width / 36, height / 20) / d;
+      cloudLayer(layer, tex, lw, lh, (t * 0.03 * px) / d, (-t * 0.01 * px) / d, scale, 0.32 * intensity);
+    }
+    if (v > 0.12) {
+      layer.imageSmoothingEnabled = true;
+      layer.drawImage(vignetteCanvas(width, height, v), 0, 0, lw, lh);
+    }
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(layer.canvas, 0, 0, lw, lh, 0, 0, lw * d, lh * d);
+    ctx.imageSmoothingEnabled = false;
+  }
+  if (weather === "smoke") {
     // Rising embers.
     ctx.fillStyle = `rgba(255,150,60,${0.85 * intensity})`;
     ctx.beginPath();
@@ -266,9 +312,8 @@ export function drawAtmosphere(ctx: CanvasRenderingContext2D, width: number, hei
     }
     ctx.fill();
   }
-  // Vignette: only where it is noticeable (dusk, night, fog, smoke).
-  const v = grade.vignette * intensity + (weather === "fog" || weather === "smoke" ? 0.08 : 0);
-  if (v > 0.12) {
+  // Fog and smoke drew theirs with the cloud layer.
+  if (v > 0.12 && weather !== "fog" && weather !== "smoke") {
     ctx.globalCompositeOperation = "source-over";
     ctx.imageSmoothingEnabled = true;
     ctx.drawImage(vignetteCanvas(width, height, v), 0, 0, width, height);

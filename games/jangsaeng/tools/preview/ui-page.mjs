@@ -14,7 +14,7 @@ import { chromium } from "playwright-core";
 const root = join(dirname(fileURLToPath(import.meta.url)), "../..");
 const ALL = [
   "title", "creation", "demo", "pitch", "settings", "loading", "card", "hud", "calm", "prompt", "cardprompt",
-  "result", "death", "years", "roll", "downed", "character", "inventory", "nation", "chronicle", "map", "help",
+  "result", "longresult", "alt", "death", "years", "roll", "downed", "character", "inventory", "nation", "chronicle", "map", "help",
   "menu", "ending", "error", "drawer-status", "drawer-obj", "drawer-chat",
 ];
 const [outArg, statesArg = "all", sizesArg = "1280x720,390x844", waitArg = "1600"] = process.argv.slice(2);

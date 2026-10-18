@@ -1,10 +1,10 @@
 // Toasts (top-centre), coloured by tone; epic ones carry the star glyph.
-// While a full-screen document is open (chapter card, years planner, ending)
-// the top stack would sit on its header, so toasts are held: the ones already
-// showing are taken back, new ones wait (newest MAX_SHOWN), and all of them
-// play once the document closes. Only "bad" toasts (errors the player must
-// see now) still show, docked at the bottom — the ones already showing move
-// there too, without a second announcement or entry animation.
+// Toasts never draw over modal UI: while one is up (the UI decides which, in
+// ui/index.ts sync) toasts are held: the ones already showing are taken back,
+// new ones wait (newest MAX_SHOWN), and all of them play once it closes. Only
+// "bad" toasts (errors the player must see now) still show, docked at the
+// bottom — the ones already showing move there too, without a second
+// announcement or entry animation.
 import { h } from "./dom.ts";
 
 export type Tone = "info" | "good" | "bad" | "warn" | "epic";

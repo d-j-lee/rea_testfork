@@ -86,7 +86,7 @@ export function renderView(
   applyCamera(c, camera);
   renderer.drawGround(c, camera, timeMs);
   const t1 = performance.now();
-  const drawables = renderer.structureDrawables(camera, timeMs);
+  const drawables: Drawable[] = renderer.structureDrawables(camera, timeMs);
   if (view.figures) {
     drawables.push(figure(centre.x - 20, centre.y + 30, "#2b5a8c", "#1d1a19"));
     drawables.push(figure(centre.x + 24, centre.y + 26, "#b8312f", "#3a2a1a"));

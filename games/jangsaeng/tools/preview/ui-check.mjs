@@ -294,9 +294,194 @@ try {
     await t.page.waitForTimeout(3600); // the roll: 2100 + 650 + 420 ms
     const done = await visible();
     check("toasts: held through the years roll", rolling.top.length === 0, JSON.stringify(rolling));
-    check("toasts: play once the years roll ends", done.top.includes("세월이 흘렀다 — 시험"), JSON.stringify(done));
     check("years: the planner is gone after the roll, the result card stays", await t.page.evaluate(() => document.querySelector(".years-host")?.childElementCount === 0 && !!document.querySelector(".prompt")));
+    // The result card is a modal too: the toasts wait for it.
+    check("toasts: still held under the result card", done.top.length === 0, JSON.stringify(done));
+    await t.page.evaluate(() => window.__ui.handle({ t: "prompt", prompt: null }));
+    const after = await visible();
+    check("toasts: play once the result card closes", after.top.includes("세월이 흘렀다 — 시험"), JSON.stringify(after));
     check("toasts (years path): no page errors", t.errors.length === 0, t.errors.join(" | "));
+    await t.close();
+  }
+  const PHONE = { width: 390, height: 844 };
+  for (const phone of [false, true]) {
+    // The years result with a wash (CH07): the list scrolls inside the sheet,
+    // right under the header, and 계속 stays on screen.
+    const tag = phone ? "long result (phone)" : "long result";
+    const t = await open("longresult", phone ? PHONE : undefined, phone);
+    await t.page.waitForTimeout(200);
+    const g = await t.page.evaluate(() => {
+      const sheet = document.querySelector(".prompt");
+      const opt = sheet.querySelector(".opt").getBoundingClientRect();
+      const head = sheet.querySelector(".pr-head").getBoundingClientRect();
+      const list = sheet.querySelector(".pr-result");
+      const scroll = sheet.querySelector(".pr-scroll");
+      return {
+        vh: innerHeight,
+        opt: [Math.round(opt.top), Math.round(opt.bottom)],
+        gap: Math.round(list.getBoundingClientRect().top - head.bottom),
+        inScroll: !!scroll?.contains(list),
+        scrolls: !!scroll && scroll.scrollHeight > scroll.clientHeight + 2,
+        cue: !!scroll?.classList.contains("more"),
+      };
+    });
+    check(`${tag}: 계속 stays fully on screen`, g.opt[0] >= 0 && g.opt[1] <= g.vh, JSON.stringify(g));
+    check(`${tag}: the list scrolls in the sheet's body, right under the header`, g.inScroll && g.scrolls && g.gap <= 16, JSON.stringify(g));
+    check(`${tag}: a fade cues the rest of the list`, g.cue, JSON.stringify(g));
+    await t.page.keyboard.press("End");
+    await t.page.keyboard.press("PageDown");
+    await t.page.keyboard.press("PageDown");
+    await t.page.waitForTimeout(150);
+    const end = await t.page.evaluate(() => {
+      const s = document.querySelector(".pr-scroll");
+      return { top: s?.scrollTop ?? 0, cue: !!s?.classList.contains("more") };
+    });
+    check(`${tag}: Page keys scroll the list; the cue goes at its end`, end.top > 0 && !end.cue, JSON.stringify(end));
+    await t.page.keyboard.press("Enter");
+    check(`${tag}: Enter continues`, t.sent.some((m) => m.t === "choose" && m.option === "ok"));
+    check(`${tag}: no page errors`, t.errors.length === 0, t.errors.join(" | "));
+    await t.close();
+  }
+  {
+    const t = await open("alt");
+    const r = await t.page.evaluate(() =>
+      [...document.querySelectorAll(".prompt .pr-ribbon")].map((el) => ({ text: el.textContent, alt: el.classList.contains("alt"), w: Math.round(el.getBoundingClientRect().width) })),
+    );
+    check("alt card: a 대체역사 ribbon, never 실제 역사", r.length === 1 && r[0].text === "대체역사" && r[0].alt, JSON.stringify(r));
+    check("alt card: the tag stays compact", (r[0]?.w ?? 999) < 120, JSON.stringify(r));
+    await t.close();
+  }
+  {
+    // Toasts never draw over modal UI; only the menu holds an offline world.
+    const t = await open("hud");
+    const top = () => t.page.evaluate(() => document.querySelectorAll(".toasts .toast:not(.out)").length);
+    const toast = (text) => t.page.evaluate((x) => window.__ui.handle({ t: "toast", text: x, tone: "good" }), text);
+    const holds = () => t.page.evaluate(() => window.__ui.holdsWorld);
+    const shown = await top();
+    await t.page.click('.hud-btn[data-cmd="character"]');
+    await toast("목표 달성 — 메뉴 뒤");
+    const menu = { top: await top(), holds: await holds() };
+    await t.page.keyboard.press("Escape");
+    const closed = { top: await top(), holds: await holds() };
+    check("toasts: none over the menu book; they play after it closes", shown >= 1 && menu.top === 0 && closed.top >= 1, JSON.stringify({ shown, menu, closed }));
+    check("world: the menu book holds an offline world, closing it releases it", menu.holds === true && closed.holds === false, JSON.stringify({ menu, closed }));
+    await t.page.evaluate(() => window.__ui.handle({ t: "prompt", prompt: window.__mock.STORY_PROMPT }));
+    await toast("목표 달성 — 카드 뒤");
+    const story = { top: await top(), holds: await holds() };
+    await t.page.evaluate(() => window.__ui.handle({ t: "prompt", prompt: null }));
+    check("toasts: none over a story sheet", story.top === 0 && (await top()) >= 1, JSON.stringify(story));
+    check("world: a story card does not hold the world (the host holds its battle)", story.holds === false, JSON.stringify(story));
+    // The 사경 overlay: toasts wait under it; it closes to a small self-revive
+    // plate when the battle ends or the timer runs out, never showing "0초".
+    const self = (over) => t.page.evaluate((o) => window.__ui.handle({ t: "self", self: window.__mock.mockSelf(o) }), over);
+    const downed = () =>
+      t.page.evaluate(() => {
+        const el = document.querySelector(".downed");
+        const shown = (sel) => !!el.querySelector(sel)?.getClientRects().length;
+        return { hidden: el.classList.contains("hidden"), alone: el.classList.contains("alone"), count: shown(".dn-line") ? el.querySelector(".dn-count").textContent : null, revive: shown(".dn-btn") };
+      });
+    await self({ hp: 0, downed: { secondsLeft: 12 } });
+    await toast("사경 뒤의 소식");
+    const down = { ...(await downed()), top: await top() };
+    await self({ hp: 0, downed: { secondsLeft: 9 }, battle: undefined });
+    const ended = { ...(await downed()), top: await top() };
+    check("downed: the overlay counts down while others can help; toasts wait", !down.hidden && !down.alone && down.count === "12" && down.top === 0, JSON.stringify(down));
+    check("downed: the battle ended — the overlay closes to a self-revive plate, toasts play", !ended.hidden && ended.alone && ended.count === null && ended.revive && ended.top >= 1, JSON.stringify(ended));
+    await self({});
+    await self({ hp: 0, downed: { secondsLeft: 0.3 } });
+    await t.page.waitForTimeout(700);
+    const late = await downed();
+    await self({ hp: 0, downed: { secondsLeft: 0 } });
+    const expired = await downed();
+    check("downed: the countdown never shows 0초 (the host's own zero is awaited)", !late.alone && late.count === "1", JSON.stringify(late));
+    check("downed: the host's timer ran out — the overlay closes to the self-revive plate", expired.alone && expired.count === null && expired.revive, JSON.stringify(expired));
+    await self({});
+    check("downed: up again, nothing is left", (await downed()).hidden);
+    check("modals: no page errors", t.errors.length === 0, t.errors.join(" | "));
+    await t.close();
+  }
+  {
+    const t = await open("hud");
+    const life = (over) =>
+      t.page.evaluate((o) => {
+        window.__ui.handle({ t: "self", self: window.__mock.mockSelf(o) });
+        const card = document.querySelector(".hud-status");
+        return { life: card.dataset.life, warn: card.querySelector(".st-warn").textContent, chip: getComputedStyle(card.querySelector(".st-short")).backgroundColor };
+      }, over);
+    const far = await life({ year: 1361, lifeEnd: 1861, lifeShortfall: 49 });
+    const near = await life({ year: 1830, lifeEnd: 1870, lifeShortfall: 40 });
+    const ok = await life({ year: 1361, lifeEnd: 1924, lifeShortfall: 0 });
+    check("life: a shortfall centuries away is a calm note (the opening)", far.life === "far" && !far.warn.includes("다한다") && far.chip !== near.chip, JSON.stringify({ far, near }));
+    check("life: red only when life runs out", near.life === "near" && near.warn === "이대로면 1870년에 천수가 다한다", JSON.stringify(near));
+    check("life: no warning once 1910 is reached", ok.life === "ok" && ok.warn === "", JSON.stringify(ok));
+    await t.close();
+  }
+  {
+    const t = await open("years");
+    const view = (sel) =>
+      t.page.evaluate((s) => {
+        const body = document.querySelector(".years-panel .panel-body").getBoundingClientRect();
+        const el = document.querySelector(s);
+        if (!el || !el.getClientRects().length) return null;
+        const r = el.getBoundingClientRect();
+        return r.top >= body.top - 1 && r.bottom <= body.bottom + 1;
+      }, sel);
+    check("years (laptop): the offering switch is on screen when the planner opens", (await view(".yr-offer")) === true);
+    await t.page.click(".yr-wash:not(.locked) >> nth=-1");
+    check("years (laptop): the new-name field shows with the chosen wash", (await view(".yr-name:not(.hidden) input")) === true);
+    await t.close();
+  }
+  {
+    const t = await open("demo");
+    const g = await t.page.evaluate(() => {
+      const b = document.querySelector(".demo-panel .panel-body").getBoundingClientRect();
+      const cards = [...document.querySelectorAll(".demo-card")];
+      return { n: cards.length, fit: cards.filter((c) => { const r = c.getBoundingClientRect(); return r.top >= b.top - 1 && r.bottom <= b.bottom + 1; }).length };
+    });
+    check("demo (laptop 1280×720): every chapter card is on screen", g.n === 16 && g.fit === g.n, JSON.stringify(g));
+    await t.close();
+  }
+  {
+    const t = await open("demo", PHONE, true);
+    const g = await t.page.evaluate(() => {
+      const lines = [...document.querySelectorAll(".demo-line")].map((el) => el.getBoundingClientRect().height / parseFloat(getComputedStyle(el).lineHeight));
+      return { tall: lines.filter((n) => n > 2.05).length, cue: document.querySelector(".demo-panel .panel-body").classList.contains("more") };
+    });
+    check("demo (phone): a card's line is two lines at most", g.tall === 0, JSON.stringify(g));
+    check("demo (phone): a fade cues the cards below", g.cue, JSON.stringify(g));
+    await t.close();
+  }
+  for (const phone of [false, true]) {
+    const t = await open("map", phone ? PHONE : undefined, phone);
+    const tag = phone ? "map (phone)" : "map";
+    const overlaps = () =>
+      t.page.evaluate(() => {
+        const els = [...document.querySelectorAll(".bm-label, .bm-obj")].filter((e) => e.getClientRects().length && getComputedStyle(e).visibility !== "hidden");
+        const rs = els.map((e) => e.getBoundingClientRect());
+        const pairs = [];
+        for (let i = 0; i < rs.length; i++)
+          for (let j = i + 1; j < rs.length; j++) {
+            const a = rs[i];
+            const b = rs[j];
+            if (Math.min(a.right, b.right) - Math.max(a.left, b.left) > 1 && Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 1) pairs.push(`${els[i].textContent}/${els[j].textContent}`);
+          }
+        return { shown: els.length, pairs };
+      });
+    await t.page.waitForTimeout(200);
+    const whole = await overlaps();
+    check(`${tag}: no two names overlap`, whole.shown >= 4 && whole.pairs.length === 0, JSON.stringify(whole));
+    await t.page.click(".bm-zoom");
+    await t.page.waitForTimeout(300);
+    const zoomed = await overlaps();
+    check(`${tag}: zoomed, no two names overlap`, zoomed.shown > whole.shown && zoomed.pairs.length === 0, JSON.stringify(zoomed));
+    if (phone) {
+      const strip = await t.page.evaluate(() => {
+        const s = document.querySelector(".book-tabs");
+        const r = s.getBoundingClientRect();
+        return { tabs: [...s.querySelectorAll(".book-tab")].filter((b) => b.getBoundingClientRect().right <= r.right + 0.5).length, scrolls: s.scrollWidth > s.clientWidth + 1 };
+      });
+      check("menu (phone): all seven tabs, 설정 too, fit the strip", strip.tabs === 7 && !strip.scrolls, JSON.stringify(strip));
+    }
     await t.close();
   }
   for (const phone of [false, true]) {

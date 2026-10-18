@@ -228,8 +228,26 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 .demo-no { color: var(--red); font-weight: 700; letter-spacing: .06em; }
 .demo-years { margin-left: auto; color: var(--ink-mute); font-variant-numeric: tabular-nums; }
 .demo-title { margin-right: 2px; font: 18px/1.3 var(--f-title); font-weight: 400; }
-.demo-line { flex: 1; font-size: 13.5px; line-height: 1.5; color: var(--ink-2); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+/* Two lines at most: the box itself is two lines tall, so a stretched card never shows a third line under the ellipsis. */
+.demo-line { flex: none; max-height: 3em; font-size: 13.5px; line-height: 1.5; color: var(--ink-2); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .demo-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+/* More below: a fade at the bottom of the scrolling grid (demo.ts sets .more). */
+.demo-panel .panel-body.more { -webkit-mask-image: linear-gradient(#000 calc(100% - 40px), transparent); mask-image: linear-gradient(#000 calc(100% - 40px), transparent); }
+/* A laptop screen (1280 × 720) shows all sixteen chapters without scrolling. */
+@media (min-width: 861px) and (max-height: 820px) {
+  .title-host .demo-panel { max-height: 100%; }
+  .demo-panel .panel-head { padding: 12px 30px 8px; }
+  .demo-panel .panel-glyph { font-size: 58px; }
+  .demo-panel .panel-body { padding: 10px 24px 12px; }
+  .demo-intro { margin-bottom: 8px; }
+  .demo-intro p { max-width: none; font-size: 13.5px; line-height: 1.5; }
+  .demo-options { gap: 6px; }
+  .demo-options .seg-opt { min-height: 32px; padding: 4px 14px; }
+  .demo-grid { gap: 6px; }
+  .demo-card { gap: 2px; padding: 6px 12px 7px; }
+  .demo-title { font-size: 17px; }
+  .demo-line { max-height: 2.8em; line-height: 1.4; }
+}
 
 /* Pitch */
 .pitch { max-width: 860px; margin: 0 auto; }
@@ -333,8 +351,12 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 .life-goal { left: calc(var(--goal) * 100%); top: -4px !important; bottom: -4px !important; width: 2px; margin-left: -1px; background: var(--gold-hi); box-shadow: 0 0 6px rgba(241, 211, 135, .8); }
 .life-track.big { height: 10px; margin: 8px 0; }
 .st-warn { display: none; margin-top: 3px; font-size: 13px; line-height: 1.45; color: #ff9b8d; }
-.hud-status.life-short .st-warn { display: block; }
-.hud-status.life-short .st-short { display: inline-block; }
+/* labels.ts lifeWarning: a shortfall decades away is an amber note, red only when life runs out. */
+.hud-status:is([data-life="far"], [data-life="near"]) .st-warn { display: block; }
+.hud-status:is([data-life="far"], [data-life="near"]) .st-short { display: inline-block; }
+.hud-status[data-life="far"] .st-warn { color: #e9cf91; }
+.hud-status[data-life="far"] .st-short { color: #2a2008; background: rgba(226, 178, 58, .82); }
+.hud-status[data-life="far"] .life-gap { background: repeating-linear-gradient(135deg, rgba(226, 178, 58, .75) 0 3px, transparent 3px 6px); }
 .st-susp { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 6px; margin-top: 6px; }
 .eye { position: relative; display: inline-block; width: 15px; height: 9px; border: 1.5px solid currentColor; border-radius: 75% 15%; transform: rotate(45deg) scale(.8); }
 .eye::after { content: ""; position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px; border-radius: 50%; background: currentColor; }
@@ -478,6 +500,8 @@ html[data-touch="on"] .chat-open::after { content: none; }
 .toast-star { color: #fff4d6; }
 
 .downed { position: absolute; inset: 0; display: grid; place-items: start center; padding-top: 17vh; background: radial-gradient(60% 55% at 50% 50%, rgba(20, 0, 0, .15), rgba(70, 6, 6, .6) 70%, rgba(20, 0, 0, .85)); animation: fadein .6s ease both; }
+/* In a battle the countdown opens below the battle banner, not over its meters. */
+.ui-root.battle-on .downed { padding-top: max(17vh, calc(var(--g) + var(--sat) + 172px)); }
 .dn-center { padding: 18px 40px 22px; border-radius: 50%; background: radial-gradient(closest-side, rgba(12, 4, 4, .72), rgba(12, 4, 4, .5) 60%, transparent); }
 .dn-center { display: grid; justify-items: center; gap: 4px; text-align: center; text-shadow: 0 2px 6px #000; }
 .dn-title { display: flex; align-items: baseline; gap: 12px; font: 72px/1 var(--f-title); color: #ff8a7a; letter-spacing: .1em; }
@@ -487,6 +511,15 @@ html[data-touch="on"] .chat-open::after { content: none; }
 .dn-wait { margin-bottom: 14px; font-size: 16px; color: #f0d7cc; animation: pulse 2s ease-in-out infinite; }
 .dn-btn { pointer-events: auto; }
 .dn-btn small { margin-left: 6px; font-weight: 400; opacity: .9; }
+/* Nobody can help any more (the timer ran out or the battle ended): the
+   overlay closes to a small self-revive plate, never a "0초" countdown. */
+.dn-alone { display: none; margin-bottom: 10px; font-size: 15px; color: #f0d7cc; }
+.downed.alone { background: none; animation: none; }
+.downed.alone .dn-center { padding: 12px 22px 14px; border-radius: 6px; background: rgba(14, 6, 6, .84); box-shadow: 0 6px 18px rgba(0, 0, 0, .45), inset 0 0 0 1px rgba(224, 87, 76, .35); }
+.downed.alone .dn-title { font-size: 28px; }
+.downed.alone .dn-title small { font-size: 15px; }
+.downed.alone .dn-line, .downed.alone .dn-wait { display: none; }
+.downed.alone .dn-alone { display: block; }
 
 /* ── Prompt ───────────────────────────────────────────────────────────── */
 .prompt-host, .years-host, .menu-host { position: absolute; inset: 0; pointer-events: none; }
@@ -496,7 +529,13 @@ html[data-touch="on"] .chat-open::after { content: none; }
 .prompt-host:has(.prompt.card) { background: rgba(8, 7, 7, .45); }
 .layer-hud .hud-bl, .layer-hud .hud-br { transition: opacity .25s, visibility .25s; }
 .ui-root.modal-open .hud-bl, .ui-root.modal-open .hud-br { opacity: 0; visibility: hidden; }
-.prompt.sheet { position: absolute; left: 50%; bottom: calc(var(--g) + var(--sab)); transform: translateX(-50%); display: flex; flex-direction: column; width: min(900px, calc(100vw - 2 * var(--g))); max-height: min(74vh, 640px); padding: 20px 28px 22px; border-radius: 3px; }
+/* Centred, but never over the right HUD column (minimap, buttons, objective
+   tracker, 264px wide): on a laptop the sheet moves left to clear it. */
+.prompt.sheet {
+  --sw: min(900px, calc(100vw - 2 * var(--g)));
+  position: absolute; left: max(calc(var(--g) + var(--sw) / 2), min(50%, calc(100% - 264px - 3 * var(--g) - var(--sw) / 2))); bottom: calc(var(--g) + var(--sab)); transform: translateX(-50%);
+  display: flex; flex-direction: column; width: var(--sw); max-height: min(74vh, 640px); padding: 20px 28px 22px; border-radius: 3px;
+}
 .prompt.sheet.enter { animation: sheet-up .38s ease both; }
 .prompt.card { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); display: flex; flex-direction: column; width: min(600px, calc(100vw - 2 * var(--g))); max-height: calc(100vh - 2 * var(--g)); padding: 34px 38px 26px; border-radius: 2px; text-align: center; }
 .prompt.card.enter { animation: card-in .5s ease both; }
@@ -511,20 +550,28 @@ html[data-touch="on"] .chat-open::after { content: none; }
 .badge-real { justify-self: start; padding: 0 6px; font-size: 12px; font-weight: 700; line-height: 18px; color: #fff3ea; background: var(--red); border-radius: 2px; }
 .pr-titles { flex: 1; min-width: 0; display: grid; gap: 2px; }
 .pr-speaker + .pr-titles { padding-left: 14px; border-left: 1px solid rgba(29, 26, 25, .2); }
-.pr-ribbon { justify-self: start; padding: 0 8px; font-size: 12.5px; font-weight: 700; letter-spacing: .1em; line-height: 20px; color: #fff3ea; background: var(--ink-2); border-radius: 2px; }
-.prompt.card .pr-ribbon { justify-self: center; }
+.pr-ribbons { justify-self: start; display: flex; flex-wrap: wrap; gap: 6px; }
+.prompt.card .pr-ribbons { justify-self: center; }
+.pr-ribbon { padding: 0 8px; font-size: 12.5px; font-weight: 700; letter-spacing: .1em; line-height: 20px; color: #fff3ea; background: var(--ink-2); border-radius: 2px; }
 .pk-history .pr-ribbon { background: var(--blue); }
 .pk-identity .pr-ribbon { background: #8a6a2a; }
 .pk-negotiation .pr-ribbon { background: var(--jade); }
 .pk-death .pr-ribbon, .pk-notice .pr-ribbon { background: var(--red); }
+/* PromptView.alt: the game's alternate history, never the blue 실제 역사. */
+.prompt .pr-ribbon.alt { line-height: 18px; color: #8a1f1c; background: rgba(184, 49, 47, .08); border: 1px solid rgba(184, 49, 47, .6); }
 .pr-title { font: 23px/1.3 var(--f-title); }
 .prompt.card .pr-title { font-size: 29px; }
 .pr-year { flex: none; align-self: flex-start; padding: 2px 9px; font-size: 13.5px; font-weight: 700; color: var(--red); border: 1.5px solid var(--red); border-radius: 2px; font-variant-numeric: tabular-nums; }
-.pr-body { min-height: min(5.4em, 22vh); overflow: auto; padding-right: 4px; font-size: 17px; line-height: 1.8; overscroll-behavior: contain; }
+/* Text and result list scroll as one region; the options below stay put. */
+.pr-scroll { flex: 0 1 auto; min-height: 0; overflow-y: auto; padding-right: 4px; overscroll-behavior: contain; touch-action: pan-y; }
+.pr-scroll.more { -webkit-mask-image: linear-gradient(#000 calc(100% - 36px), transparent); mask-image: linear-gradient(#000 calc(100% - 36px), transparent); }
+.pr-options { flex: none; }
+.pr-body { font-size: 17px; line-height: 1.8; }
 .pr-body p + p { margin-top: .55em; }
+.pr-body + .pr-result { margin-top: 10px; }
 .tw-rest { visibility: hidden; }
 .pk-history .pr-body { padding-left: 14px; border-left: 3px solid rgba(43, 90, 140, .5); }
-.pr-result { display: grid; gap: 5px; margin: 10px 0 0; padding: 10px 14px; background: rgba(255, 252, 244, .55); border: 1px solid rgba(29, 26, 25, .14); border-radius: 3px; text-align: left; }
+.pr-result { display: grid; gap: 5px; margin: 0; padding: 10px 14px; background: rgba(255, 252, 244, .55); border: 1px solid rgba(29, 26, 25, .14); border-radius: 3px; text-align: left; }
 .pr-result li { display: grid; grid-template-columns: 18px 1fr; gap: 6px; font-size: 15.5px; }
 .rs-mark { font-weight: 700; text-align: center; }
 .pr-result .tone-good { color: #1d6b61; }
@@ -577,9 +624,20 @@ html[data-touch="on"] .chat-open::after { content: none; }
 .years-host { display: flex; align-items: center; justify-content: center; }
 .years-panel { width: min(1000px, calc(100vw - 2 * var(--g))); max-height: calc(100vh - 2 * var(--g)); pointer-events: auto; animation: rise .45s ease both; }
 .yr-grid { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr); gap: 0 28px; }
-.yr-side .sub-title:first-child, .yr-main .sub-title:first-child { margin-top: 4px; }
+.yr-main .sub-title:first-child { margin-top: 4px; }
+/* The side column leads with 천수 (the offering switch and the projection),
+   then 신분: the switch is on screen when the planner opens, not under the
+   six wash cards. */
+.yr-side { display: flex; flex-direction: column; }
+.yr-side > .sub-title:has(+ .yr-offer), .yr-side > .yr-offer, .yr-side > .yr-proj { order: -1; }
+.yr-side > .sub-title:has(+ .yr-offer) { margin-top: 4px; }
+.yr-side > .yr-offer + .yr-offer { margin-top: 8px; }
 .yr-side .yr-washes { grid-template-columns: 1fr; gap: 6px; }
 .yr-side .yr-wash { padding: 8px 12px; }
+/* The new name follows the chosen wash; below the fold it rides the bottom of the view until scrolled to. */
+.yr-side > .yr-name { position: sticky; bottom: -1px; z-index: 1; grid-template-columns: auto minmax(0, 1fr); align-items: center; column-gap: 10px; max-width: none; padding: 8px 12px; border: 1px solid rgba(29, 26, 25, .22); border-radius: 3px; background: rgba(250, 245, 233, .97); box-shadow: 0 -8px 16px rgba(60, 40, 10, .12); }
+.yr-side > .yr-name .field-label { margin: 0; }
+.yr-side > .yr-name .field-hint { grid-column: 2; margin-top: 3px; }
 .yr-body p { font-size: 16px; line-height: 1.75; color: var(--ink-2); }
 .yr-track { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 6px; }
 .yr-token { display: grid; gap: 2px; width: 100%; padding: 8px 10px; text-align: left; border: 1.5px solid rgba(29, 26, 25, .3); border-radius: 3px; background: rgba(255, 252, 244, .5); color: var(--ink); }
@@ -615,6 +673,10 @@ html[data-touch="on"] .chat-open::after { content: none; }
 .yr-proj .life-past { background: rgba(29, 26, 25, .45); }
 .yr-proj .st-k { color: var(--gold-ink); }
 .yr-proj .good { color: #1d6b61; }
+/* A shortfall decades away is amber here as on the HUD (labels.ts lifeWarning, set by years.ts as data-life). */
+.yr-proj[data-life="far"] .yr-short { color: var(--gold-ink); }
+.yr-proj[data-life="far"] .life-gap { background: repeating-linear-gradient(135deg, rgba(176, 128, 30, .8) 0 3px, transparent 3px 6px); }
+.yr-summary[data-life="far"] .yr-short-chip { color: #2a2008; background: rgba(226, 178, 58, .9); }
 .yr-foot { display: flex; align-items: center; justify-content: space-between; gap: 14px; width: 100%; }
 .yr-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 15px; }
 .yr-summary .st-k { color: var(--gold-ink); }
@@ -752,6 +814,12 @@ html[data-touch="on"] .chat-open::after { content: none; }
 .bm-label { position: absolute; transform: translate(-50%, -135%); padding: 0 4px; font-size: 12px; line-height: 16px; white-space: nowrap; color: #fff8ea; text-shadow: 0 0 3px #000, 0 1px 1px #000; pointer-events: none; }
 .bm-label.kind-capital { font-size: 14px; font-weight: 700; color: #ffd9cf; }
 .bigmap:not(.zoom) .bm-label:not(.kind-capital):not(.kind-city) { display: none; }
+/* menus/map.ts declutterNames moves a name that would overlap another, or hides a site name. */
+.bm-label[data-place="below"] { transform: translate(-50%, 35%); }
+.bm-obj[data-place="above"] { transform: translate(-50%, -135%); }
+.bigmap [data-place="right"] { transform: translate(6px, -50%); }
+.bigmap [data-place="left"] { transform: translate(calc(-100% - 6px), -50%); }
+.bm-label.bm-hide { visibility: hidden; }
 .bm-note { font-size: 13.5px; margin-bottom: 4px; }
 .bm-label.station::before { content: "◎ "; color: var(--gold-hi); }
 .bm-obj { position: absolute; transform: translate(-50%, 45%); padding: 0 5px; font-size: 11.5px; line-height: 17px; color: var(--ink); background: var(--gold-hi); border-radius: 2px; white-space: nowrap; pointer-events: none; }
@@ -928,9 +996,13 @@ html[data-touch="on"] .hud-skills { display: none; }
   .opt .risk { grid-column: 1 / -1; grid-template-columns: auto 1fr auto; }
   .opt-text { font-size: 16px; }
   .book { width: 100%; height: 100%; border-radius: 0; }
-  .book-head { padding: calc(8px + var(--sat)) 8px 0 8px; }
-  .book-tab { padding: 8px 10px; font-size: 14px; }
+  /* All seven tabs (설정 too) and the close button fit a 360 px phone. */
+  .book-head { gap: 4px; padding: calc(8px + var(--sat)) 6px 0 6px; }
+  .book-tabs { gap: 0; }
+  .book-tab { flex: 1 1 auto; justify-content: center; padding: 8px 4px; font-size: 13.5px; letter-spacing: -.02em; }
+  .book-tab.on { padding-bottom: 9.5px; }
   .book-tab .tab-glyph { display: none; }
+  .book-close { width: 36px; height: 36px; min-height: 36px; font-size: 16px; }
   .book-body { padding: 14px 16px calc(22px + var(--sab)); }
   .stat { grid-template-columns: 50px 32px 1fr auto; gap: 8px; }
   .equip-slots { grid-template-columns: 1fr 1fr; }
@@ -966,7 +1038,8 @@ html[data-layout="compact"] .hud-cbar { display: block; top: calc(var(--g) + var
 .cb-st .meter-fill { background: #d7b24a; }
 .cb-chips { gap: 4px; align-items: center; }
 .cb-chip { padding: 0 6px; font-size: 12.5px; line-height: 18px; border-radius: 2px; color: #e3d9c4; background: rgba(255, 255, 255, .08); }
-.cb-life.short { color: #fff1ec; background: rgba(184, 49, 47, .88); font-weight: 700; }
+.cb-life[data-life="near"] { color: #fff1ec; background: rgba(184, 49, 47, .88); font-weight: 700; }
+.cb-life[data-life="far"] { color: #2a2008; background: rgba(226, 178, 58, .82); font-weight: 700; }
 .cb-susp::before { content: "●"; margin-right: 3px; font-size: 10px; }
 .cb-susp[data-tone="calm"]::before { color: var(--jade-hi); }
 .cb-susp[data-tone="rumour"]::before { color: var(--yellow); }
@@ -1044,8 +1117,10 @@ html[data-layout="compact"] .hud[data-drawer="chat"] .chat-toggle { display: non
   html[data-layout="compact"] .ui-root.battle-on .toasts { top: calc(var(--g) + var(--sat) + 96px); }
   html[data-layout="compact"] .tc-cluster { transform: scale(.76); transform-origin: right bottom; }
   html[data-layout="compact"] .hud[data-drawer="objectives"] .hud-obj { right: auto; width: min(440px, 54vw); }
-  .prompt.sheet { max-height: calc(100vh - 2 * var(--g)); overflow-y: auto; padding: 12px 18px 14px; }
-  .prompt.sheet .pr-body { flex: none; overflow: visible; font-size: 15.5px; line-height: 1.7; }
+  /* Too short for a fixed option block under a text region: the whole sheet scrolls as one. */
+  .prompt.sheet { max-height: calc(100vh - 2 * var(--g)); overflow-y: auto; overscroll-behavior: contain; padding: 12px 18px 14px; }
+  .prompt.sheet .pr-scroll { flex: none; overflow: visible; -webkit-mask-image: none; mask-image: none; }
+  .prompt.sheet .pr-body { font-size: 15.5px; line-height: 1.7; }
   .pr-portrait { width: 48px; height: 48px; }
   .pr-portrait canvas { width: 48px !important; height: 48px !important; }
   .pr-head { margin-bottom: 6px; }
