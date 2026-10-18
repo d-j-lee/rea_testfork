@@ -10,6 +10,66 @@ import { minimapFor } from "../hud-map.ts";
 const PPT = 2;
 const LABELLED = new Set(["capital", "city", "fortress", "port", "battlefield", "frontier"]);
 
+/** Where a name may sit around its point (CSS: [data-place]; none = the element's own default). */
+type Place = "above" | "below" | "right" | "left";
+type Rect = readonly [number, number, number, number];
+/** Site names sit above their point by default, objective tags below it. */
+const LABEL_PLACES: readonly Place[] = ["above", "below", "right", "left"];
+const OBJECTIVE_PLACES: readonly Place[] = ["below", "above", "right", "left"];
+
+/** A name's box (board px) for its point (x, y), size w × h and place; mirrors the CSS transforms. */
+function nameRect(place: Place, objective: boolean, x: number, y: number, w: number, h: number): Rect {
+  switch (place) {
+    case "above":
+      return [x - w / 2, y - 1.35 * h, x + w / 2, y - 0.35 * h];
+    case "below": {
+      const top = objective ? 0.45 : 0.35;
+      return [x - w / 2, y + top * h, x + w / 2, y + (1 + top) * h];
+    }
+    case "right":
+      return [x + 6, y - h / 2, x + 6 + w, y + h / 2];
+    case "left":
+      return [x - 6 - w, y - h / 2, x - 6, y + h / 2];
+  }
+}
+
+const NAME_RANK = (el: HTMLElement): number =>
+  el.classList.contains("bm-obj") ? 0 : el.classList.contains("kind-capital") ? 1 : el.classList.contains("kind-city") ? 2 : 3;
+
+/**
+ * Declutters the board's names for its current size: objective tags first,
+ * then the capital, cities and the rest, each takes the first of its places
+ * that overlaps nothing placed. A site name with no free place is hidden (the
+ * zoomed map has room for it); an objective tag always shows.
+ */
+function declutterNames(board: HTMLElement): void {
+  const width = board.clientWidth;
+  const height = board.clientHeight;
+  if (!width || !height) return;
+  const placed: Rect[] = [];
+  const free = (r: Rect) => !placed.some((p) => r[0] < p[2] && r[2] > p[0] && r[1] < p[3] && r[3] > p[1]);
+  const items = [...board.querySelectorAll<HTMLElement>(".bm-obj, .bm-label")].sort((a, b) => NAME_RANK(a) - NAME_RANK(b));
+  for (const el of items) {
+    el.classList.remove("bm-hide");
+    delete el.dataset.place;
+    const w = el.offsetWidth;
+    const h = el.offsetHeight;
+    if (!w || !h) continue; // hidden by the unzoomed map
+    const x = (parseFloat(el.style.left) / 100) * width;
+    const y = (parseFloat(el.style.top) / 100) * height;
+    const objective = el.classList.contains("bm-obj");
+    const places = objective ? OBJECTIVE_PLACES : LABEL_PLACES;
+    const place = places.find((p) => free(nameRect(p, objective, x, y, w, h)));
+    if (!place && !objective) {
+      el.classList.add("bm-hide");
+      continue;
+    }
+    const at = place ?? (places[0] as Place);
+    if (at !== places[0]) el.dataset.place = at;
+    placed.push(nameRect(at, objective, x, y, w, h));
+  }
+}
+
 export function mapTab(
   map: GameMap,
   self: SelfView,
@@ -44,6 +104,8 @@ export function mapTab(
     .filter((o) => !o.done && o.x !== undefined && o.y !== undefined)
     .map((o) => h("span", { class: "bm-obj", style: `left:${pctX(o.x ?? 0)};top:${pctY(o.y ?? 0)}` }, o.siteName ?? "목표"));
   const board = h("div", { class: "bigmap" }, canvas, ...labels, ...objectiveTags);
+  // Names are placed for the board's size: on mount, on resize and on zoom.
+  new ResizeObserver(() => declutterNames(board)).observe(board);
   const wrap = h("div", { class: "bigmap-wrap" }, board);
 
   const stations = map.sites

@@ -196,6 +196,53 @@ export const RESULT_PROMPT: PromptView = {
   options: [{ id: "ok", text: "계속" }],
 };
 
+/** The years result with a wash and small events (CH07 shape): no body text, a long list. */
+export const LONG_RESULT_PROMPT: PromptView = {
+  id: "p-years-result",
+  kind: "result",
+  title: "세월이 흘렀다",
+  year: 1575,
+  body: [],
+  data: {
+    type: "result",
+    lines: [
+      { text: "1555년 → 1575년 · 세월이 흐른다 (5토큰)", tone: "info" },
+      { text: "유배지에서 세월을 견디다 — 녹봉 없음", tone: "bad" },
+      { text: "품계 승진 — 종9품 부사용", tone: "good" },
+      { text: "1번째 세월 · 무예 수련 — 자유 포인트 +2", tone: "info" },
+      { text: "산삼 발견 — 깊은 골짜기에서 붉은 열매를 보았다. 산삼 획득", tone: "good" },
+      { text: "2번째 세월 · 무예 수련 — 자유 포인트 +2", tone: "info" },
+      { text: "흉년 — 가뭄 끝에 흉년이 들었다. 민심 −1", tone: "bad" },
+      { text: "3번째 세월 · 무예 수련 — 자유 포인트 +2", tone: "info" },
+      { text: "호환 — 범이 마을을 덮쳤다. 호환(신법) 판정 실패 (62%) · 천수 −1년", tone: "bad" },
+      { text: "4번째 세월 · 무예 수련 — 자유 포인트 +2", tone: "info" },
+      { text: "5번째 세월 · 무예 수련 — 자유 포인트 +2", tone: "info" },
+      { text: "도적 — 고갯길에 도적 떼가 나타났다.", tone: "info" },
+      { text: "신분 세탁 — 출가: 명한국 → 문무신", tone: "epic" },
+      { text: "시주 12전 · 의심도 5 · 품계 없음", tone: "info" },
+      { text: "동료 보증 — 함께 싸운 장생인이 새 신분을 증언했다 (의심도 −5)", tone: "good" },
+      { text: "노인성 제단에 공덕을 바치다 — 천수 +4년 (1887년까지)", tone: "good" },
+      { text: "의심도 0 → 2.3 (평온)", tone: "info" },
+      { text: "국운 이월 — 국방 36 · 재정 31 · 민심 42 · 외교 27 · 개혁 35", tone: "info" },
+    ],
+  },
+  options: [{ id: "ok", text: "계속" }],
+};
+
+/** A counterfactual scene in the history style (PromptView.alt): never labelled 실제 역사. */
+export const ALT_PROMPT: PromptView = {
+  id: "p-alt",
+  kind: "history",
+  alt: true,
+  title: "도장이 찍히지 않은 새벽",
+  year: 1905,
+  body: [
+    "대신들은 끝내 끌려 나오지 않았다. 조약은 성립하지 않았다.",
+    "실제 역사에서는 11월 18일 새벽 을사늑약이 강제로 성립했고, 1906년 2월 통감부가 설치되었다.",
+  ],
+  options: [{ id: "ok", text: "다음 해를 준비한다." }],
+};
+
 export const DEATH_PROMPT: PromptView = {
   id: "p-death",
   kind: "death",

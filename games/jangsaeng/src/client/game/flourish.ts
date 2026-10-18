@@ -28,12 +28,16 @@ class Seal {
 
 const SEAL_POOL = 24;
 
+/**
+ * A small seal: one-pixel digits on a red block about as tall as a crit
+ * number, so a burst of crits in a melee never buries the name plates (which
+ * are drawn over the seals).
+ */
 function paintSeal(seal: Seal, rows: readonly string[], seed: number): void {
-  const s = 2;
-  const pad = 3;
+  const pad = 2;
   const cols = rows[0]?.length ?? 0;
-  const iw = cols * s + pad * 2;
-  const ih = FONT_H * s + pad * 2;
+  const iw = cols + pad * 2;
+  const ih = FONT_H + pad * 2;
   const w = iw + 2;
   const h = ih + 2;
   let surface = seal.surface;
@@ -66,17 +70,11 @@ function paintSeal(seal: Seal, rows: readonly string[], seed: number): void {
     if (hash01(3, y, seed) > 0.22) ctx.fillRect(2, y, 1, 1);
     if (hash01(4, y, seed) > 0.22) ctx.fillRect(iw - 1, y, 1, 1);
   }
-  // Digits in paper colour (白文印), shadowed for depth.
-  for (const [color, oy] of [
-    [SEAL_DARK, 1],
-    [PAPER, 0],
-  ] as const) {
-    ctx.fillStyle = color;
-    for (let r = 0; r < rows.length; r++) {
-      const row = rows[r] as string;
-      for (let c = 0; c < row.length; c++)
-        if (row[c] === "#") ctx.fillRect(1 + pad + c * s, 1 + pad + r * s + oy, s, s);
-    }
+  // Digits in paper colour (白文印).
+  ctx.fillStyle = PAPER;
+  for (let r = 0; r < rows.length; r++) {
+    const row = rows[r] as string;
+    for (let c = 0; c < row.length; c++) if (row[c] === "#") ctx.fillRect(1 + pad + c, 1 + pad + r, 1, 1);
   }
   seal.w = w;
   seal.h = h;
@@ -126,8 +124,8 @@ export class SealStamps {
     for (const s of this.#pool) {
       if (!s.active || !s.surface) continue;
       const k = s.age / s.life;
-      // Slam down (oversized → 1), settle, drift up a little, fade.
-      const pop = s.age < 90 ? 1.8 - (s.age / 90) * 0.8 : s.age < 150 ? 1 - ((150 - s.age) / 60) * 0.06 : 1;
+      // Slam down (a little oversized → 1), settle, drift up a little, fade.
+      const pop = s.age < 90 ? 1.35 - (s.age / 90) * 0.35 : s.age < 150 ? 1 - ((150 - s.age) / 60) * 0.06 : 1;
       const rise = 2 + 8 * (1 - (1 - k) * (1 - k));
       ctx.globalAlpha = prev * (k > 0.7 ? (1 - k) / 0.3 : 1);
       const w = Math.round(s.w * pop);

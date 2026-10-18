@@ -42,7 +42,7 @@ export function demoPanel(
       ),
     ),
   );
-  return paperPanel(
+  const panel = paperPanel(
     { title: "시연 모드", kicker: "발표자용", glyph: "演", onClose: handlers.onBack, class: "demo-panel" },
     h(
       "div",
@@ -72,4 +72,14 @@ export function demoPanel(
     ),
     grid,
   );
+  // Where the grid does not fit (a phone), a fade at the bottom says there is more.
+  const body = panel.querySelector<HTMLElement>(".panel-body");
+  if (body) {
+    const cue = () => body.classList.toggle("more", body.scrollTop + body.clientHeight < body.scrollHeight - 2);
+    body.addEventListener("scroll", cue, { passive: true });
+    const watch = new ResizeObserver(cue);
+    watch.observe(body);
+    watch.observe(grid);
+  }
+  return panel;
 }

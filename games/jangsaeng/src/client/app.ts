@@ -235,6 +235,7 @@ async function beginSession(choice: TitleChoice, game: GameClient, ui: Ui): Prom
       session = startOffline(
         (line) => console.debug(`[host] ${line}`),
         (reason) => lost(`오프라인 세계가 멈췄습니다 (${reason}).`),
+        () => ui.holdsWorld,
       );
     } catch (error) {
       console.error(error);

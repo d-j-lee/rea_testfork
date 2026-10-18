@@ -1,6 +1,7 @@
 // Scene composition for one frame: ground, depth-sorted structures +
-// characters + props, atmosphere, then the readable layer (telegraphs,
-// arena ring, effects, name plates, markers) and screen-space cues.
+// characters + props (structures over a fighter fade), atmosphere, then the
+// readable layer (telegraphs, arena ring, effects, crit seals, name plates,
+// markers) and screen-space cues.
 
 import type { GameMap } from "../../shared/map/generate.ts";
 import {
@@ -10,13 +11,14 @@ import {
   type CharacterSprite,
   type PropSprite,
 } from "../../shared/sprites.ts";
-import type { ChapterView, SelfView } from "../../shared/types.ts";
+import type { ChapterView, SelfView, Team } from "../../shared/types.ts";
 import { characterHeight, drawCharacter, type DrawCharacterOptions } from "../render/characters.ts";
 import { EffectSystem } from "../render/effects.ts";
 import { drawAtmosphere, type AtmosphereOptions, type Weather } from "../render/lighting.ts";
 import { drawSelectionRing } from "../render/overlays.ts";
 import { TEAM_COLORS } from "../render/palette.ts";
 import { drawProp } from "../render/props.ts";
+import type { StructureDrawable } from "../render/structures.ts";
 import type { Drawable } from "../render/types.ts";
 import { applyCamera, worldViewOf, WorldRenderer } from "../render/world.ts";
 import type { CameraRig } from "./camera.ts";
@@ -44,6 +46,12 @@ const BATTLE_SKY = 12;
 const SKY_EDGE = 6;
 /** …and it takes this long (ms) to turn the sky in or out, as a battle starts or ends. */
 const SKY_FADE_MS = 1500;
+/** A roof, gate or wall drawn over someone standing behind it fades to this… */
+const COVER_ALPHA = 0.3;
+/** …over this long (ms), and comes back as they step out. */
+const COVER_FADE_MS = 180;
+/** Whom structures give way to: everyone who plays or fights (villagers may walk behind houses). */
+const REVEALED: ReadonlySet<Team> = new Set<Team>(["self", "player", "ally", "enemy", "boss"]);
 
 /** What the atmosphere pass draws: an hour of the day and a weather. */
 interface Sky {
@@ -181,6 +189,11 @@ export class Scene {
   /** The last battle's own sky (kept while it fades out after the battle ends) and how much of it shows, 0–1. */
   #battleSky: Sky | null = null;
   #skyMix = 0;
+  /** Alpha of each visible structure fading over someone (absent = opaque); two maps swapped per frame. */
+  #covers = new Map<Drawable, number>();
+  #coversNext = new Map<Drawable, number>();
+  /** Revealed characters' sprite boxes this frame: x0, y0, x1, y1, sortY. */
+  readonly #boxes: number[] = [];
   #byDepth = (a: Drawable, b: Drawable) => a.sortY - b.sortY;
 
   constructor(map: GameMap) {
@@ -211,16 +224,21 @@ export class Scene {
     if (selfView?.visible && !selfView.lying) drawSelectionRing(ctx, selfView.wx, selfView.wy, TEAM_COLORS.self, t);
     const list = this.#drawables;
     list.length = 0;
-    for (const d of this.world.structureDrawables(cam, t)) list.push(d);
+    const structures = this.world.structureDrawables(cam, t);
+    this.#fadeCovers(structures, f.visualDt);
+    for (const d of structures) list.push(d);
     for (const v of this.#visible) list.push(v);
     list.sort(this.#byDepth);
-    for (const d of list) d.draw(ctx, t);
-    // X-ray: when a roof or wall hides the player, show them through it.
-    if (selfView?.visible && selfView.character && this.#occluded(selfView, list)) {
-      const prev = ctx.globalAlpha;
-      ctx.globalAlpha = prev * 0.45;
-      selfView.draw(ctx, t);
-      ctx.globalAlpha = prev;
+    const covers = this.#covers;
+    for (const d of list) {
+      const alpha = covers.get(d);
+      if (alpha === undefined) d.draw(ctx, t);
+      else {
+        const prev = ctx.globalAlpha;
+        ctx.globalAlpha = prev * alpha;
+        d.draw(ctx, t);
+        ctx.globalAlpha = prev;
+      }
     }
     this.ink.update(f.visualDt);
     this.ink.draw(ctx, t);
@@ -236,10 +254,11 @@ export class Scene {
     for (const v of this.#visible) if (v.track.down && v.character) drawDownedRing(ctx, v.wx, v.wy, f.now, f.unit);
     this.effects.update(f.visualDt);
     this.effects.draw(ctx, t);
-    const self = f.store.self;
-    this.#plates.draw(ctx, this.#visible, f.store.selfId, self ?? null, cam.scale, f.unit, t);
+    // Crit seals under the name plates: a melee's crits never hide who is who.
     this.seals.update(f.visualDt);
     this.seals.draw(ctx);
+    const self = f.store.self;
+    this.#plates.draw(ctx, this.#visible, f.store.selfId, self ?? null, cam.scale, f.unit, t);
     const objectives = f.self?.objectives;
     if (objectives)
       for (const o of objectives)
@@ -276,19 +295,42 @@ export class Scene {
     drawSky(ctx, cam.width, cam.height, atmo, base, this.#battleSky, this.#skyMix);
   }
 
-  /** True when a structure drawn after `v` overlaps its sprite box. */
-  #occluded(v: EntityView, list: readonly Drawable[]): boolean {
-    const x0 = v.wx - 7;
-    const x1 = v.wx + 7;
-    const y1 = v.wy - 2;
-    const y0 = v.wy - 22;
-    for (let i = list.length - 1; i >= 0; i--) {
-      const d = list[i] as Drawable & { bounds?: { x0: number; y0: number; x1: number; y1: number } };
-      if (d.sortY <= v.sortY) break;
-      const b = d.bounds;
-      if (b && b.x0 < x1 && b.x1 > x0 && b.y0 < y1 && b.y1 > y0) return true;
+  /**
+   * Structures drawn after someone who plays or fights (they stand behind or
+   * under it) and over their sprite fade out, so a roof, gate tower or wall
+   * never hides a fight; they come back as the person steps out. Only the
+   * covering pieces fade: a wall run opens a window, not the whole town.
+   */
+  #fadeCovers(structures: readonly StructureDrawable[], dtMs: number): void {
+    const boxes = this.#boxes;
+    boxes.length = 0;
+    for (const v of this.#visible) {
+      if (!v.character || v.dissolve >= 0 || !REVEALED.has(v.track.snap.tm)) continue;
+      boxes.push(v.wx - 6, v.wy - characterHeight(v.character), v.wx + 6, v.wy - 2, v.sortY);
     }
-    return false;
+    const prev = this.#covers;
+    const next = this.#coversNext;
+    next.clear();
+    const step = (dtMs / COVER_FADE_MS) * (1 - COVER_ALPHA);
+    for (const d of structures) {
+      let covering = false;
+      if (boxes.length) {
+        const r = d.cover();
+        for (let i = 0; i < boxes.length; i += 5) {
+          if (d.sortY <= (boxes[i + 4] as number)) continue;
+          if (r.x0 < (boxes[i + 2] as number) && r.x1 > (boxes[i] as number) && r.y0 < (boxes[i + 3] as number) && r.y1 > (boxes[i + 1] as number)) {
+            covering = true;
+            break;
+          }
+        }
+      }
+      const was = prev.get(d) ?? 1;
+      const alpha = covering ? Math.max(COVER_ALPHA, was - step) : Math.min(1, was + step);
+      if (alpha < 1) next.set(d, alpha);
+    }
+    // Structures that left the view drop out with the swap.
+    this.#covers = next;
+    this.#coversNext = prev;
   }
 
   #prepareViews(f: SceneFrame, view: { x0: number; y0: number; x1: number; y1: number }): void {

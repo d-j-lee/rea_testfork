@@ -2,7 +2,7 @@
 // 천수 (lifespan) track with the 1910 goal, 의심도 gauge and rank/office.
 import { AWAKENING_YEAR, FINAL_YEAR, type SelfView } from "../../shared/types.ts";
 import { h, meter, ratio, setMeter, setStyle, setText, toggle } from "./dom.ts";
-import { IDENTITY_LABELS, meritLabel, SUSPICION_BANDS } from "./labels.ts";
+import { IDENTITY_LABELS, lifeWarning, meritLabel, SUSPICION_BANDS } from "./labels.ts";
 
 export class StatusCard {
   readonly el: HTMLElement;
@@ -82,11 +82,12 @@ export class StatusCard {
     setStyle(this.#lifeTrack, "--end", at(self.lifeEnd).toFixed(4));
     setStyle(this.#lifeTrack, "--goal", at(FINAL_YEAR).toFixed(4));
     this.#lifeTrack.title = `${AWAKENING_YEAR} 각성 · 지금 ${self.year} · 천수 ${self.lifeEnd} · 목표 ${FINAL_YEAR}`;
-    const short = self.lifeShortfall > 0;
-    toggle(this.el, "life-short", short);
-    setText(this.#warn, short ? `이대로면 ${self.lifeEnd}년에 천수가 다한다` : "");
-    setText(this.#short, short ? `−${self.lifeShortfall}년` : "");
-    this.#short.title = short ? `${FINAL_YEAR}년까지 ${self.lifeShortfall}년 부족` : "";
+    // A shortfall decades away is a calm amber note; red only when life runs out.
+    const life = lifeWarning(self);
+    this.el.dataset.life = life;
+    setText(this.#warn, life === "near" ? `이대로면 ${self.lifeEnd}년에 천수가 다한다` : life === "far" ? `${FINAL_YEAR}년까지 ${self.lifeShortfall}년을 더 이어야 한다` : "");
+    setText(this.#short, life === "ok" ? "" : `−${self.lifeShortfall}년`);
+    this.#short.title = life === "ok" ? "" : `${FINAL_YEAR}년까지 ${self.lifeShortfall}년 부족`;
 
     const band = SUSPICION_BANDS[self.suspicionBand];
     setMeter(this.#susp, ratio(self.suspicion, 100));

@@ -36,6 +36,20 @@ export const SUSPICION_BANDS: Readonly<Record<SelfView["suspicionBand"], { label
   exposed: { label: "발각 위기", tone: "exposed" },
 };
 
+/** Years of lifespan left at or under which a shortfall is urgent; further off it is a calm note. */
+export const LIFE_NEAR_YEARS = 50;
+
+/**
+ * How the HUD shows the lifespan against 1910: "ok" (it reaches 1910), "far"
+ * (it falls short, but decades remain to make it up — an amber note), "near"
+ * (short, and only LIFE_NEAR_YEARS or fewer left — red). The opening of the
+ * game is "far": 500 years ahead, 49 short.
+ */
+export function lifeWarning(self: Pick<SelfView, "year" | "lifeEnd" | "lifeShortfall">): "ok" | "far" | "near" {
+  if (self.lifeShortfall <= 0) return "ok";
+  return self.lifeEnd - self.year <= LIFE_NEAR_YEARS ? "near" : "far";
+}
+
 export function meritLabel(grade: 1 | 2 | 3 | 4): string {
   return grade === 4 ? "원종공신" : `개국공신 ${grade}등`;
 }

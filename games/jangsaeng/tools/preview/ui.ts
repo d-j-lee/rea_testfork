@@ -9,7 +9,21 @@ import { createUi, type Ui } from "../../src/client/ui/index.ts";
 import { TILE_PX, type CharacterSprite } from "../../src/shared/sprites.ts";
 import type { ServerMsg } from "../../src/shared/protocol.ts";
 import { renderView, viewCentre, worldMap } from "./world-lib.ts";
-import { CARD_PROMPT, CHAPTER, DEATH_PROMPT, ENDING, mockAudio, mockSelf, RESULT_PROMPT, STORY_PROMPT, YEARS_PROMPT } from "./ui-mock.ts";
+import {
+  ALT_PROMPT,
+  CARD_PROMPT,
+  CHAPTER,
+  DEATH_PROMPT,
+  ENDING,
+  LONG_RESULT_PROMPT,
+  mockAudio,
+  mockSelf,
+  RESULT_PROMPT,
+  STORY_PROMPT,
+  YEARS_PROMPT,
+} from "./ui-mock.ts";
+
+const MOCK = { ENDING, YEARS_PROMPT, RESULT_PROMPT, LONG_RESULT_PROMPT, ALT_PROMPT, STORY_PROMPT, mockSelf };
 
 declare global {
   interface Window {
@@ -17,7 +31,7 @@ declare global {
     /** Hooks for tools/preview/ui-check.mjs. */
     __ui?: Ui;
     __input?: Input;
-    __mock?: { ENDING: typeof ENDING; YEARS_PROMPT: typeof YEARS_PROMPT; RESULT_PROMPT: typeof RESULT_PROMPT };
+    __mock?: typeof MOCK;
     __arrowLabel?: (inherited: CanvasTextAlign) => { label: [number, number]; arrow: [number, number]; width: number };
   }
 }
@@ -60,7 +74,7 @@ const input = new Input(canvas);
 const ui: Ui = createUi({ root, send, audio: mockAudio(), input, map });
 window.__ui = ui;
 window.__input = input;
-window.__mock = { ENDING, YEARS_PROMPT, RESULT_PROMPT };
+window.__mock = MOCK;
 
 /**
  * Draws an off-screen objective's edge arrow (target far to the left) on a
@@ -185,6 +199,14 @@ async function run(): Promise<void> {
     case "result":
       startGame();
       ui.handle({ t: "prompt", prompt: RESULT_PROMPT });
+      break;
+    case "longresult":
+      startGame();
+      ui.handle({ t: "prompt", prompt: LONG_RESULT_PROMPT });
+      break;
+    case "alt":
+      startGame();
+      ui.handle({ t: "prompt", prompt: ALT_PROMPT });
       break;
     case "death":
       startGame();

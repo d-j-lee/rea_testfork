@@ -17,8 +17,8 @@ import {
   terrainChunkJob,
   type TerrainChunk,
 } from "./terrain.ts";
-import { StructureLayer } from "./structures.ts";
-import type { Camera, Drawable } from "./types.ts";
+import { StructureLayer, type StructureDrawable } from "./structures.ts";
+import type { Camera } from "./types.ts";
 
 export type { Season } from "./terrain-art.ts";
 
@@ -326,7 +326,7 @@ export class WorldRenderer {
   }
 
   /** Visible structures as depth-sortable drawables (merge with characters). */
-  structureDrawables(camera: Camera, timeMs: number): Drawable[] {
+  structureDrawables(camera: Camera, timeMs: number): StructureDrawable[] {
     return this.#structures.visible(worldViewOf(camera), timeMs);
   }
 }

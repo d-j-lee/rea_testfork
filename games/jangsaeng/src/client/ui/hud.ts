@@ -27,6 +27,8 @@ export interface HudDeps {
   onTyping(typing: boolean): void;
   /** A compact-layout drawer opened or closed. */
   onDrawer(): void;
+  /** The full 사경 overlay opened or closed. */
+  onOverlay(): void;
   /** ≡ on the compact layout: open the menu book. */
   openMenu(): void;
   compactChat: boolean;
@@ -60,7 +62,7 @@ export class Hud {
     };
     this.map = new MapPanel(deps.map, deps.command);
     this.objectives = new ObjectiveTracker(deps.audio, () => deps.act({ kind: "demoSkip" }));
-    this.downed = new DownedOverlay(() => deps.act({ kind: "selfRevive" }));
+    this.downed = new DownedOverlay(() => deps.act({ kind: "selfRevive" }), () => deps.onOverlay());
     this.chat = new ChatPanel(deps.audio, deps.chat, deps.onTyping, deps.compactChat);
     const bar = new SkillBar(this.skills, (n) => deps.input.pressSkill(n), useItem);
     this.#deps = deps;

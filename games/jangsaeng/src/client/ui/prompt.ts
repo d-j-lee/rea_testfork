@@ -1,6 +1,9 @@
 // Dialogue and choice sheet for story / history / notice / identity / death /
 // negotiation prompts, montage cards and result lists. Body text types out
 // quickly (tap to complete); options carry hints, lock reasons and the 풍향계.
+// The text and the result list scroll together in one region between the
+// header and the options, so the options (the continue button) stay on screen
+// however long a result list grows.
 import type { PromptOptionView, PromptView, ResultView } from "../../shared/types.ts";
 import type { AudioEngine } from "../audio/types.ts";
 import { h } from "./dom.ts";
@@ -16,6 +19,19 @@ const KIND_RIBBON: Partial<Record<PromptView["kind"], string>> = {
   result: "결과",
   notice: "알림",
 };
+
+/**
+ * The header ribbons: the kind's, then 대체역사 for an alternate-history card
+ * (PromptView.alt). An alternate-history card is never labelled 실제 역사, so
+ * there the 대체역사 ribbon takes the history ribbon's place.
+ */
+function promptRibbons(p: Pick<PromptView, "kind" | "alt">): { text: string; alt: boolean }[] {
+  const kind = KIND_RIBBON[p.kind];
+  const out: { text: string; alt: boolean }[] = [];
+  if (kind && !(p.alt && p.kind === "history")) out.push({ text: kind, alt: false });
+  if (p.alt) out.push({ text: "대체역사", alt: true });
+  return out;
+}
 
 const RESULT_MARK: Readonly<Record<ResultView["lines"][number]["tone"], string>> = {
   info: "·",
@@ -50,6 +66,8 @@ export class PromptDialog {
   readonly #reduced: () => boolean;
   #prompt: PromptView | null = null;
   #typing: (() => void) | null = null;
+  /** The open sheet's text + result region, which scrolls between header and options. */
+  #scroll: HTMLElement | null = null;
   #sent = false;
   #timer = 0;
 
@@ -57,6 +75,13 @@ export class PromptDialog {
     this.#audio = audio;
     this.#choose = choose;
     this.#reduced = reduced;
+    window.addEventListener("resize", () => this.#cue());
+  }
+
+  /** Marks the scroll region while more of it lies below (the fade cue). */
+  #cue(): void {
+    const s = this.#scroll;
+    if (s) s.classList.toggle("more", s.scrollTop + s.clientHeight < s.scrollHeight - 2);
   }
 
   get open(): boolean {
@@ -77,19 +102,27 @@ export class PromptDialog {
     this.el.replaceChildren(sheet);
     if (!same) this.#audio.sfx(p.kind === "death" ? "warning" : "ui_open");
     sheet.focus({ preventScroll: true });
+    this.#cue();
   }
 
   close(): void {
     window.clearInterval(this.#timer);
     this.#prompt = null;
     this.#typing = null;
+    this.#scroll = null;
     this.el.replaceChildren();
   }
 
-  /** Keyboard: 1–9 choose, Enter/Space complete typing or continue. */
+  /** Keyboard: 1–9 choose, Enter/Space complete typing or continue, arrows/Page keys scroll the text. */
   handleKey(e: KeyboardEvent): boolean {
     const p = this.#prompt;
     if (!p || this.#sent) return false;
+    const scroll = this.#scroll;
+    const step = e.key === "ArrowDown" ? 48 : e.key === "ArrowUp" ? -48 : e.key === "PageDown" ? 1 : e.key === "PageUp" ? -1 : 0;
+    if (scroll && step) {
+      scroll.scrollBy({ top: Math.abs(step) === 1 ? step * scroll.clientHeight * 0.85 : step });
+      return true;
+    }
     if (this.#typing && (e.key === "Enter" || e.key === " " || /^[1-9]$/.test(e.key))) {
       this.#typing();
       return true;
@@ -119,12 +152,13 @@ export class PromptDialog {
   }
 
   #build(p: PromptView, same: boolean): HTMLElement {
-    const ribbon = KIND_RIBBON[p.kind];
-    const body = h("div", { class: "pr-body" });
+    // Only text that exists takes room: a result card without body text
+    // starts its list right under the header.
+    const body = p.body.length ? h("div", { class: "pr-body" }) : null;
     const paragraphs = p.body.map((text) => {
       const shown = document.createTextNode("");
       const rest = h("span", { class: "tw-rest" }, text);
-      body.appendChild(h("p", null, shown, rest));
+      body?.appendChild(h("p", null, shown, rest));
       return { text, shown, rest };
     });
     const result = p.data?.type === "result" ? p.data : null;
@@ -132,6 +166,11 @@ export class PromptDialog {
       ? h("ul", { class: "pr-result" },
           ...result.lines.map((l) => h("li", { class: `tone-${l.tone}` }, h("span", { class: "rs-mark", "aria-hidden": "true" }, RESULT_MARK[l.tone]), l.text)))
       : null;
+    const keep = same ? (this.#scroll?.scrollTop ?? 0) : 0;
+    const scroll = h("div", { class: "pr-scroll" }, body, resultList);
+    scroll.addEventListener("scroll", () => this.#cue(), { passive: true });
+    this.#scroll = scroll;
+    if (keep) requestAnimationFrame(() => (scroll.scrollTop = keep));
     const single = p.options.length === 1;
     const options = h(
       "div",
@@ -173,6 +212,7 @@ export class PromptDialog {
             p.speaker.historical ? h("span", { class: "badge-real", title: "실존 인물" }, "실존") : null))
       : null;
     const isCard = p.kind === "card";
+    const ribbons = promptRibbons(p);
     const sheet = h(
       "section",
       {
@@ -186,12 +226,14 @@ export class PromptDialog {
       h("header", { class: "pr-head" },
         speaker,
         h("div", { class: "pr-titles" },
-          ribbon ? h("span", { class: "pr-ribbon" }, ribbon) : null,
-          p.title ? h("h2", { class: "pr-title" }, p.title) : null,
-          p.alt ? h("span", { class: "hn-tag pr-alt", title: "게임 속 대체역사" }, "대체역사") : null),
+          ribbons.length
+            ? h("span", { class: "pr-ribbons" },
+                ...ribbons.map((r) =>
+                  h("span", r.alt ? { class: "pr-ribbon alt", title: "게임 속 대체역사" } : { class: "pr-ribbon" }, r.text)))
+            : null,
+          p.title ? h("h2", { class: "pr-title" }, p.title) : null),
         !isCard && p.year !== undefined ? h("span", { class: "pr-year" }, `${p.year}년`) : null),
-      body,
-      resultList,
+      scroll,
       options,
     );
     // Typewriter: hidden remainder keeps layout stable while text appears.
@@ -224,7 +266,7 @@ export class PromptDialog {
         }
         if (left > 0) finish();
       }, 30);
-      body.addEventListener("click", () => this.#typing?.());
+      scroll.addEventListener("click", () => this.#typing?.());
     }
     return sheet;
   }
