@@ -285,11 +285,10 @@ export interface BossDef {
   title?: string;
   /**
    * A person named in the record (아지발도): the battle UI marks the name
-   * '(기록상)'. Otherwise the boss is invented and is marked '(가상)'.
+   * '(기록상)'. Otherwise (false) the boss is invented and is marked '(가상)'.
    * Real people never become bosses otherwise (docs/HISTORY.md §1.2).
-   * Every shipped boss declares it (tests/unit/content.test.ts).
    */
-  historical?: boolean;
+  historical: boolean;
   level: number;
   hpScale: number;
   phases: readonly BossPhase[];
@@ -473,10 +472,11 @@ export interface ChapterDef {
   prompts: readonly PromptDef[];
   steps: readonly StepDef[];
   /**
-   * Demo mode only: id of the step a demo preset starts at. The steps before
-   * it are played out by rules/save.ts the way 건너뛰기 would (first enabled
-   * option, every battle won). Normal play always starts at the first step.
-   * The session must enter the save's step on first entry for this to apply.
+   * Demo mode only: id of the step a demo preset starts at; it must name a
+   * step after the first. The preset records it as save.demoEntry, and on
+   * first entry the session plays the steps before it with its own 건너뛰기
+   * (host/session.ts #playDemoEntry), so the demo holds exactly what skipping
+   * from the first step leaves. Normal play always starts at the first step.
    */
   demoStart?: string;
   /** Montage chapters play mostly as cards during the passage of years. */

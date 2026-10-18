@@ -521,6 +521,7 @@ export function battleView(sim: Sim): BattleView | null {
   const view: BattleView = { id: def.id, title: def.title, kind: def.kind, x, y, radius, participants: b.participants.length, morale: b.morale };
   if (def.subtitle) view.subtitle = def.subtitle;
   if (def.music) view.music = def.music;
+  if (def.alt) view.alt = true;
   if (def.weather) view.weather = def.weather;
   if (def.hour !== undefined) view.hour = def.hour;
   if (def.timeLimit !== undefined && (def.kind === "survive" || def.kind === "escape" || def.kind === "defend"))

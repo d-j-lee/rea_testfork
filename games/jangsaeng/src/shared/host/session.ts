@@ -1211,6 +1211,8 @@ export class Session {
         optional: objective.optional ?? false,
       };
       if (objective.hint) view.hint = objective.hint;
+      if (objective.solemn) view.solemn = true;
+      if (objective.kind === "battle" && this.chapter.battles.find((def) => def.id === objective.target)?.alt) view.alt = true;
       if ((objective.count ?? 1) > 1)
         view.progress = [this.save.objectives[objective.id] ?? 0, objective.count ?? 1];
       const { place, siteId } = this.#objectivePlace(objective);

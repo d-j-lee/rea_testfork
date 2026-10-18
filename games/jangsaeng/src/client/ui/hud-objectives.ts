@@ -5,15 +5,20 @@ import type { ObjectiveView, SelfView } from "../../shared/types.ts";
 import type { AudioEngine } from "../audio/types.ts";
 import { chapterNumber } from "./chapters.ts";
 import { button, h, setText, toggle } from "./dom.ts";
+import { ObjectiveCues } from "./objective-cues.ts";
 
-/** Control names for an objective's input hints, per device. */
+/**
+ * Control names for an objective's input hints, per device. They only name
+ * the controls; how to use one (holding the bow longer) is in the
+ * objective's own device-neutral text.
+ */
 const INPUT_HINT_TEXT: Readonly<Record<InputHint, { keys: string; touch: string }>> = {
-  move: { keys: "이동 WASD·방향키", touch: "이동 왼쪽 화면을 끌기" },
-  interact: { keys: "말 걸기 E", touch: "말 걸기 手 행동" },
-  attack: { keys: "공격 J·Space·클릭", touch: "공격 劍" },
-  bow: { keys: "활 K·우클릭, 길게 당기기", touch: "활 弓, 길게 누르기" },
-  roll: { keys: "구르기 Shift·L", touch: "구르기 轉" },
-  skill: { keys: "기술 1·2·3", touch: "기술 칸 1·2·3" },
+  move: { keys: "이동: WASD·방향키", touch: "이동: 화면 왼쪽을 끌어서" },
+  interact: { keys: "말 걸기: E", touch: "말 걸기: 手(행동) 버튼" },
+  attack: { keys: "공격: J·Space·클릭", touch: "공격: 劍 버튼" },
+  bow: { keys: "활: K·우클릭", touch: "활: 弓 버튼" },
+  roll: { keys: "구르기: Shift·L", touch: "구르기: 轉 버튼" },
+  skill: { keys: "기술: 1·2·3", touch: "기술: 기술 칸 1·2·3" },
 };
 
 /** The settings store publishes the active input mode on <html data-touch>. */
@@ -32,7 +37,7 @@ export class ObjectiveTracker {
   readonly #head = h("span", { class: "obj-chapter" });
   readonly #skip: HTMLButtonElement;
   readonly #audio: AudioEngine;
-  #known = new Map<string, boolean>();
+  readonly #cues = new ObjectiveCues();
   #key = "";
 
   constructor(audio: AudioEngine, onSkip: () => void) {
@@ -55,16 +60,8 @@ export class ObjectiveTracker {
     const key = `${touch ? "t" : "k"}|${list.map((o) => `${o.id}:${o.done ? 1 : 0}:${o.progress?.[0] ?? ""}/${o.progress?.[1] ?? ""}:${o.text}`).join("|")}`;
     if (key === this.#key) return;
     this.#key = key;
-    let newlyDone = false;
-    let fresh = false;
-    for (const o of list) {
-      const before = this.#known.get(o.id);
-      if (before === undefined && this.#known.size > 0) fresh = true;
-      if (before === false && o.done) newlyDone = true;
-    }
-    this.#known = new Map(list.map((o) => [o.id, o.done]));
-    if (newlyDone) this.#audio.sfx("quest_done");
-    else if (fresh) this.#audio.sfx("quest");
+    const cue = this.#cues.next(list);
+    if (cue) this.#audio.sfx(cue);
     // Pending first, then completed; optional ones last among pending.
     const sorted = [...list].sort((a, b) => Number(a.done) - Number(b.done) || Number(a.optional) - Number(b.optional));
     this.#list.replaceChildren(...sorted.map((o) => this.#item(o, touch)));
@@ -80,6 +77,8 @@ export class ObjectiveTracker {
       h("span", { class: "obj-box", "aria-hidden": "true" }),
       h("span", { class: "obj-text" },
         o.optional ? h("span", { class: "obj-opt" }, "선택") : null,
+        o.alt ? h("span", { class: "hn-tag obj-alt", title: "게임 속 대체역사" }, "대체역사") : null,
+        o.alt ? " " : null,
         o.text,
         keys ? h("small", { class: "obj-site obj-keys" }, keys) : null,
         o.siteName && !o.done ? h("small", { class: "obj-site" }, o.siteName) : null),

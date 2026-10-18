@@ -82,8 +82,8 @@ function checkChapter(chapter: ChapterDef): string[] {
   if (!siteIds.has(chapter.start.site)) problems.push(where(`start site ${chapter.start.site}`));
   if (chapter.briefing.length === 0) problems.push(where("empty briefing"));
   if (chapter.history.length === 0) problems.push(where("empty history note"));
-  if (chapter.demoStart !== undefined && !stepIds.has(chapter.demoStart))
-    problems.push(where(`demoStart ${chapter.demoStart} is not a step`));
+  if (chapter.demoStart !== undefined && !(chapter.steps.findIndex((step) => step.id === chapter.demoStart) > 0))
+    problems.push(where(`demoStart ${chapter.demoStart} is not a step after the first`));
   for (const npc of chapter.npcs) {
     if (!siteIds.has(npc.site)) problems.push(where(`npc ${npc.id} site ${npc.site}`));
     if (!characterSprites.has(npc.sprite)) problems.push(where(`npc ${npc.id} sprite ${npc.sprite}`));
@@ -107,8 +107,6 @@ function checkChapter(chapter: ChapterDef): string[] {
       if (phase.summon && !CONTENT.enemies[phase.summon.enemy])
         problems.push(where(`battle ${battle.id} summon ${phase.summon.enemy}`));
     if (battle.kind === "boss" && !battle.boss) problems.push(where(`battle ${battle.id} boss kind without boss`));
-    if (battle.boss && typeof battle.boss.historical !== "boolean")
-      problems.push(where(`battle ${battle.id} boss must declare historical (record or 가상)`));
     if (battle.kind === "defend" && !battle.defend) problems.push(where(`battle ${battle.id} defend without target`));
     if (["survive", "escape", "defend"].includes(battle.kind) && !battle.timeLimit)
       problems.push(where(`battle ${battle.id} ${battle.kind} needs timeLimit`));
@@ -351,8 +349,6 @@ test("counterfactual outcomes reach 나의 실록 tagged 대체역사", () => {
     };
     for (const { where, effects } of effectLists(chapter)) visit(effects, where, false);
     for (const battle of chapter.battles) {
-      // The banner copy and the flag agree until the subtitle marker is rendered from the flag.
-      assert.equal(battle.alt === true, battle.subtitle?.includes("[대체역사]") === true, `${chapter.id} ${battle.id}`);
       if (!battle.alt) continue;
       for (const effect of walkEffects(battle.victory))
         if (effect.k === "chronicle") assert.equal(effect.alt, true, `${battle.id}: ${effect.text}`);
@@ -392,11 +388,6 @@ function rulesFlags(): { read: Set<string>; written: Set<string> } {
   return { read, written };
 }
 
-/** Rule reads that nothing writes yet: each names its open handoff and must stay unwritten until fixed. */
-const UNWRITTEN_RULE_FLAGS: ReadonlyMap<string, string> = new Map([
-  ["righteous", "rules/progression.ts heroSprite reads it; no content or rule sets it (handoff)"],
-]);
-
 test("every flag the rules read is written by content or by the rules", () => {
   const { read, written } = rulesFlags();
   const content = new Set<string>();
@@ -408,13 +399,7 @@ test("every flag the rules read is written by content or by the rules", () => {
       }
   assert.ok(read.has(SCHOOL_FLAG) && read.has(DISCIPLE_XP_FLAG), "the scan sees the 유파 flags");
   assert.ok(content.has(SCHOOL_FLAG) && content.has(DISCIPLE_XP_FLAG), "choices found the 유파 and train disciples (P3)");
-  for (const flag of read) {
-    if (UNWRITTEN_RULE_FLAGS.has(flag)) {
-      assert.ok(!content.has(flag) && !written.has(flag), `${flag} is written now: drop it from UNWRITTEN_RULE_FLAGS`);
-      continue;
-    }
-    assert.ok(content.has(flag) || written.has(flag), `rules read flag '${flag}' that nothing writes`);
-  }
+  for (const flag of read) assert.ok(content.has(flag) || written.has(flag), `rules read flag '${flag}' that nothing writes`);
 });
 
 test("narration names a chapter's 공동 실록 by its title", () => {

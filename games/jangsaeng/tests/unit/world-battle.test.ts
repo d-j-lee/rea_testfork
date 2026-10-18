@@ -576,7 +576,7 @@ test("morale: 40% of each wave falling routs the rest, which counts as cleared",
 test("duels: only the starter can hurt the boss and the boss only hunts the starter", () => {
   const chapter = withBattles([{
     id: "duel", title: "결투", site: "hwangsan", offset: [4, 0], radius: 7, kind: "duel",
-    boss: { enemy: "boss_duelist", name: "강휘", level: 10, hpScale: 1, phases: [{ at: 1, mechanic: "charge" }] },
+    boss: { enemy: "boss_duelist", name: "강휘", historical: false, level: 10, hpScale: 1, phases: [{ at: 1, mechanic: "charge" }] },
     waves: [{ enemies: [{ enemy: "bandit", count: 5, level: 1 }] }], victory: [], defeat: [],
   }]);
   const { world } = makeWorld("duel", chapter);
@@ -616,7 +616,7 @@ test("every boss mechanic runs with its telegraph", () => {
   ];
   const chapter = withBattles([{
     id: "all", title: "기믹", site: "hwangsan", offset: [4, 0], radius: 9, kind: "boss",
-    boss: { enemy: "boss_rebel_captain", name: "부장", level: 12, hpScale: 1, phases }, waves: [], victory: [], defeat: [],
+    boss: { enemy: "boss_rebel_captain", name: "부장", historical: false, level: 12, hpScale: 1, phases }, waves: [], victory: [], defeat: [],
   }]);
   const { world } = makeWorld("mechanics-all", chapter);
   const c = arena();

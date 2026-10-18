@@ -294,6 +294,10 @@ export interface ObjectiveView {
   optional: boolean;
   /** Controls this objective teaches, named for the player's device by the HUD. */
   hint?: readonly InputHint[];
+  /** ObjectiveDef.solemn: finishing it is no achievement, so the HUD plays no completion sound. */
+  solemn?: true;
+  /** The battle it starts is counterfactual (BattleDef.alt): the HUD tags it 대체역사. */
+  alt?: true;
   progress?: readonly [number, number];
   /** Marker position in tiles, when the objective has a place. */
   x?: number;
@@ -336,6 +340,8 @@ export interface BattleView {
   id: string;
   title: string;
   subtitle?: string;
+  /** A counterfactual battle (BattleDef.alt): the banner tags it 대체역사. */
+  alt?: true;
   kind: string;
   x: number;
   y: number;

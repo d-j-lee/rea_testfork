@@ -12,6 +12,8 @@ function bossLabel(boss: NonNullable<BattleView["boss"]>): string {
 export class BattleBanner {
   readonly el: HTMLElement;
   readonly #title = h("strong", { class: "bt-title" });
+  /** BattleView.alt: beside the title, so the compact layout (no subtitle) keeps it. */
+  readonly #alt = h("span", { class: "hn-tag bt-alt hidden", title: "게임 속 대체역사" }, "대체역사");
   readonly #sub = h("span", { class: "bt-sub" });
   readonly #status = h("span", { class: "bt-status" });
   readonly #bossName = h("span", { class: "bt-boss-name" });
@@ -34,7 +36,7 @@ export class BattleBanner {
       "section",
       { class: "hud-battle hidden", "aria-label": "전투" },
       h("header", { class: "bt-head" }, h("span", { class: "bt-mark", "aria-hidden": "true" }, "戰"),
-        h("span", { class: "bt-titles" }, this.#title, this.#sub), this.#status),
+        h("span", { class: "bt-titles" }, h("span", null, this.#title, " ", this.#alt), this.#sub), this.#status),
       this.#bossRow,
       this.#defRow,
       this.#moraleRow,
@@ -55,6 +57,7 @@ export class BattleBanner {
       this.el.classList.add("enter");
     }
     setText(this.#title, battle.title);
+    toggle(this.#alt, "hidden", !battle.alt);
     setText(this.#sub, battle.subtitle ?? "");
     this.#endsAt = battle.timeLeft !== undefined ? now + battle.timeLeft * 1000 : 0;
     toggle(this.#bossRow, "hidden", !battle.boss);
