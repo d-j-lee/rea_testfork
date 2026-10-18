@@ -4,7 +4,7 @@ import type { ContentIndex } from "../content/index.ts";
 import type { BranchId, ChapterId, NationKey, NationMeter } from "../content/schema.ts";
 import { BRANCH_IDS, NATION_KEYS } from "../content/schema.ts";
 import type { EndingResult, PlayerSave } from "../types.ts";
-import { chapterVirtue, clamp, discipleGeneration, nationName, numberFlag, round1, virtueEarned } from "./util.ts";
+import { chapterVirtue, clamp, discipleGeneration, nationName, numberFlag, virtueEarned } from "./util.ts";
 
 export const BRANCH_LABELS: Readonly<Record<BranchId, string>> = {
   B1: "장용영 유지 (1802)",
@@ -170,13 +170,22 @@ export function carryNation(content: ContentIndex, save: PlayerSave, next: Chapt
 
 // ── Ending ───────────────────────────────────────────────────────────────
 
+/**
+ * §8.1 terms in hundredths: the meters, branches and infiltration are whole
+ * numbers, so every term is an exact integer before it is settled to 0.1.
+ */
 const WEIGHTS: readonly (readonly [NationKey, number])[] = [
-  ["defense", 0.25],
-  ["diplomacy", 0.2],
-  ["finance", 0.15],
-  ["people", 0.2],
-  ["reform", 0.2],
+  ["defense", 25],
+  ["diplomacy", 20],
+  ["finance", 15],
+  ["people", 20],
+  ["reform", 20],
 ];
+const BRANCH_WEIGHT = 300;
+const INFILTRATION_WEIGHT = -30;
+
+/** Hundredths settled to whole tenths, half up: 재정 57 × 0.15 = 855 → 86 (8.6). */
+const tenths = (hundredths: number): number => Math.floor((Math.round(hundredths) + 5) / 10);
 
 /** Final infiltration: every branch that did not succeed adds its weight (unresolved = failed). */
 export function finalInfiltration(save: PlayerSave): number {
@@ -184,22 +193,24 @@ export function finalInfiltration(save: PlayerSave): number {
 }
 
 /**
- * The 1910 settlement (§8). Every breakdown row is settled to 0.1, the
- * precision the ending shows, and the score is exactly their sum: the rows on
- * the screen always add up to the score the endings were judged on.
+ * The 1910 settlement (§8). Each breakdown row is computed exactly in
+ * hundredths and settled to 0.1 (the precision the ending shows) half up; the
+ * score is exactly their sum, added in tenths, so the rows on the screen add up
+ * to the score the endings were judged on.
  */
 export function computeEnding(content: ContentIndex, save: PlayerSave): EndingResult {
   void content;
-  const breakdown: EndingResult["breakdown"] = [];
-  const row = (label: string, value: number) => breakdown.push({ label, value: round1(value) });
-  for (const [key, weight] of WEIGHTS) row(`${nationName(key)} ${save.nation[key]} × ${weight}`, save.nation[key] * weight);
+  const rows: { label: string; tenths: number }[] = [];
+  const row = (label: string, hundredths: number) => rows.push({ label, tenths: tenths(hundredths) });
+  for (const [key, weight] of WEIGHTS) row(`${nationName(key)} ${save.nation[key]} × ${weight / 100}`, save.nation[key] * weight);
   const succeeded = BRANCH_IDS.filter((id) => save.branches[id] === true).length;
-  row(`분기 성공 ${succeeded}개 × 3`, 3 * succeeded);
+  row(`분기 성공 ${succeeded}개 × ${BRANCH_WEIGHT / 100}`, BRANCH_WEIGHT * succeeded);
   const infiltration = finalInfiltration(save);
-  row(`침투도 ${infiltration} × −0.3`, -0.3 * infiltration);
+  row(`침투도 ${infiltration} × −${-INFILTRATION_WEIGHT / 100}`, INFILTRATION_WEIGHT * infiltration);
   const zeitgeist = clamp(numberFlag(save, "zeitgeist"), 0, ZEITGEIST_MAX);
-  if (zeitgeist > 0) row("시대정신 보너스", zeitgeist);
-  const score = round1(breakdown.reduce((sum, entry) => sum + entry.value, 0));
+  if (zeitgeist > 0) row("시대정신 보너스", 100 * zeitgeist);
+  const breakdown: EndingResult["breakdown"] = rows.map((entry) => ({ label: entry.label, value: entry.tenths / 10 }));
+  const score = rows.reduce((sum, entry) => sum + entry.tenths, 0) / 10;
 
   // §8.2: N1 needs the 중명전 defence (B12b) and the army kept (B12c).
   const ok = (id: BranchId) => save.branches[id] === true;

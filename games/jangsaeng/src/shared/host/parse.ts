@@ -131,7 +131,7 @@ export function parseClientMsg(raw: unknown): ClientMsg | null {
         if (!parsed) return null;
         activities.push(parsed);
       }
-      const message: ClientMsg = { t: "years", prompt, activities, offer: bool(raw.offer) };
+      const message: ClientMsg = { t: "years", prompt, activities, offer: bool(raw.offer), grace: bool(raw.grace) };
       const wash = WASH_METHODS.find((method) => method === raw.wash);
       if (wash) message.wash = wash;
       const name = str(raw.name, 48);

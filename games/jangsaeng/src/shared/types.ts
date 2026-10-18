@@ -273,6 +273,13 @@ export interface YearsPlanView {
   graceYears?: number;
   /** The plan a plain confirm submits; the planner starts from it. */
   suggested: { activities: string[]; offer: boolean };
+  /**
+   * The name a wash takes unless the player writes another: the planner's name
+   * field starts with it, and the rules use it when the plan sends no valid
+   * name. The host always sets it (rules yearsPlan); it is optional only until
+   * the preview mock (tools/preview/ui-mock.ts) carries it.
+   */
+  suggestedName?: string;
 }
 
 export interface ResultView {

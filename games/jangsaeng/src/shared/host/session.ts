@@ -32,7 +32,6 @@ import {
   reviveVirtue,
   selfRevive,
   slotSkill,
-  suggestName,
   useItem,
   useLongevity,
   yearsPlan,
@@ -70,12 +69,6 @@ type Queued = (
 ) & { year?: number; step?: number; pending?: PendingStory };
 
 type Active = Queued & { view: PromptView };
-
-/**
- * The years plan as the client sends it. `grace` (노인성의 마지막 은혜, only when
- * the player turns it on) rides on the same message.
- */
-type YearsMessage = Extract<ClientMsg, { t: "years" }> & { grace?: boolean };
 
 /** The 사사 위기 card for the sentence `<chapter>:<year>` (save.pending id). */
 const escapeCardId = (sentence: string): string => `escape:${sentence}`;
@@ -208,8 +201,16 @@ export class Session {
    * played by this session's own 건너뛰기: it presses #demoSkip until the story
    * stands at the entry step and every card raised before it is answered — the
    * presses a presenter would make from the first step, so the save holds
-   * exactly what they would leave. Nothing is sent meanwhile; the presenter
-   * then sees the card the entry step opens with.
+   * exactly what they would leave. Nothing is sent to this session meanwhile;
+   * the presenter then sees the card the entry step opens with.
+   *
+   * #quiet silences only this session's own send. What those presses do in the
+   * shared channel still reaches everyone else in the same demo shard, all at
+   * once as the presenter joins: Channel.startBattle's epic toast and intro
+   * chat to every member, the companions' battle and victory reactions, and
+   * 공동 실록 progress from each won battle (Channel.addWorldEvent), whose
+   * completion runs every member's onWorldEventComplete and posts its system
+   * chat. Demo shards hold only demo saves, so no real run is touched.
    */
   #playDemoEntry(stepId: string): void {
     delete this.save.demoEntry;
@@ -320,7 +321,12 @@ export class Session {
 
   #chat(raw: string): void {
     const text = sanitizeChat(raw);
-    if (!text || !this.channel) return;
+    if (text) this.#say(text);
+  }
+
+  /** Every line this player puts in the channel chat (chat and emotes) spends the one chat budget. */
+  #say(text: string): void {
+    if (!this.channel) return;
     if (this.#chatBudget <= 0) {
       this.send({ t: "toast", text: "채팅이 너무 빠르다.", tone: "warn" });
       return;
@@ -686,20 +692,15 @@ export class Session {
         };
       case "years": {
         const next = this.content.chapters[item.next];
-        const plan = yearsPlan(this.content, this.save, item.next);
+        // The plan carries the era (its summary heads the planner) and the suggested name.
         return {
           id: item.id,
           kind: "years",
           title: "세월이 흐른다",
-          body: [
-            // The tokens stand for the whole era, as the planner heading (plan.summary) says.
-            `${plan.eraFrom}년부터 ${plan.eraTo}년까지 ${plan.eraTo - plan.eraFrom}년, 이 시대의 세월을 ${plan.tokens}마디로 보낸다.`,
-            `다음 시대: ${next.title} — ${next.subtitle}`,
-            `새 이름 제안: ${suggestName(this.save, item.next)}`,
-          ],
+          body: [`다음 시대: ${next.title} — ${next.subtitle}`],
           options: [{ id: "confirm", text: "세월을 보낸다" }],
           year: this.save.year,
-          data: plan,
+          data: yearsPlan(this.content, this.save, item.next),
         };
       }
       case "inquiry":
@@ -855,17 +856,19 @@ export class Session {
 
   /**
    * Runs the passage of years. The plan goes to the rules as sent: they own
-   * which activity runs for a missing, unknown or blocked token and whether a
-   * wash is allowed, and say so in the result lines.
+   * which activity runs for a missing, unknown or blocked token, whether a
+   * wash is allowed and which name it takes without a valid one (the plan's
+   * suggestedName), and say so in the result lines.
    */
-  #years(message: YearsMessage, fallback?: Active): void {
+  #years(message: Extract<ClientMsg, { t: "years" }>, fallback?: Active): void {
     const active = fallback ?? this.#active;
     if (!active || active.type !== "years" || active.view.id !== message.prompt) return;
     this.#active = null;
     const choice: YearsChoice = { activities: [...message.activities], offer: message.offer, grace: message.grace === true };
     if (message.wash) {
       choice.wash = message.wash;
-      choice.newName = (message.name ? sanitizeName(message.name) : null) ?? suggestName(this.save, active.next);
+      const name = message.name ? sanitizeName(message.name) : null;
+      if (name) choice.newName = name;
     }
     const lines = advanceYears(this.content, this.save, active.next, choice);
     this.#fxSelf("sfx", "years_pass");
@@ -903,7 +906,7 @@ export class Session {
         if (world?.playerStatus(this.id)?.downed !== null) world?.selfRevive(this.id);
         break;
       case "emote":
-        this.channel?.broadcastChat(this.save.name, `(${action.emote})`, "player");
+        this.#say(`(${action.emote})`);
         break;
       case "demoSkip":
         if (this.save.demo) this.#demoSkip();

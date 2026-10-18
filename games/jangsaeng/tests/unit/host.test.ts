@@ -3,10 +3,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { CONTENT, type ContentIndex } from "../../src/shared/content/index.ts";
-import { CHAPTER_IDS, type ChapterId, type PromptDef } from "../../src/shared/content/schema.ts";
+import { CHAPTER_IDS, type ChapterId, type PromptDef, type WashMethod } from "../../src/shared/content/schema.ts";
 import type { HostConnection, HostMode, ProfileStore } from "../../src/shared/host/api.ts";
 import { Channel } from "../../src/shared/host/channel.ts";
 import { createGameHost } from "../../src/shared/host/host.ts";
+import { parseClientMsg } from "../../src/shared/host/parse.ts";
 import { Session } from "../../src/shared/host/session.ts";
 import { generateMap, type GameMap } from "../../src/shared/map/generate.ts";
 import { PROTOCOL_VERSION, type ClientMsg, type ServerMsg } from "../../src/shared/protocol.ts";
@@ -743,7 +744,7 @@ test("onBattleEnd: battleResult owns first-victory rewards, and a held field's �
   assert.deepEqual(hand.session.save.battlesWon, once.battlesWon);
 });
 
-test("the years card: its body speaks of the era the planner splits, and the last grace waits for the player", () => {
+test("the years card: the plan heads the era and names the wash, the body only the next era, and the last grace waits for the player", () => {
   for (const grace of [false, true]) {
     const save = demoSave(CONTENT, "ch12", 5);
     save.lifeEnd = 1850;
@@ -756,7 +757,8 @@ test("the years card: its body speaks of the era the planner splits, and the las
     assert.ok(card && plan);
     assert.equal(plan.graceYears, 10, "CH13 starts in 1776: the grace is on offer");
     assert.equal(plan.summary, `${plan.eraFrom}~${plan.eraTo}년, 이 시대를 어떻게 보냈나 · ${plan.tokens}마디`);
-    assert.equal(card.body[0], `${plan.eraFrom}년부터 ${plan.eraTo}년까지 ${plan.eraTo - plan.eraFrom}년, 이 시대의 세월을 ${plan.tokens}마디로 보낸다.`);
+    assert.match(plan.suggestedName ?? "", /^[가-힣]{3,4}$/, "the wash's name comes as its own field");
+    assert.deepEqual(card.body, [`다음 시대: ${CONTENT.chapters.ch13.title} — ${CONTENT.chapters.ch13.subtitle}`], "the heading states the era; no name rides in the text");
     if (grace) {
       const message = { t: "years" as const, prompt: card.id, activities: plan.suggested.activities, offer: plan.suggested.offer, grace: true };
       hand.session.receive(message);
@@ -765,6 +767,56 @@ test("the years card: its body speaks of the era the planner splits, and the las
     assert.equal(hand.session.save.graceUsed, grace, grace ? "taken when asked for" : "never spent by the suggested plan");
     assert.equal(hand.session.save.points.virtue === 0, grace, "only the grace takes all 공덕");
   }
+});
+
+test("the years plan as a client sends it: the last grace and the suggested name reach the rules", () => {
+  const parsedGrace = (grace: unknown) => {
+    const message = parseClientMsg({ t: "years", prompt: "y", activities: [], offer: false, grace });
+    return message?.t === "years" ? message.grace : undefined;
+  };
+  assert.deepEqual([parsedGrace(true), parsedGrace("yes"), parsedGrace(undefined)], [true, false, false]);
+
+  const { connect, advance, store } = setup();
+  let client = connect();
+  hello(client, { demo: "ch12" });
+  advance(300);
+  client.connection?.close("set up");
+  const before = stored(store, client.token);
+  before.lifeEnd = 1850;
+  before.points.virtue = 350;
+  before.points.money = 5000;
+  client = reload(client, connect, advance);
+  assert.ok(playUntil(client, advance, () => client.prompt?.kind === "years", 600), "the years card opens");
+  const card = client.prompt;
+  const plan = card?.data?.type === "years" ? card.data : null;
+  assert.ok(card && plan);
+  assert.equal(plan.graceYears, 10, "the planner offers the grace");
+  const wash = plan.washes.find((candidate) => !candidate.disabled);
+  assert.ok(wash && plan.suggestedName, "a wash is open and the plan names it");
+  // The planner as shipped: the grace switch on, a wash with the name field left as it was.
+  client.prompt = null;
+  client.send({ t: "years", prompt: card.id, activities: plan.suggested.activities, offer: plan.suggested.offer, grace: true, wash: wash.id as WashMethod });
+  advance(300);
+  const after = stored(store, client.token);
+  assert.equal(after.chapter, "ch13");
+  assert.equal(after.graceUsed, true, "the grace the player turned on is taken");
+  assert.equal(after.name, plan.suggestedName, "the wash takes the name the planner showed");
+});
+
+test("emotes spend the chat budget like chat lines", () => {
+  const { connect, advance } = setup();
+  const client = connect();
+  hello(client);
+  advance(300);
+  const said = () => client.messages.filter((message) => message.t === "chat" && message.kind === "player" && message.from === "한결").length;
+  const emote = () => client.send({ t: "action", action: { kind: "emote", emote: "bow" } });
+  for (let burst = 0; burst < 4; burst++) emote();
+  client.send({ t: "chat", text: "안녕" });
+  assert.equal(said(), 3, "three lines in a burst, chat or emote");
+  assert.ok(client.toasts.includes("채팅이 너무 빠르다."), client.toasts.join(" / "));
+  advance(1600);
+  emote();
+  assert.equal(said(), 4, "the budget refills over time");
 });
 
 test("공덕 for reviving (+8, 10 per chapter) and for a completed 공동 실록 (+40, twice per chapter)", () => {
