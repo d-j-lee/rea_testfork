@@ -86,7 +86,8 @@ try {
     await t.page.click(".yr-offer");
     await t.page.click('[data-action="years-confirm"]');
     const y = t.sent.find((m) => m.t === "years");
-    check("years: plan sent", !!y && y.activities.length === 3 && y.wash === "descendant" && y.name === "윤현" && y.offer === true, JSON.stringify(y));
+    // The planner starts from the suggested plan (offering on), so the click turns it off.
+    check("years: plan sent", !!y && y.activities.length === 2 && y.wash === "descendant" && y.name === "윤현" && y.offer === false, JSON.stringify(y));
     await t.close();
   }
   {

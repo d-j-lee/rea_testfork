@@ -209,8 +209,12 @@ export const YEARS_PROMPT: PromptView = {
   data: {
     type: "years",
     fromYear: 1418,
-    toYear: 1448,
-    tokens: 3,
+    toYear: 1419,
+    eraFrom: 1393,
+    eraTo: 1419,
+    tokens: 2,
+    spans: [{ from: 1393, to: 1406 }, { from: 1406, to: 1419 }],
+    summary: "1393~1419년, 이 시대를 어떻게 보냈나 · 2마디",
     activities: [
       { id: "study", name: "학문", desc: "성균관 근처에서 글을 읽는다.", effect: "지략 +1 · 명망 +1" },
       { id: "train", name: "수련", desc: "산사에서 무예를 닦는다.", effect: "완력 +1 · 근골 +1" },
@@ -229,6 +233,7 @@ export const YEARS_PROMPT: PromptView = {
     lifeEnd: 1861,
     virtue: 140,
     canOffer: 3,
+    suggested: { activities: ["study", "study"], offer: true },
   },
 };
 
@@ -269,9 +274,9 @@ export const ENDING: EndingView = {
     { id: "B9", label: "만민공동회·의회 (1898)", ok: true },
     { id: "B10", label: "재정 일원화·상비군 (1899~1904)", ok: false },
     { id: "B11", label: "중립 실효 (1904)", ok: false },
-    { id: "B12a", label: "열강 사전 외교 (1905)", ok: null },
+    { id: "B12a", label: "열강 사전 외교 (1905)", ok: false },
     { id: "B12b", label: "중명전 수호 (1905)", ok: false },
-    { id: "B12c", label: "군대 해산 저지 (1907)", ok: null },
+    { id: "B12c", label: "군대 해산 저지 (1907)", ok: false },
   ],
   identities: [
     { name: "강무진", kind: "birth", from: 1361, to: 1387 },
