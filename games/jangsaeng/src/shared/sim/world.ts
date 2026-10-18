@@ -12,12 +12,24 @@ import { createRng } from "../rng.ts";
 import type { BodyVariant, CharacterSprite } from "../sprites.ts";
 import type { BattleView, EntitySnap, FxEvent, Marker } from "../types.ts";
 import { tickEnemy } from "./ai.ts";
-import { arenaOf, battleView, endBattle, leaveBattle, rimRevival, startBattle, tickBattle } from "./battle.ts";
+import {
+  arenaOf,
+  arrival,
+  atBattle,
+  battleView,
+  endBattle,
+  leaveBattle,
+  rimRevival,
+  startBattle,
+  startRefusal,
+  tickBattle,
+  type StartRefusal,
+} from "./battle.ts";
 import { downPlayer, kill, revivePlayer, tickBurn } from "./combat.ts";
-import { bodyFree, freePoint, releaseTokensOn, removeActor, spawnEnemy } from "./entities.ts";
+import { bodyFree, freePoint, placePlayer, releaseTokensOn, removeActor, spawnEnemy } from "./entities.ts";
 import { tickFighter } from "./fighters.ts";
 import { isBlocked, type CollisionGrid } from "./physics.ts";
-import { applyInput, createPlayer, placePlayer, tickPlayer } from "./player.ts";
+import { applyInput, createPlayer, tickPlayer } from "./player.ts";
 import { makeSpawns, refreshPopulation, safeSpot, siteCentre, tickNpc, tickProps, tickSpawns } from "./population.ts";
 import { stepDelayedFx, stepHazards, stepProjectiles, stepStrikes } from "./projectiles.ts";
 import { snapshotFor } from "./snapshot.ts";
@@ -72,7 +84,14 @@ export interface PlayerSpec {
 export interface WorldHooks {
   /** An enemy died; `killers` are player ids credited (last hitter first). */
   onKill(enemy: EnemyDef, level: number, boss: boolean, killers: readonly number[]): void;
+  /** A battle ended; `participants`: everyone who fought it (sim/battle.ts muster), each to be resolved. */
   onBattleEnd(battleId: string, result: "victory" | "defeat", participants: readonly number[]): void;
+  /**
+   * Query, answered inline: whether a player at a chapter battle (not its
+   * starter) still has it to fight and so is taken in — the host's call,
+   * e.g. companions always, a person while it is an open objective of theirs.
+   */
+  fights(playerId: number, battleId: string): boolean;
   /** Player pressed interact near an NPC. */
   onTalk(playerId: number, npcId: string): void;
   onPickup(playerId: number, item: string): void;
@@ -325,11 +344,26 @@ export class World {
     sound(sim, "heal", a.x, a.y);
   }
 
-  /** Starts a battle from the chapter's battles if none is active. */
+  /** Starts a chapter battle for `starterId` unless it is refused (battleRefusal). */
   startBattle(battleId: string, starterId: number): boolean {
     const started = startBattle(this.#sim, battleId, starterId) !== null;
     flushEvents(this.#sim);
     return started;
+  }
+
+  /** Why `starterId` cannot start `battleId` now (unknown, downed, busy), or null when startBattle would start it. */
+  battleRefusal(battleId: string, starterId: number): StartRefusal | null {
+    return startRefusal(this.#sim, battleId, starterId);
+  }
+
+  /** True when a player is at a battle: close enough to its ring to start it, or to be taken into it while it runs. */
+  atBattle(battleId: string, playerId: number): boolean {
+    return atBattle(this.#sim, battleId, playerId);
+  }
+
+  /** Where a player carried to a battle (story start, demo skip) lands: its own ground on their side. */
+  arrivalSpot(battleId: string, playerId: number): { x: number; y: number } | null {
+    return arrival(this.#sim, battleId, playerId);
   }
 
   /** Ends any active battle without result (chapter change, demo skip). */
@@ -345,7 +379,8 @@ export class World {
   /**
    * Where a chapter battle is fought (centre and radius): the running
    * battle's arena, or the arena it would be fought on now. The one place
-   * hosts read a battle's position from (trigger, marker, story teleport).
+   * hosts read a battle's position from (the objective marker); atBattle and
+   * arrivalSpot answer from it too.
    */
   arenaOf(battleId: string): { x: number; y: number; radius: number } | null {
     const arena = arenaOf(this.#sim, battleId);
@@ -362,7 +397,7 @@ export class World {
     return battleView(this.#sim);
   }
 
-  /** Player ids (humans and companions) taking part in the active battle. */
+  /** Player ids (humans and companions) who fight the active battle: counted, and resolved when it ends. */
   battleParticipants(): number[] {
     return [...(this.#sim.battle?.participants ?? [])];
   }

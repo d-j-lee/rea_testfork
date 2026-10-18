@@ -73,12 +73,10 @@ type Active = Queued & { view: PromptView };
 /** The 사사 위기 card for the sentence `<chapter>:<year>` (save.pending id). */
 const escapeCardId = (sentence: string): string => `escape:${sentence}`;
 
-/** Demo skip moves the presenter only when the next objective is farther than this (tiles). */
+/** Demo skip moves the presenter to an NPC or place only when it is farther than this (tiles). */
 const DEMO_NEAR = 8;
 /** Most 건너뛰기 presses a demo entry may take to reach its step (guards malformed content). */
 const DEMO_ENTRY_PRESSES = 2000;
-/** A battle objective starts when its player comes this close to the arena's rim (tiles). */
-const BATTLE_TRIGGER = 6;
 
 const IDLE_INPUT: PlayerInput = {
   mx: 0,
@@ -550,7 +548,10 @@ export class Session {
     for (const line of outcome.lines)
       if (line.tone === "epic") this.send({ t: "toast", text: line.text, tone: "epic" });
     if (won) {
-      if (!battle.great) this.send({ t: "toast", text: `${battle.title} 승리`, tone: "good" });
+      if (!battle.great) {
+        const text = battle.victoryLabel ? `${battle.title} — ${battle.victoryLabel}` : `${battle.title} 승리`;
+        this.send({ t: "toast", text, tone: "good" });
+      }
       for (const objective of this.#visibleObjectives())
         if (objective.kind === "battle" && objective.target === battle.id) this.#completeObjective(objective.id);
     } else this.send({ t: "toast", text: `${battle.title} — 물러났다. 다시 도전할 수 있다.`, tone: "bad" });
@@ -943,9 +944,11 @@ export class Session {
    * first option (the years card with the suggested plan), wins a battle this
    * player is in, or completes the next objective — and then carries the
    * presenter (and the companions) to the objective after it. A battle
-   * objective is never won before it is fought in view: a press far away
-   * moves the presenter to its ring, a press at the ring starts it, and the
-   * next press wins it.
+   * objective is never won before it is fought in view: a press away from it
+   * carries the presenter onto its ground (World.arrivalSpot), a press at it
+   * (World.atBattle) starts it, and the next press wins it. A presenter lying
+   * down rises first (자력 소생, as they would); a battle the world cannot
+   * start because another holds it is won outright, without the refusal toast.
    */
   #demoSkip(): void {
     const active = this.#active;
@@ -967,10 +970,14 @@ export class Session {
     const objective = this.#nextObjective();
     if (!objective) return;
     if (objective.kind === "battle" && objective.target) {
-      // Far off: go to the ring. At the ring: start the fight in view; the
-      // next press wins it. Another battle holding the world: win outright.
       const def = this.chapter.battles.find((candidate) => candidate.id === objective.target);
-      if (!def || this.#moveToObjective(objective) || channel.startBattle(def.id, this, true)) return;
+      if (!def) return;
+      const refusal = world.battleRefusal(def.id, this.id);
+      if (refusal === "downed") {
+        world.selfRevive(this.id);
+        return;
+      }
+      if (this.#moveToObjective(objective) || (refusal === null && channel.startBattle(def.id, this, true))) return;
       channel.skipBattle(this, def);
     } else if (objective.kind === "talk" && objective.target) this.onTalk(objective.target);
     else this.#completeObjective(objective.id);
@@ -994,9 +1001,10 @@ export class Session {
   }
 
   /**
-   * Teleports the player (and the companions) to where `objective` is played —
-   * beside its NPC or place, or at the edge of its battle ring — when that is
-   * more than DEMO_NEAR tiles away. Returns whether it moved.
+   * Teleports the player (and the companions) to where `objective` is played:
+   * beside its NPC or place when that is more than DEMO_NEAR tiles away, or
+   * onto a battle's own ground (World.arrivalSpot) when they are not at it
+   * (World.atBattle, the trigger's reach). Returns whether it moved.
    */
   #moveToObjective(objective: ObjectiveDef): boolean {
     const channel = this.channel;
@@ -1005,13 +1013,12 @@ export class Session {
     if (!channel || !world || !status || status.downed !== null) return false;
     let spot: { x: number; y: number } | null = null;
     if (objective.kind === "battle") {
-      const ring = objective.target ? world.arenaOf(objective.target) : null;
-      if (ring) spot = { x: ring.x, y: ring.y + ring.radius + 2 };
+      if (objective.target && !world.atBattle(objective.target, this.id)) spot = world.arrivalSpot(objective.target, this.id);
     } else {
       const place = this.#objectivePlace(objective).place;
-      if (place) spot = { x: place.x, y: place.y + 1.5 };
+      if (place && Math.hypot(place.x - status.x, place.y + 1.5 - status.y) > DEMO_NEAR) spot = { x: place.x, y: place.y + 1.5 };
     }
-    if (!spot || Math.hypot(spot.x - status.x, spot.y - status.y) <= DEMO_NEAR) return false;
+    if (!spot) return false;
     world.teleport(this.id, spot.x, spot.y);
     channel.catchUpCompanions(spot.x, spot.y);
     return true;
@@ -1139,6 +1146,16 @@ export class Session {
     if (this.#saveTimer >= 30) this.persist();
   }
 
+  /**
+   * Whether `battleId` is still this player's to fight: an open battle
+   * objective of their step. Standing at such a battle starts it
+   * (#checkPlaces); standing at it while it runs takes them in
+   * (WorldHooks.fights), so a winner is never pulled into its replay.
+   */
+  needsBattle(battleId: string): boolean {
+    return !this.#settled() && this.#openObjective("battle", battleId) !== undefined;
+  }
+
   #checkPlaces(): void {
     const channel = this.channel;
     const world = channel?.world;
@@ -1151,10 +1168,9 @@ export class Session {
         const site = world.sitePosition(objective.target);
         const near = site ? Math.hypot(site.x - status.x, site.y - status.y) <= 4 : false;
         if (here === objective.target || near) this.#completeObjective(objective.id);
-      } else if (objective.kind === "battle" && !world.battleView() && status.downed === null) {
-        const ring = world.arenaOf(objective.target);
-        if (ring && Math.hypot(ring.x - status.x, ring.y - status.y) <= ring.radius + BATTLE_TRIGGER)
-          channel.startBattle(objective.target, this, false);
+      } else if (objective.kind === "battle" && world.atBattle(objective.target, this.id)) {
+        // The world refuses a start while another battle runs or this player is down.
+        channel.startBattle(objective.target, this, false);
       }
     }
   }

@@ -155,6 +155,7 @@ export const ch10: ChapterDef = {
       timeLimit: 60,
       music: "naval",
       weather: "smoke",
+      hour: 4,
       intro: [
         "새벽, 조선 함대가 칠천량에서 에워싸였다.",
         "이길 수 없는 밤이다. 배설의 배가 빠져나가는 물길까지 버텨라.",
@@ -239,6 +240,7 @@ export const ch10: ChapterDef = {
       kind: "deck",
       music: "naval",
       weather: "fog",
+      hour: 5,
       intro: [
         "자정을 넘긴 바다. 시마즈의 함대가 노량 물목으로 들어왔다.",
         "기함 곁을 지켜라. 날이 밝기 전에 싸움은 끝난다.",

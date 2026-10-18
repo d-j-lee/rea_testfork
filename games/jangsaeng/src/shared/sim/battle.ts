@@ -1,15 +1,15 @@
-// Battles: participants, waves (side/sea/deck spawns), boss, defend target,
-// allies, headcount scaling, morale/rout and the victory/defeat rules, fought
-// on the arena that sim/arena.ts resolves (arenaOf is the one owner of where).
+// Battles: who fights them, waves (side/sea/deck spawns), boss, defend
+// target, allies, headcount scaling, morale/rout and the victory/defeat
+// rules, fought on the arena that sim/arena.ts resolves. arenaOf is the one
+// owner of where a battle is, fights/muster of who fights it.
 import type { BattleDef, WaveDef } from "../content/schema.ts";
 import { TILE_INFO, type TileId } from "../map/tiles.ts";
 import { isPropSprite } from "../sprites.ts";
 import type { BattleView } from "../types.ts";
-import { arenaSpot, battleArena, boardingSpot, bossSpot, deckSpot, inRing, onArena, onArenaTile, onDeck, rimSpot, type Arena } from "./arena.ts";
+import { arenaSpot, arrivalSpot, battleArena, boardingSpot, bossSpot, deckSpot, inRing, onArena, onArenaTile, onDeck, rimSpot, type Arena } from "./arena.ts";
 import { makeBossState } from "./boss.ts";
-import { atkScale, bodyFree, makeActor, releaseToken, spawnEnemy, spawnFighter } from "./entities.ts";
+import { atkScale, bodyFree, makeActor, placePlayer, releaseToken, spawnEnemy, spawnFighter } from "./entities.ts";
 import type { CollisionGrid } from "./physics.ts";
-import { placePlayer } from "./player.ts";
 import { COLOR, emit, floatText, isDowned, later, sound, type Actor, type Sim } from "./state.ts";
 
 export interface WaveRuntime {
@@ -24,6 +24,10 @@ export interface BattleRuntime {
   arena: Arena;
   startedAt: number;
   starter: number;
+  /**
+   * Who fights the battle (see muster): counted for its scaling, held on its
+   * ground once they step on it, and resolved when it ends.
+   */
   participants: number[];
   /** Players who left the battle (a demo skip won it for them alone); they do not rejoin it. */
   left: Set<number>;
@@ -43,8 +47,12 @@ export interface BattleRuntime {
 }
 
 const SIDE_ANGLE = { north: -Math.PI / 2, south: Math.PI / 2, east: 0, west: Math.PI } as const;
-/** Players this far beyond the ring still count toward a wave's scaling: they are arriving. */
-const ARRIVING = 6;
+/**
+ * A player this close to a battle's ring (tiles beyond its radius) is at the
+ * battle: a battle they still have to fight starts for them there (the host's
+ * trigger, atBattle), and a running one takes them in (muster).
+ */
+const BATTLE_REACH = 6;
 
 /** Humans count 1, companion bots 0.5. */
 function headcount(sim: Sim, ids: readonly number[]): number {
@@ -58,26 +66,49 @@ function headcount(sim: Sim, ids: readonly number[]): number {
 
 const scaleOf = (n: number, per: number): number => Math.min(3, 1 + per * (n - 1));
 
-/** Participants plus players arriving at the ring: who a wave will meet. */
-function fightersAt(sim: Sim, b: BattleRuntime): number[] {
-  const ids = [...b.participants];
+/**
+ * Whether player `id` fights battle `b`: nobody who left it; its starter;
+ * nobody else in a duel; otherwise whoever the host says still has it to
+ * fight (WorldHooks.fights: companions, and people whose open objective it
+ * is), so a replay never drags in someone who already won it.
+ */
+function fights(sim: Sim, b: BattleRuntime, id: number): boolean {
+  if (b.left.has(id)) return false;
+  if (id === b.starter) return true;
+  return b.def.kind !== "duel" && sim.hooks.fights(id, b.def.id);
+}
+
+/**
+ * Keeps who fights the battle: every player at it (within BATTLE_REACH of
+ * its ring) who fights it. Someone who walks off before setting foot on its
+ * ground, or is gone from the world, is let go; those on the ground are held
+ * there (clampArena), so they stay.
+ */
+function muster(sim: Sim, b: BattleRuntime): void {
   const { x, y, radius } = b.arena;
+  const at = (a: Actor) => Math.hypot(a.x - x, a.y - y) <= radius + BATTLE_REACH;
+  b.participants = b.participants.filter((id) => {
+    const a = sim.players.get(id);
+    return a !== undefined && at(a);
+  });
   for (const p of sim.players.values())
-    if (!ids.includes(p.id) && !b.left.has(p.id) && Math.hypot(p.x - x, p.y - y) <= radius + ARRIVING) ids.push(p.id);
-  return ids;
+    if (!b.participants.includes(p.id) && at(p) && fights(sim, b, p.id)) b.participants.push(p.id);
 }
 
 /**
  * A defend post's HP: the written HP for each attacker multiple it faces
- * (countScale). The attackers' extra HP (hpScale) only makes them live
- * longer, which the larger party offsets.
+ * (countScale), times √hpScale for their longer lives. The attackers' HP
+ * pool grows by countScale·hpScale while the party cutting through it grows
+ * by about its headcount n, so each attacker lives about countScale·hpScale/n
+ * times longer. √hpScale follows that within 8% up to n = 5 (one person and
+ * eight ◇: 3·3/5 = 1.8 against 1.73) and is monotone in n, as hpScale is.
  */
-const postHp = (b: BattleRuntime): number => Math.round((b.def.defend?.hp ?? 0) * b.countScale);
+const postHp = (b: BattleRuntime): number => Math.round((b.def.defend?.hp ?? 0) * b.countScale * Math.sqrt(b.hpScale));
 
 /** Re-reads the headcount scaling, and the post's HP with it; duels are always one against one. */
 function rescale(sim: Sim, b: BattleRuntime): void {
   if (b.def.kind === "duel") return;
-  const n = headcount(sim, fightersAt(sim, b));
+  const n = headcount(sim, b.participants);
   b.countScale = scaleOf(n, 0.5);
   b.hpScale = Math.max(b.hpScale, scaleOf(n, 0.65));
   const post = sim.actors.get(b.defendId);
@@ -95,7 +126,7 @@ const arenas = new WeakMap<CollisionGrid, Map<BattleDef, Arena | null>>();
  * Where a chapter battle is fought: the running battle's arena, else the one
  * sim/arena.ts resolves for it on the current year's map (cached). Every
  * reader of a battle's place goes through it: the start, the trigger, the
- * objective marker, the story teleport.
+ * objective marker, the story and demo carries (arrival).
  */
 export function arenaOf(sim: Sim, battleId: string): Arena | null {
   if (sim.battle?.def.id === battleId) return sim.battle.arena;
@@ -106,6 +137,35 @@ export function arenaOf(sim: Sim, battleId: string): Arena | null {
   if (!byDef) arenas.set(sim.grid, (byDef = new Map()));
   if (!byDef.has(def)) byDef.set(def, battleArena(sim.grid, site, def));
   return byDef.get(def) ?? null;
+}
+
+/** True when player `id` is at battle `battleId`: within BATTLE_REACH of its ring. */
+export function atBattle(sim: Sim, battleId: string, id: number): boolean {
+  const arena = arenaOf(sim, battleId);
+  const a = sim.players.get(id);
+  return arena !== null && a !== undefined && Math.hypot(a.x - arena.x, a.y - arena.y) <= arena.radius + BATTLE_REACH;
+}
+
+/** Where player `id`, brought to battle `battleId` from where they stand, lands: its ground on their side (arena.ts arrivalSpot). */
+export function arrival(sim: Sim, battleId: string, id: number): { x: number; y: number } | null {
+  const arena = arenaOf(sim, battleId);
+  const a = sim.players.get(id);
+  return arena && a ? arrivalSpot(arena, a.x, a.y) : null;
+}
+
+/**
+ * Why a battle cannot start for `starterId` now: there is no such battle,
+ * ground or starter ("unknown"), the starter is down ("downed": nobody is
+ * carried into a battle lying down), or another battle holds the world
+ * ("busy"). Null when it can; startBattle starts only then.
+ */
+export type StartRefusal = "unknown" | "downed" | "busy";
+
+export function startRefusal(sim: Sim, battleId: string, starterId: number): StartRefusal | null {
+  const starter = sim.players.get(starterId);
+  if (!arenaOf(sim, battleId) || !starter) return "unknown";
+  if (isDowned(starter)) return "downed";
+  return sim.battle ? "busy" : null;
 }
 
 /**
@@ -126,23 +186,18 @@ function enter(sim: Sim, b: BattleRuntime, a: Actor): void {
   placePlayer(sim, a, p.x, p.y);
 }
 
+/** Starts a chapter battle for its starter and everyone at it who fights it; null when refused (startRefusal). */
 export function startBattle(sim: Sim, battleId: string, starterId: number): BattleRuntime | null {
-  if (sim.battle) return null;
   const def = sim.chapter.battles.find((b) => b.id === battleId);
   const arena = arenaOf(sim, battleId);
-  if (!def || !arena) return null;
+  if (!def || !arena || startRefusal(sim, battleId, starterId) !== null) return null;
   const duel = def.kind === "duel";
-  const participants: number[] = [];
-  if (sim.players.has(starterId)) participants.push(starterId);
-  if (!duel)
-    for (const p of sim.players.values())
-      if (p.id !== starterId && Math.hypot(p.x - arena.x, p.y - arena.y) <= arena.radius + 2) participants.push(p.id);
   const b: BattleRuntime = {
     def,
     arena,
     startedAt: sim.time,
     starter: starterId,
-    participants,
+    participants: [starterId],
     left: new Set(),
     waves: duel ? [] : def.waves.map((w) => ({ def: w, spawned: false, ids: [], moraleHit: false })),
     enemies: [],
@@ -158,9 +213,13 @@ export function startBattle(sim: Sim, battleId: string, starterId: number): Batt
     seaAngle: undefined,
   };
   sim.battle = b;
-  for (const id of participants) {
-    const a = sim.actors.get(id);
-    if (a) enter(sim, b, a);
+  // The starter steps onto the ground wherever they stand; then everyone at the battle who fights it joins.
+  const starter = sim.players.get(starterId);
+  if (starter) enter(sim, b, starter);
+  muster(sim, b);
+  for (const id of b.participants) {
+    const a = sim.players.get(id);
+    if (a && id !== starterId) enter(sim, b, a);
   }
   rescale(sim, b);
   const level = battleLevel(sim, def);
@@ -334,9 +393,7 @@ export function tickBattle(sim: Sim): void {
   if (!b) return;
   const t = sim.time;
   const elapsed = t - b.startedAt;
-  if (b.def.kind !== "duel")
-    for (const p of sim.players.values())
-      if (!b.participants.includes(p.id) && !b.left.has(p.id) && onArena(b.arena, p.x, p.y)) b.participants.push(p.id);
+  muster(sim, b);
   if (!b.routed && !b.bossDead)
     for (let i = 0; i < b.waves.length; i++) {
       const w = b.waves[i] as WaveRuntime;
@@ -415,8 +472,8 @@ export function rimRevival(sim: Sim, a: Actor): { x: number; y: number } | null 
 
 /**
  * Takes a player out of the active battle: they are no participant any more
- * and do not rejoin by standing on its ground. A demo skip that wins the
- * battle for one player while others fight on uses it.
+ * and do not rejoin by standing at it. A demo skip that wins the battle for
+ * one player while others fight on uses it.
  */
 export function leaveBattle(sim: Sim, id: number): void {
   const b = sim.battle;
@@ -449,7 +506,8 @@ export function endBattle(sim: Sim, result: "victory" | "defeat" | null): void {
     if (npc?.fi) npc.fi.active = false;
   }
   if (!result) return;
-  floatText(sim, b.arena.x, b.arena.y, result === "victory" ? "승리" : "패배", result === "victory" ? COLOR.crit : COLOR.hurt, true);
+  const won = result === "victory";
+  floatText(sim, b.arena.x, b.arena.y, won ? (b.def.victoryLabel ?? "승리") : "패배", won ? COLOR.crit : COLOR.hurt, true);
   const participants = [...b.participants];
   const id = b.def.id;
   later(sim, () => sim.hooks.onBattleEnd(id, result, participants));
@@ -462,6 +520,7 @@ export function battleView(sim: Sim): BattleView | null {
   const { x, y, radius } = b.arena;
   const view: BattleView = { id: def.id, title: def.title, kind: def.kind, x, y, radius, participants: b.participants.length, morale: b.morale };
   if (def.subtitle) view.subtitle = def.subtitle;
+  if (def.music) view.music = def.music;
   if (def.weather) view.weather = def.weather;
   if (def.hour !== undefined) view.hour = def.hour;
   if (def.timeLimit !== undefined && (def.kind === "survive" || def.kind === "escape" || def.kind === "defend"))

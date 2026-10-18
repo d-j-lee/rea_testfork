@@ -101,32 +101,6 @@ export function applyInput(a: Actor, input: PlayerInput): void {
   p.input = input;
 }
 
-/**
- * Moves a player to (x, y) with every in-flight action cancelled (roll, dash,
- * cast, draw, knockback): the one way a player is put somewhere — teleports,
- * entering a battle's arena, reviving at a station or the arena rim.
- */
-export function placePlayer(sim: Sim, a: Actor, x: number, y: number): void {
-  a.x = x;
-  a.y = y;
-  a.kx = 0;
-  a.ky = 0;
-  const p = a.pl;
-  if (p) {
-    p.cast = null;
-    p.drawStart = -1;
-    p.swingEnd = Math.min(p.swingEnd, sim.time);
-    p.swingHit = true;
-    p.rollEnd = 0;
-    p.tapAttack = false;
-    p.tapShot = false;
-    p.pendingDodge = false;
-    p.pendingSkill = 0;
-    p.pendingInteract = false;
-  }
-  sim.index.update(a);
-}
-
 function readAim(input: PlayerInput): Aim | null {
   const ax = input.ax;
   const ay = input.ay;

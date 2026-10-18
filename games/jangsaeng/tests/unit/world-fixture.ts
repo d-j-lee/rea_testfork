@@ -104,13 +104,19 @@ export interface HookLog {
   downed: number[];
   revived: { player: number; by: number | null }[];
   longevity: number[];
+  /** `player:battle` for every victory resolved: the `fights` query answers from it as a host does. */
+  won: Set<string>;
 }
 
 export function recorder(marker?: (player: number, npc: string) => Marker | undefined): { log: HookLog; hooks: WorldHooks } {
-  const log: HookLog = { kills: [], battles: [], talks: [], pickups: [], downed: [], revived: [], longevity: [] };
+  const log: HookLog = { kills: [], battles: [], talks: [], pickups: [], downed: [], revived: [], longevity: [], won: new Set() };
   const hooks: WorldHooks = {
     onKill: (enemy, level, boss, killers) => void log.kills.push({ enemy, level, boss, killers }),
-    onBattleEnd: (id, result, participants) => void log.battles.push({ id, result, participants }),
+    onBattleEnd: (id, result, participants) => {
+      log.battles.push({ id, result, participants });
+      if (result === "victory") for (const player of participants) log.won.add(`${player}:${id}`);
+    },
+    fights: (player, battle) => !log.won.has(`${player}:${battle}`),
     onTalk: (player, npc) => void log.talks.push({ player, npc }),
     onPickup: (player, item) => void log.pickups.push({ player, item }),
     onDowned: (player) => void log.downed.push(player),

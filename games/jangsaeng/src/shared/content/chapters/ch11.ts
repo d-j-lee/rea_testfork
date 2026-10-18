@@ -203,7 +203,7 @@ export const ch11: ChapterDef = {
       great: true,
       music: "siege",
       weather: "snow",
-      defend: { name: "성첩의 화톳불", sprite: "campfire", hp: 700 },
+      defend: { name: "성첩의 화톳불", sprite: "campfire", hp: 1000 },
       intro: [
         "눈이 무릎까지 쌓였다. 성첩의 군사들이 언 손을 화톳불에 녹인다.",
         "불이 꺼지면 사람이 얼어 죽는다. 화톳불을 지켜라.",
@@ -212,8 +212,8 @@ export const ch11: ChapterDef = {
       waves: [
         { at: 0, from: "north", enemies: [{ enemy: "qing_rider", count: 4, level: 33 }], line: "북문 쪽 — 기병이 눈보라를 뚫고 온다!" },
         { at: 30, from: "east", enemies: [{ enemy: "qing_archer", count: 4, level: 33 }, { enemy: "qing_rider", count: 2, level: 33 }], line: "화살이 화톳불을 노린다! 방패를 세워라." },
-        { at: 65, from: "south", enemies: [{ enemy: "qing_armored", count: 3, level: 34 }], line: "철갑병이다. 느리지만 쓰러지지 않는다 — 다리를 노려라." },
-        { at: 100, from: "around", enemies: [{ enemy: "qing_rider", count: 4, level: 34 }, { enemy: "qing_archer", count: 3, level: 34 }], line: "사방에서 온다. 불을 지켜라!" },
+        { at: 65, from: "south", enemies: [{ enemy: "qing_armored", count: 2, level: 34 }], line: "철갑병이다. 느리지만 쓰러지지 않는다 — 다리를 노려라." },
+        { at: 100, from: "around", enemies: [{ enemy: "qing_rider", count: 3, level: 34 }, { enemy: "qing_archer", count: 2, level: 34 }], line: "사방에서 온다. 불을 지켜라!" },
         { at: 120, from: "north", enemies: [{ enemy: "qing_rider", count: 2, level: 34 }], line: "기병대장이 직접 돌진한다 — 붉은 선을 피하라!" },
       ],
       boss: {
@@ -229,7 +229,7 @@ export const ch11: ChapterDef = {
         ],
       },
       allies: [
-        { sprite: "soldier_joseon", name: "수어청 군사", count: 6 },
+        { sprite: "soldier_joseon", name: "수어청 군사", count: 8 },
         { sprite: "archer_joseon", name: "성첩 사수", count: 3 },
         { sprite: "monk_soldier", name: "승군", count: 2 },
       ],

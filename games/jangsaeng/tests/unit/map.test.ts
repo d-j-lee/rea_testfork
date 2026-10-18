@@ -94,17 +94,21 @@ test("island provinces stay on their islands", () => {
   assert.deepEqual(strays, []);
 });
 
-test("sea battlefields are fleets of deck moored to the peninsula", () => {
+test("sea battlefields are whole fleets of deck on open water, moored to the peninsula", () => {
   const blocked = collisionFor(map, 1598);
   const hanyang = map.sites.find((site) => site.id === "hanyang");
   assert.ok(hanyang);
   for (const id of ["hansan_sea", "noryang_sea", "myeongnyang"]) {
     const site = map.sites.find((candidate) => candidate.id === id);
     assert.ok(site, id);
+    // The fleet fills its footprint's rows (four rows of seven or more), even off a strait's shore.
     let decks = 0;
-    for (let y = site.y - 4; y <= site.y + 4; y++)
-      for (let x = site.x - 4; x <= site.x + 4; x++) if (tileAt(x, y) === Tile.Deck) decks++;
-    assert.ok(decks >= 12, `${id}: ${decks} deck tiles`);
+    for (let y = site.rect.y; y < site.rect.y + site.rect.h; y++)
+      for (let x = site.rect.x; x < site.rect.x + site.rect.w; x++) if (tileAt(x, y) === Tile.Deck) decks++;
+    assert.ok(decks >= 4 * site.rect.w - 2, `${id}: ${decks} deck tiles in a ${site.rect.w}-wide fleet`);
+    // 명량, the great sea battle, is fought on a fleet of 9 × 4 (a road ends on its deck).
+    if (id === "myeongnyang") assert.ok(decks >= 32, `${id}: ${decks} deck tiles`);
+    assert.equal(tileAt(site.x, site.y) === Tile.Deck || tileAt(site.x, site.y) === Tile.Road, true, `${id} stands on its fleet`);
     const path = findPath(map.width, map.height, hanyang, site, (x, y) => (blocked[y * map.width + x] ? Infinity : 1));
     assert.ok(path.length > 0, `${id} is reached on foot`);
   }

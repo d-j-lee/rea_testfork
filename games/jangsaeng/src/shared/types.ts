@@ -347,8 +347,15 @@ export interface BattleView {
   boss?: { name: string; hp: number; title?: string; historical: boolean };
   defend?: { name: string; hp: number };
   morale?: number;
+  /** How many fight it: everyone at its ring who still has it to fight (sim/battle.ts muster). */
   participants: number;
-  /** The battle's own sky over its arena, when it differs from the chapter's. */
+  /** The battle's music (BattleDef.music), when it sets one; the client plays it in place of the chapter's. */
+  music?: MusicMood;
+  /**
+   * The battle's own weather and hour (BattleDef.weather/hour), each sent
+   * whenever the battle sets it, even if the chapter's is the same; the
+   * client shows them over the arena in place of the chapter's.
+   */
   weather?: Weather;
   hour?: number;
 }

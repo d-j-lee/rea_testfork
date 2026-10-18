@@ -45,16 +45,13 @@ const NEIGHBOURS = [[1, 0], [-1, 0], [0, 1], [0, -1]] as const;
 
 type Ring = Omit<Arena, "inSight" | "hull">;
 
-/** True when the ring is battle ground (see ARENA_* and, for deck battles, DECK_*). */
-function fits(ring: Ring): boolean {
+/** True when a ring (or a resolved arena) is battle ground (see ARENA_* and, for deck battles, DECK_*). */
+export function arenaFits(ring: Ring): boolean {
   const n = ring.tiles.size;
   if (n < ARENA_COVERAGE * ring.walkable) return false;
   if (ring.naval) return ring.deck.size >= DECK_MIN && ring.deck.size >= DECK_SHARE * n;
   return n >= ARENA_ROOM * Math.PI * ring.radius * ring.radius;
 }
-
-/** True when the arena is its battle's ground (see ARENA_* and DECK_*). */
-export const arenaFits = (arena: Arena): boolean => fits(arena);
 
 /** True when tile (x, y) lies in a walkable 2×2 block: room to pass, not a one-tile gap in a wall. */
 function clear(grid: CollisionGrid, x: number, y: number): boolean {
@@ -122,12 +119,12 @@ function resolveArena(grid: CollisionGrid, x: number, y: number, radius: number,
       candidates.push({ tx, ty, d, deck: isDeck(grid, ty * grid.width + tx) });
     }
   candidates.sort((m, n) => m.d - n.d || m.ty - n.ty || m.tx - n.tx);
-  const onDeck = naval ? candidates.filter((c) => c.deck) : [];
+  const deckCandidates = naval ? candidates.filter((c) => c.deck) : [];
   const share = (ring: Ring) => ring.deck.size / Math.max(1, ring.tiles.size);
   let best: Ring | null = null;
-  for (const c of onDeck.length > 0 ? onDeck : candidates) {
+  for (const c of deckCandidates.length > 0 ? deckCandidates : candidates) {
     const ring = ringAt(grid, c.tx + 0.5, c.ty + 0.5, radius, naval);
-    if (fits(ring)) return finish(grid, ring);
+    if (arenaFits(ring)) return finish(grid, ring);
     if (!best || (naval ? share(ring) > share(best) : ring.tiles.size > best.tiles.size)) best = ring;
   }
   return best && finish(grid, best);
@@ -202,6 +199,23 @@ export function deckSpot(arena: Arena, x: number, y: number): Point {
 }
 
 type Point = { x: number; y: number };
+
+/** How far in from the centre a player brought to the arena stands (tiles, at most half the radius). */
+const ARRIVAL_DEPTH = 3;
+
+/**
+ * Where a player brought to the arena from (x, y) stands: the arena tile
+ * nearest the point ARRIVAL_DEPTH tiles in from the centre on their side (on
+ * a deck in a deck battle). It is the arena's own ground, so whoever lands
+ * there is at the battle, and those brought along stand inside the ring.
+ */
+export function arrivalSpot(arena: Arena, x: number, y: number): Point {
+  const d = Math.hypot(x - arena.x, y - arena.y);
+  const k = d > 0 ? Math.min(ARRIVAL_DEPTH, arena.radius / 2, d) / d : 0;
+  const tx = arena.x + (x - arena.x) * k;
+  const ty = arena.y + (y - arena.y) * k;
+  return arena.naval ? deckSpot(arena, tx, ty) : arenaSpot(arena, tx, ty);
+}
 
 /** Score penalty for a spawn tile within reach of someone already fighting. */
 const crowding = (p: Point, avoid: readonly Point[]) => avoid.reduce((s, q) => s + (Math.hypot(p.x - q.x, p.y - q.y) < 4 ? 6 : 0), 0);

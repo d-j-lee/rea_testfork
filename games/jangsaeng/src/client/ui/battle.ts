@@ -97,7 +97,8 @@ export class DownedOverlay {
   #on = false;
 
   constructor(onRevive: () => void) {
-    const revive = button(h("span", null, "자력 소생 ", h("small", null, "천수 −1년")), onRevive, { class: "btn btn-danger dn-btn" });
+    // rules/lifespan.ts selfRevive: the first in each chapter is free, then a year each.
+    const revive = button(h("span", null, "자력 소생 ", h("small", null, "장마다 첫 번 무료 · 이후 천수 −1년")), onRevive, { class: "btn btn-danger dn-btn" });
     this.el = h(
       "section",
       { class: "downed hidden", role: "alertdialog", "aria-label": "사경" },

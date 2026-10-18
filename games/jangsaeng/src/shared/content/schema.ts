@@ -353,6 +353,13 @@ export interface BattleDef {
    * carry the 대체역사 tag (victory chronicle effects set `alt` too).
    */
   alt?: true;
+  /**
+   * What its victory is called, in place of '승리' (over the arena, and after
+   * the title in the toast: '<title> — <victoryLabel>'): for a fight won
+   * inside a campaign that failed, e.g. a retreat covered.
+   */
+  victoryLabel?: string;
+  /** The music while it runs (BattleView.music), in place of the chapter's. */
   music?: MusicMood;
   /** Weather over the arena while the battle runs, in place of the chapter's. */
   weather?: Weather;
