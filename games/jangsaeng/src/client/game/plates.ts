@@ -7,7 +7,13 @@
 import type { CharacterSprite, PropSprite } from "../../shared/sprites.ts";
 import type { Team } from "../../shared/types.ts";
 import { characterHeight } from "../render/characters.ts";
-import { drawEmote, drawHpBar, drawNamePlate, type NamePlateOptions } from "../render/overlays.ts";
+import {
+  drawEmote,
+  drawHpBar,
+  drawNamePlate,
+  measureNamePlate,
+  type NamePlateOptions,
+} from "../render/overlays.ts";
 import { TEAM_COLORS } from "../render/palette.ts";
 import { propHeight } from "../render/props.ts";
 import type { EntityTrack } from "./snapshots.ts";
@@ -26,7 +32,6 @@ export interface PlateSubject {
   top: number;
 }
 
-const FONT = "Galmuri11, 'Noto Sans KR', sans-serif";
 /** Enemy plates hide beyond this distance from the player (tiles)… */
 const ENEMY_PLATE_TILES = 10;
 /** …or when more living enemies than this are on screen. */
@@ -56,42 +61,14 @@ class Slot {
   base = 0;
 }
 
-// Text widths at 1× (canvas px), cached; reset when web fonts arrive.
-const widths = new Map<string, number>();
-let measureCtx: CanvasRenderingContext2D | null | undefined;
-if (typeof document !== "undefined" && document.fonts)
-  document.fonts.addEventListener("loadingdone", () => widths.clear());
-
-function textWidth(text: string, size: number): number {
-  const key = `${size}|${text}`;
-  let w = widths.get(key);
-  if (w === undefined) {
-    if (measureCtx === undefined) measureCtx = document.createElement("canvas").getContext("2d");
-    if (measureCtx) {
-      measureCtx.font = `${size}px ${FONT}`;
-      w = Math.ceil(measureCtx.measureText(text).width);
-    } else w = text.length * size;
-    if (widths.size > 1024) widths.clear();
-    widths.set(key, w);
-  }
-  return w;
-}
-
-/**
- * Plate size in canvas px at text scale `mult`, following the layout of
- * overlays.ts buildPlate (name row with level badge, optional title row).
- */
+/** Plate size in canvas px at text scale `mult` (layout owned by overlays.ts). */
 function plateSize(slot: Slot, level: number | undefined, mult: number): { w: number; h: number } {
-  const nameSize = slot.small ? 11 : 12;
-  const nameW = textWidth(slot.name, nameSize);
-  const levelW = level !== undefined ? textWidth(String(level), 11) + 4 : 0;
-  const titleW = slot.title ? textWidth(slot.title, 11) : 0;
-  const rowW = nameW + (levelW ? levelW + 3 : 0);
-  SIZE.w = (Math.max(rowW, titleW) + 4) * mult + 2;
-  SIZE.h = (nameSize + 4 + (slot.title ? 13 : 0)) * mult + 2;
-  return SIZE;
+  const opts: Parameters<typeof measureNamePlate>[1] = { small: slot.small };
+  if (slot.title !== undefined) opts.title = slot.title;
+  if (level !== undefined) opts.level = level;
+  return measureNamePlate(slot.name, opts, mult);
 }
-const SIZE = { w: 0, h: 0 };
+
 
 export class PlateLayer {
   readonly #slots: Slot[] = [];

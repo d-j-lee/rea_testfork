@@ -341,6 +341,18 @@ export const ch03: ChapterDef = {
   ],
   prompts: [
     {
+      id: "ch03_four",
+      title: "네 가지 불가",
+      speaker: { name: "이성계", sprite: "general_goryeo" },
+      body: [
+        "\"작은 나라가 큰 나라를 거스르는 것이 첫째 불가요, 여름에 군사를 일으키는 것이 둘째 불가요.\"",
+        "\"온 나라가 멀리 나가면 왜구가 그 틈을 탈 것이니 셋째 불가요.\"",
+        "\"장마철이라 활의 아교가 풀리고 군사들이 역병에 걸릴 것이니 넷째 불가요.\"",
+        "그는 너를 보았다. \"황산에서 함께 싸운 그대라면 알 것이오.\"",
+      ],
+      options: [{ id: "ok", text: "고개를 끄덕인다", effects: [{ k: "bond", npc: "yi_seonggye", add: 5 }] }],
+    },
+    {
       id: "ch03_council",
       title: "요동을 칠 것인가",
       speaker: { name: "최영", sprite: "general_goryeo" },
@@ -705,6 +717,7 @@ export const ch03: ChapterDef = {
           text: "우군도통사 이성계의 4불가론을 듣는다",
           kind: "talk",
           target: "yi_seonggye",
+          prompt: "ch03_four",
           onComplete: [{ k: "flag", flag: "ch03_heard", value: true }],
         },
         {

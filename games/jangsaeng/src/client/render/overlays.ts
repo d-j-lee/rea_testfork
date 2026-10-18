@@ -54,38 +54,86 @@ function deviceScale(ctx: CanvasRenderingContext2D): { s: number; x: number; y: 
   return { s: Math.max(1, Math.hypot(m.a, m.b)), x: m.e, y: m.f, m };
 }
 
+/** Text width in canvas px, cached; cleared when web fonts finish loading. */
+const textWidths = new Map<string, number>();
+if (typeof document !== "undefined" && document.fonts)
+  document.fonts.addEventListener("loadingdone", () => textWidths.clear());
+
+function textWidth(text: string, size: number): number {
+  const key = `${size}|${text}`;
+  let width = textWidths.get(key);
+  if (width === undefined) {
+    const m = measurer();
+    if (m) {
+      m.font = `${size}px ${FONT_FAMILY}`;
+      width = Math.ceil(m.measureText(text).width);
+    } else width = text.length * size;
+    if (textWidths.size > 2048) textWidths.clear();
+    textWidths.set(key, width);
+  }
+  return width;
+}
+
+interface PlateLayout {
+  titleW: number;
+  nameSize: number;
+  titleSize: number;
+  pad: number;
+  nameRowW: number;
+  levelW: number;
+  levelText: string;
+  nameH: number;
+  titleH: number;
+  w: number;
+  h: number;
+}
+
+/** Single owner of plate geometry, shared by drawing and by declutter. */
+function plateLayout(text: string, opts: NamePlateOptions, mult: number): PlateLayout {
+  const nameSize = (opts.small ? 11 : 12) * mult;
+  const titleSize = 11 * mult;
+  const pad = 2 * mult;
+  const levelText = opts.level !== undefined ? `${opts.level}` : "";
+  const nameW = textWidth(text, nameSize);
+  const titleW = opts.title ? textWidth(opts.title, titleSize) : 0;
+  const levelW = levelText ? textWidth(levelText, titleSize) + 4 * mult : 0;
+  const nameRowW = nameW + (levelW ? levelW + 3 * mult : 0);
+  const nameH = nameSize + pad * 2;
+  const titleH = opts.title ? titleSize + 2 * mult : 0;
+  return {
+    titleW,
+    nameSize,
+    titleSize,
+    pad,
+    nameRowW,
+    levelW,
+    levelText,
+    nameH,
+    titleH,
+    w: Math.max(nameRowW, titleW) + pad * 2 + 2,
+    h: nameH + titleH + 2,
+  };
+}
+
+/** Plate size in canvas px at text scale `mult` (for layout and declutter). */
+export function measureNamePlate(
+  text: string,
+  opts: Omit<NamePlateOptions, "color" | "pixelRatio">,
+  mult: number,
+): { w: number; h: number } {
+  const layout = plateLayout(text, { ...opts, color: "" }, mult);
+  return { w: layout.w, h: layout.h };
+}
+
 function buildPlate(
   text: string,
   opts: NamePlateOptions,
   mult: number,
 ): Surface {
-  const nameSize = (opts.small ? 11 : 12) * mult;
-  const titleSize = 11 * mult;
-  const pad = 2 * mult;
-  const m = measurer();
+  const { titleW, nameSize, titleSize, pad, nameRowW, levelW, levelText, nameH, titleH, w, h } =
+    plateLayout(text, opts, mult);
   const nameFont = `${nameSize}px ${FONT_FAMILY}`;
   const titleFont = `${titleSize}px ${FONT_FAMILY}`;
-  const levelText = opts.level !== undefined ? `${opts.level}` : "";
-  let nameW = text.length * nameSize;
-  let titleW = 0;
-  let levelW = 0;
-  if (m) {
-    m.font = nameFont;
-    nameW = Math.ceil(m.measureText(text).width);
-    if (opts.title) {
-      m.font = titleFont;
-      titleW = Math.ceil(m.measureText(opts.title).width);
-    }
-    if (levelText) {
-      m.font = `${titleSize}px ${FONT_FAMILY}`;
-      levelW = Math.ceil(m.measureText(levelText).width) + 4 * mult;
-    }
-  }
-  const nameRowW = nameW + (levelW ? levelW + 3 * mult : 0);
-  const w = Math.max(nameRowW, titleW) + pad * 2 + 2;
-  const nameH = nameSize + pad * 2;
-  const titleH = opts.title ? titleSize + 2 * mult : 0;
-  const h = nameH + titleH + 2;
   const surface = createSurface(w, h);
   const ctx = surface.getContext("2d");
   if (!ctx) return surface;

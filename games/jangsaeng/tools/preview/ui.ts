@@ -116,6 +116,13 @@ async function run(): Promise<void> {
       ui.handle({ t: "toast", text: "강가의 척후를 물리쳤다 (3/5)", tone: "good" });
       ui.handle({ t: "toast", text: "대첩의 공으로 천수 +2년", tone: "epic" });
       break;
+    case "drawer-status":
+    case "drawer-obj":
+    case "drawer-chat":
+      startGame();
+      ui.handle({ t: "toast", text: "강가의 척후를 물리쳤다 (3/5)", tone: "good" });
+      click(state === "drawer-status" ? ".cbar" : state === "drawer-obj" ? ".cstrip" : '.cbtn[aria-label="채팅"]');
+      break;
     case "calm":
       drawWorld();
       ui.enterGame();

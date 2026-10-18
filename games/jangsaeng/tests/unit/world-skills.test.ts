@@ -155,23 +155,34 @@ test("shield bearers take −70% from the front; their flank is open", () => {
   world.addPlayer(p);
   const shield = world.spawnEnemy("rebel_shield", c.x + 1.2, c.y, 1);
   assert.ok(shield !== null);
-  run(world, 1.5);
-  const swing = (ax: number): number => {
+  // Strike while it is rooted in its own wind-up (it cannot turn then).
+  const windup = () => {
+    for (let i = 0; i < 200; i++) {
+      world.tick(DT);
+      if (world.snapshotFor(p.id).ents.find((e) => e.id === shield)?.a === "attack") return;
+    }
+    assert.fail("the shield bearer never attacked");
+  };
+  const swing = (): number => {
     world.drainFx();
-    world.setInput(p.id, input({ attack: true, ax, ay: 0 }));
+    const e = world.inspect(shield);
+    const me = world.playerStatus(p.id);
+    assert.ok(e && me);
+    world.setInput(p.id, input({ attack: true, ax: e.x - me.x, ay: e.y - me.y }));
     world.tick(DT);
-    world.setInput(p.id, input({ ax, ay: 0 }));
+    world.setInput(p.id, input());
+    run(world, 0.1);
     let dealt = 0;
-    run(world, 0.2, () => {
-      for (const f of world.drainFx()) if (f.k === "text" && f.color === "#ffffff" && /^\d+$/.test(f.text ?? "")) dealt += Number(f.text);
-    });
-    run(world, 0.4);
+    for (const f of world.drainFx()) if (f.k === "text" && f.color === "#ffffff" && /^\d+$/.test(f.text ?? "")) dealt += Number(f.text);
     return dealt;
   };
-  const front = swing(1);
+  windup();
+  const front = swing();
+  windup();
   const e = world.inspect(shield);
-  assert.ok(e);
-  world.teleport(p.id, e.x + 1.1, e.y);
-  const back = swing(-1);
+  const me = world.playerStatus(p.id);
+  assert.ok(e && me);
+  world.teleport(p.id, e.x + (e.x - me.x), e.y + (e.y - me.y));
+  const back = swing();
   assert.ok(front > 0 && back > front * 2.5, `front ${front}, back ${back}`);
 });

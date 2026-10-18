@@ -1,6 +1,6 @@
 // Browser smoke test of the built client (npm run test:e2e).
 //   node tests/e2e/run.mjs [--target=single|served|both] [--build] [--seconds=10]
-//                          [--dist=dir] [--device=laptop|phone]
+//                          [--dist=dir] [--device=laptop|phone]   (E2E_VERBOSE=1: log dialog handling)
 // For each target it opens the page in headless Chromium (playwright-core),
 // clicks through the title into offline play, plays for a few seconds with
 // the keyboard, then asserts: no page errors, frames keep rendering, the
@@ -242,7 +242,7 @@ async function runTarget(browser, target) {
     const perf = await page.evaluate(() => globalThis.__jangsaeng?.perf ?? null);
     if (perf)
       result.steps.push(
-        `frame timing (last ~2 s): fps ${perf.fps}, work avg ${perf.workAvg.toFixed(2)} ms, p95 ${perf.workP95.toFixed(2)} ms, max ${perf.workMax.toFixed(2)} ms, frame gap avg ${perf.gapAvg.toFixed(1)} ms, max ${perf.gapMax.toFixed(1)} ms`,
+        `frame timing (last 120 frames): fps ${perf.fps}, work avg ${perf.workAvg.toFixed(2)} ms, p95 ${perf.workP95.toFixed(2)} ms, max ${perf.workMax.toFixed(2)} ms, frame gap avg ${perf.gapAvg.toFixed(1)} ms, max ${perf.gapMax.toFixed(1)} ms`,
       );
     const frames = hook.frames - framesBefore;
     result.steps.push(`played ${playSeconds}s: ${frames} frames, ${presses} key presses, ${dismissed} dialogs dismissed`);

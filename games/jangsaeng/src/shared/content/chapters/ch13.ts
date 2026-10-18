@@ -139,7 +139,7 @@ export const ch13: ChapterDef = {
       id: "seobuk_comrade",
       name: "김사과",
       title: "서북 출신 옛 동료",
-      sprite: "hero_disguise",
+      sprite: "soldier_joseon",
       site: "pyeongyang",
       offset: [2, 1],
       talk: ["서북 사람은 과거에 붙어도 벼슬길이 막히오.", "가산에서 불이 올랐소."],
@@ -502,7 +502,7 @@ export const ch13: ChapterDef = {
     {
       id: "p_hong",
       title: "서북에서 온 불",
-      speaker: { name: "김사과", sprite: "hero_disguise" },
+      speaker: { name: "김사과", sprite: "soldier_joseon" },
       body: [
         "1811년 섣달, 가산 다복동에서 홍경래가 일어났소. 열흘 만에 청천강 북쪽 고을들이 넘어갔소.",
         "서북 사람이라는 이유로 벼슬길이 막히고, 세도가는 쌀을 쓸어 가오. 그대는 이 일을 어떻게 보오?",

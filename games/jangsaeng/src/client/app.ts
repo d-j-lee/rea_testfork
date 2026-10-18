@@ -31,11 +31,11 @@ type AppState = "boot" | "title" | "connecting" | "game" | "error";
 /** Test/diagnostic hook (read by tests/e2e). */
 interface DebugHook {
   state: AppState;
-  frames: number;
+  readonly frames: number;
   errors: string[];
   version: string;
-  /** Frame timing over the last ~2 s (ms): work = time spent in our frame. */
-  perf: { fps: number; workAvg: number; workP95: number; workMax: number; gapAvg: number; gapMax: number } | null;
+  /** Frame timing over the last 120 frames (ms): work = time spent in our frame. */
+  readonly perf: { fps: number; workAvg: number; workP95: number; workMax: number; gapAvg: number; gapMax: number } | null;
 }
 
 const hook: DebugHook = { state: "boot", frames: 0, errors: [], version: "", perf: null };
@@ -165,15 +165,10 @@ export async function startApp(options: AppOptions): Promise<void> {
   const game = new GameClient({ surface, map, audio, input, ui });
   client = game;
   game.start();
-  const frames = () => {
-    hook.frames = game.frames;
-    requestAnimationFrame(frames);
-  };
-  requestAnimationFrame(frames);
-  setInterval(() => {
-    const s = game.stats.summary();
-    hook.perf = { fps: game.stats.fps, workAvg: s.workAvg, workP95: s.workP95, workMax: s.workMax, gapAvg: s.gapAvg, gapMax: s.gapMax };
-  }, 1000);
+  Object.defineProperties(hook, {
+    frames: { get: () => game.frames },
+    perf: { get: () => ({ fps: game.stats.fps, ...game.stats.summary() }) },
+  });
 
   const onlineAvailable = await online;
   const saved = savedForTitle(onlineAvailable);

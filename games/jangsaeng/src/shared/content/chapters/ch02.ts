@@ -417,6 +417,17 @@ export const ch02: ChapterDef = {
       ],
     },
     {
+      id: "ch02_kanghwi",
+      title: "철령 이북",
+      speaker: { name: "강휘", sprite: "general_goryeo" },
+      body: [
+        "\"명에서 철령 이북 땅을 내놓으라 한다더군. 쌍성총관부 옛 땅 말이다.\"",
+        "강휘가 희끗해진 수염을 쓸었다. \"조정이 그냥 있지는 않을 거다. 칼 쓸 일이 생기겠지.\"",
+        "\"너를 보면 거울을 보기가 싫어진다. 나만 늙었으니.\"",
+      ],
+      options: [{ id: "ok", text: "\"너도 아직 칼은 무겁지 않잖아.\"", effects: [{ k: "bond", npc: "kang_hwi", add: 5 }] }],
+    },
+    {
       id: "ch02_mirror",
       title: "스물여섯 해",
       speaker: { name: "윤소화", sprite: "commoner_f" },
@@ -589,6 +600,7 @@ export const ch02: ChapterDef = {
           text: "도진무가 된 강휘에게서 조정 소식을 듣는다",
           kind: "talk",
           target: "kang_hwi",
+          prompt: "ch02_kanghwi",
           onComplete: [{ k: "flag", flag: "ch02_cheollyeong_news", value: true }],
         },
       ],

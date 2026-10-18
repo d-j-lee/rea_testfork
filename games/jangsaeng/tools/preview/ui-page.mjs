@@ -15,7 +15,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "../..");
 const ALL = [
   "title", "creation", "demo", "pitch", "settings", "loading", "card", "hud", "calm", "prompt", "cardprompt",
   "result", "death", "years", "roll", "downed", "character", "inventory", "nation", "chronicle", "map", "help",
-  "menu", "ending", "error",
+  "menu", "ending", "error", "drawer-status", "drawer-obj", "drawer-chat",
 ];
 const [outArg, statesArg = "all", sizesArg = "1280x720,390x844", waitArg = "1600"] = process.argv.slice(2);
 if (!outArg) {
@@ -50,7 +50,7 @@ try {
   const browser = await chromium.launch(proxy ? { proxy: { server: proxy } } : {});
   let failed = false;
   for (const [w, h] of sizes) {
-    const phone = w < 700;
+    const phone = Math.min(w, h) < 500;
     const context = await browser.newContext({
       viewport: { width: w, height: h },
       deviceScaleFactor: 1,
