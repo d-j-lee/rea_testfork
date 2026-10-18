@@ -704,7 +704,7 @@ test("a settled run takes nothing more from the world: a battle ending beside it
   const fighter = handSession(channel, CONTENT, demoSave(CONTENT, "ch16", 6, "history", "b".repeat(32)));
   const before = structuredClone(settled.session.save);
   assert.ok(channel.startBattle(def.id, fighter.session, true), "the other player's battle starts");
-  const centre = channel.battleCentre(def);
+  const centre = channel.world.arenaOf(def.id);
   assert.ok(centre);
   channel.world.teleport(settled.session.id, centre.x, centre.y);
   channel.world.endBattle("victory");

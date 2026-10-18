@@ -171,14 +171,12 @@ export class Bot {
     const battle = query.battleCentre();
     const inBattle = battle !== null && Math.hypot(battle.x - me.x, battle.y - me.y) < battle.radius + 22;
     if (inBattle && leader) {
-      const post = world.battleView()?.defend ? battle : null;
-      const shooter = query.nearestEnemy(me.x, me.y, RETURN_FIRE);
-      const aimedAt = shooter ? world.inspect(shooter.id)?.target : undefined;
+      const post = query.defendPost();
       const enemy =
         query.nearestEnemy(me.x, me.y, SELF_DEFENCE) ??
         query.nearestEnemy(leader.x, leader.y, GUARD_RADIUS) ??
         (post ? query.nearestEnemy(post.x, post.y, POST_GUARD) : null) ??
-        (aimedAt === this.id || aimedAt === leader.id ? shooter : null);
+        query.enemyAiming([this.id, leader.id], me.x, me.y, RETURN_FIRE);
       if (enemy) return this.#fight(me, enemy);
     } else if (inBattle) {
       const enemy = query.nearestEnemy(me.x, me.y, 12);

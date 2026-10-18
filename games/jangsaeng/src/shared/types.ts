@@ -336,6 +336,9 @@ export interface BattleView {
   defend?: { name: string; hp: number };
   morale?: number;
   participants: number;
+  /** The battle's own sky over its arena, when it differs from the chapter's. */
+  weather?: Weather;
+  hour?: number;
 }
 
 export interface SelfView {

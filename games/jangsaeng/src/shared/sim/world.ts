@@ -12,12 +12,12 @@ import { createRng } from "../rng.ts";
 import type { BodyVariant, CharacterSprite } from "../sprites.ts";
 import type { BattleView, EntitySnap, FxEvent, Marker } from "../types.ts";
 import { tickEnemy } from "./ai.ts";
-import { battleView, endBattle, startBattle, tickBattle } from "./battle.ts";
+import { arenaOf, battleView, endBattle, leaveBattle, rimRevival, startBattle, tickBattle } from "./battle.ts";
 import { downPlayer, kill, revivePlayer, tickBurn } from "./combat.ts";
 import { bodyFree, freePoint, releaseTokensOn, removeActor, spawnEnemy } from "./entities.ts";
 import { tickFighter } from "./fighters.ts";
 import { isBlocked, type CollisionGrid } from "./physics.ts";
-import { applyInput, createPlayer, resetActions, tickPlayer } from "./player.ts";
+import { applyInput, createPlayer, placePlayer, tickPlayer } from "./player.ts";
 import { makeSpawns, refreshPopulation, safeSpot, siteCentre, tickNpc, tickProps, tickSpawns } from "./population.ts";
 import { stepDelayedFx, stepHazards, stepProjectiles, stepStrikes } from "./projectiles.ts";
 import { snapshotFor } from "./snapshot.ts";
@@ -173,7 +173,6 @@ export class World {
       sites: new Map(map.sites.map((site) => [site.id, site])),
       players: new Map(),
       battle: null,
-      stepIndex: 0,
     };
     this.#sim = sim;
     sim.spawns.push(...makeSpawns(sim));
@@ -200,7 +199,6 @@ export class World {
     const earliest = steps[0];
     if (earliest === undefined) return;
     this.#steps = steps;
-    sim.stepIndex = earliest;
     const year = sim.chapter.steps[earliest]?.year;
     if (year !== undefined && year !== sim.year) this.setYear(year);
     refreshPopulation(sim, steps);
@@ -269,10 +267,7 @@ export class World {
     const a = sim.players.get(id);
     if (!a) return;
     const p = safeSpot(sim, x, y);
-    a.x = p.x;
-    a.y = p.y;
-    resetActions(sim, a);
-    sim.index.update(a);
+    placePlayer(sim, a, p.x, p.y);
   }
 
   /** Heals to full (chapter start, rest). */
@@ -292,28 +287,29 @@ export class World {
     }
   }
 
-  /** Self-revive at the nearest post station with 50% HP. */
+  /**
+   * Self-revive with 50% HP: a battle participant on the arena's rim, still
+   * in the fight (GDD: 전투 중이면 전투 링 가장자리); anyone else at the
+   * nearest post station.
+   */
   selfRevive(id: number): void {
     const sim = this.#sim;
     const a = sim.players.get(id);
     if (!a?.pl || a.pl.downedAt < 0) return;
-    let best: { x: number; y: number } | null = null;
-    let bestD = Infinity;
-    for (const site of sim.sites.values()) {
-      if (!site.station) continue;
-      const d = Math.hypot(site.x + 0.5 - a.x, site.y + 0.5 - a.y);
-      if (d < bestD) {
-        bestD = d;
-        best = { x: site.x + 0.5, y: site.y + 0.5 };
+    let spot = rimRevival(sim, a);
+    if (!spot) {
+      let station: { x: number; y: number } | null = null;
+      let bestD = Infinity;
+      for (const site of sim.sites.values()) {
+        const d = Math.hypot(site.x + 0.5 - a.x, site.y + 0.5 - a.y);
+        if (site.station && d < bestD) {
+          bestD = d;
+          station = site;
+        }
       }
+      if (station) spot = safeSpot(sim, station.x + 0.5, station.y + 0.5);
     }
-    if (best) {
-      const p = safeSpot(sim, best.x, best.y);
-      a.x = p.x;
-      a.y = p.y;
-      resetActions(sim, a);
-      sim.index.update(a);
-    }
+    if (spot) placePlayer(sim, a, spot.x, spot.y);
     revivePlayer(sim, a, C.SELF_REVIVE_HP, null);
     flushEvents(sim);
   }
@@ -339,6 +335,21 @@ export class World {
   /** Ends any active battle without result (chapter change, demo skip). */
   abortBattle(): void {
     endBattle(this.#sim, null);
+  }
+
+  /** Takes a player out of the active battle while the others fight on (a demo skip won it for them). */
+  leaveBattle(id: number): void {
+    leaveBattle(this.#sim, id);
+  }
+
+  /**
+   * Where a chapter battle is fought (centre and radius): the running
+   * battle's arena, or the arena it would be fought on now. The one place
+   * hosts read a battle's position from (trigger, marker, story teleport).
+   */
+  arenaOf(battleId: string): { x: number; y: number; radius: number } | null {
+    const arena = arenaOf(this.#sim, battleId);
+    return arena ? { x: arena.x, y: arena.y, radius: arena.radius } : null;
   }
 
   /** Ends the active battle with a result (fires onBattleEnd). */
@@ -511,18 +522,27 @@ export class World {
 
 export interface WorldQuery {
   nearestEnemy(x: number, y: number, radius: number): { id: number; x: number; y: number } | null;
+  /** The nearest enemy within `radius` of (x, y) whose current target is one of `targets`. */
+  enemyAiming(targets: readonly number[], x: number, y: number, radius: number): { id: number; x: number; y: number } | null;
   downedAllies(x: number, y: number, radius: number): { id: number; x: number; y: number }[];
   player(id: number): { x: number; y: number; hp: number; maxHp: number; downed: boolean } | null;
   battleCentre(): { x: number; y: number; radius: number } | null;
+  /** The standing post a running defend battle holds, if any. */
+  defendPost(): { x: number; y: number } | null;
   /** True when the tile is walkable. */
   walkable(x: number, y: number): boolean;
 }
 
 function makeQuery(sim: Sim): WorldQuery {
+  /** Enemies a companion may engage: not fleeing, and not a duel's (the duel is the starter's alone). */
+  const foe = (e: Actor) => hostile(e) && e.en?.state !== "flee" && !(sim.battle?.def.kind === "duel" && e.en?.battle === true);
   return {
     nearestEnemy(x, y, radius) {
-      const duel = sim.battle?.def.kind === "duel";
-      const a = sim.index.nearest(x, y, radius, (e) => hostile(e) && e.en?.state !== "flee" && !(duel && e.en?.battle === true));
+      const a = sim.index.nearest(x, y, radius, foe);
+      return a ? { id: a.id, x: a.x, y: a.y } : null;
+    },
+    enemyAiming(targets, x, y, radius) {
+      const a = sim.index.nearest(x, y, radius, (e) => foe(e) && targets.includes(e.en?.target ?? -1));
       return a ? { id: a.id, x: a.x, y: a.y } : null;
     },
     downedAllies(x, y, radius) {
@@ -541,8 +561,12 @@ function makeQuery(sim: Sim): WorldQuery {
       return { x: a.x, y: a.y, hp: a.hp, maxHp: a.maxHp, downed: a.pl.downedAt >= 0 };
     },
     battleCentre() {
-      const b = sim.battle;
-      return b ? { x: b.cx, y: b.cy, radius: b.radius } : null;
+      const ring = sim.battle?.arena;
+      return ring ? { x: ring.x, y: ring.y, radius: ring.radius } : null;
+    },
+    defendPost() {
+      const post = sim.actors.get(sim.battle?.defendId ?? -1);
+      return post?.alive ? { x: post.x, y: post.y } : null;
     },
     walkable(x, y) {
       return !isBlocked(sim.grid, Math.floor(x), Math.floor(y));

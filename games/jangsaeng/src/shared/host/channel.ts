@@ -163,13 +163,11 @@ export class Channel {
 
   // ── Battles ────────────────────────────────────────────────────────────
 
-  battleCentre(def: BattleDef): { x: number; y: number } | null {
-    const site = this.world.sitePosition(def.site);
-    if (!site) return null;
-    const [dx, dy] = def.offset ?? [0, 0];
-    return { x: site.x + dx, y: site.y + dy };
-  }
-
+  /**
+   * Starts a chapter battle for `session`. A battle the story starts
+   * (`fromStory`) carries a far-off starter and the companions into its
+   * arena first; one started on foot begins where the trigger caught them.
+   */
   startBattle(battleId: string, session: Session, fromStory: boolean): boolean {
     const def = this.chapter.battles.find((candidate) => candidate.id === battleId);
     if (!def) return false;
@@ -177,11 +175,11 @@ export class Channel {
       if (fromStory) session.send({ t: "toast", text: "다른 전투가 이미 벌어지고 있다.", tone: "warn" });
       return false;
     }
-    const centre = this.battleCentre(def);
+    const ring = this.world.arenaOf(def.id);
     const status = this.world.playerStatus(session.id);
-    if (fromStory && centre && status && Math.hypot(centre.x - status.x, centre.y - status.y) > def.radius) {
-      this.world.teleport(session.id, centre.x, centre.y + Math.min(3, def.radius / 2));
-      this.catchUpCompanions(centre.x, centre.y);
+    if (fromStory && ring && status && Math.hypot(ring.x - status.x, ring.y - status.y) > ring.radius) {
+      this.world.teleport(session.id, ring.x, ring.y + Math.min(3, ring.radius / 2));
+      this.catchUpCompanions(ring.x, ring.y);
     }
     const started = this.world.startBattle(battleId, session.id);
     if (started) {
@@ -194,25 +192,19 @@ export class Channel {
     return started;
   }
 
-  /** Resolves a finished world battle for the sessions that fought it or stood by its ring. */
+  /** Resolves a finished world battle for the sessions that fought it (the world's participants). */
   #onBattleEnd(battleId: string, result: "victory" | "defeat", participants: readonly number[]): void {
     const def = this.chapter.battles.find((candidate) => candidate.id === battleId);
     if (!def) return;
-    const centre = this.battleCentre(def);
-    for (const session of this.sessions.values()) {
-      const status = this.world.playerStatus(session.id);
-      const near =
-        centre && status ? Math.hypot(centre.x - status.x, centre.y - status.y) <= def.radius + 12 : false;
-      if (participants.includes(session.id) || near)
-        session.onBattleEnd(def, result, participants.filter((id) => id !== session.id).length);
-    }
+    for (const id of participants)
+      this.sessions.get(id)?.onBattleEnd(def, result, participants.filter((other) => other !== id).length);
     if (result === "victory") this.#celebrate(def);
   }
 
   /**
    * Demo skip: `session` alone wins `def`. The shared battle is called off only
-   * when no other human fights in it; otherwise it runs on, and its real end is
-   * resolved for everyone still in it (victory rewards are first-win only).
+   * when no other human fights in it; otherwise `session` leaves it and it runs
+   * on, its real end resolved for those still in it.
    */
   skipBattle(session: Session, def: BattleDef): void {
     const running = this.world.battleView()?.id === def.id;
@@ -220,7 +212,10 @@ export class Channel {
     const others = running ? fighters.filter((id) => id !== session.id).length : this.bots.size;
     const humans = fighters.filter((id) => id !== session.id && this.sessions.has(id));
     const ends = !running || humans.length === 0;
-    if (running && ends) this.world.abortBattle();
+    if (running) {
+      if (ends) this.world.abortBattle();
+      else this.world.leaveBattle(session.id);
+    }
     session.onBattleEnd(def, "victory", others);
     if (ends) this.#celebrate(def);
   }

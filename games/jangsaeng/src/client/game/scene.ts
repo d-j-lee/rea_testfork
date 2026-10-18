@@ -38,6 +38,8 @@ const HIT_FLASH = "rgba(255,255,255,0.72)";
 /** Precomputed ink tints (avoid building colour strings per frame). */
 const INK_TINTS: readonly string[] = Array.from({ length: 11 }, (_, i) => `rgba(29,26,25,${(i / 10).toFixed(2)})`);
 const VIEW_MARGIN = 40;
+/** A battle's sky reaches this many tiles beyond its ring (about half a screen). */
+const BATTLE_SKY = 12;
 
 export interface SceneFrame {
   /** Real client time (ms). */
@@ -172,10 +174,14 @@ export class Scene {
     this.ink.draw(ctx, t);
 
     // ── Atmosphere (screen space) ───────────────────────────────────────
+    // A running battle's own sky (칠천량's burning night) covers its arena
+    // and the view around it; elsewhere the chapter's.
     const chapter = f.chapter;
+    const ring = f.self?.battle;
+    const sky = ring && Math.hypot(cam.x - ring.x * TILE_PX, cam.y - ring.y * TILE_PX) <= (ring.radius + BATTLE_SKY) * TILE_PX ? ring : undefined;
     const atmo = this.#atmosphere;
-    atmo.hour = chapter?.hour ?? 12;
-    atmo.weather = chapter?.weather ?? "clear";
+    atmo.hour = sky?.hour ?? chapter?.hour ?? 12;
+    atmo.weather = sky?.weather ?? chapter?.weather ?? "clear";
     atmo.timeMs = t;
     atmo.pixelScale = cam.scale;
     drawAtmosphere(ctx, cam.width, cam.height, atmo);

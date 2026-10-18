@@ -184,7 +184,6 @@ export const ch10: ChapterDef = {
       radius: 8,
       kind: "deck",
       great: true,
-      scaled: true,
       music: "naval",
       weather: "fog",
       intro: [

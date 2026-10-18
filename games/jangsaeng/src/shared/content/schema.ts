@@ -326,10 +326,11 @@ export interface BattleDef {
   allies?: readonly { sprite: CharacterSprite; name: string; count: number }[];
   /** A 대전(大戰): first victory grants +2 lifespan years and appears in 연대기. */
   great?: boolean;
-  /** Enemy HP/count scale with participants (MMO world-event scaling). */
-  scaled?: boolean;
   music?: MusicMood;
+  /** Weather over the arena while the battle runs, in place of the chapter's. */
   weather?: Weather;
+  /** Hour of day (0–23) over the arena while the battle runs, e.g. a night battle in a dusk chapter. */
+  hour?: number;
   victory: readonly Effect[];
   defeat: readonly Effect[];
 }

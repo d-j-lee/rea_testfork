@@ -5,8 +5,9 @@ import { test } from "node:test";
 import { ENEMIES } from "../../src/shared/content/enemies.ts";
 import type { ChapterDef } from "../../src/shared/content/schema.ts";
 import { TILE_INFO, Tile, type TileId } from "../../src/shared/map/tiles.ts";
+import type { EntityInfo } from "../../src/shared/sim/world.ts";
 import type { FxEvent } from "../../src/shared/types.ts";
-import { BOSS, CHAPTER, DERIVED, arena, fightNearest, input, makeWorld, map, run, siteCentre, spec } from "./world-fixture.ts";
+import { BOSS, CHAPTER, DERIVED, DT, arena, fightNearest, input, makeWorld, map, run, siteCentre, spec } from "./world-fixture.ts";
 
 const STRONG = { ...DERIVED, weaponAtk: 120, maxHp: 5000 };
 
@@ -127,6 +128,153 @@ test("every participant downed at once is a defeat", () => {
   assert.equal(world.entityIds().map((id) => world.inspect(id)).filter((e) => e?.sprite === "bandit").length, 0);
 });
 
+test("a participant who revives themself stands on the arena's rim and fights on", () => {
+  const { world, log } = makeWorld("rim-revive");
+  const c = arena();
+  const human = spec(c.x, c.y);
+  const bot = spec(c.x - 5, c.y, { kind: "bot", derived: { ...DERIVED, maxHp: 100_000 } });
+  world.addPlayer(human);
+  world.addPlayer(bot);
+  world.startBattle("waves", human.id);
+  run(world, 0.2);
+  world.damage(human.id, 1000);
+  run(world, 1);
+  world.selfRevive(human.id);
+  const me = world.playerStatus(human.id);
+  const ring = world.battleView();
+  assert.ok(me && ring, "the battle goes on");
+  assert.equal(me.downed, null);
+  const d = Math.hypot(me.x - ring.x, me.y - ring.y);
+  assert.ok(d <= ring.radius && d >= ring.radius - 2.5, `revived ${d.toFixed(1)} tiles from the centre of a ring of ${ring.radius}`);
+  assert.ok(world.battleParticipants().includes(human.id), "still a participant");
+  assert.deepEqual(log.revived, [{ player: human.id, by: null }]);
+  // Down again with nobody coming: the battle is still lost on the timer.
+  world.damage(human.id, 1000);
+  run(world, DERIVED.downSeconds + 0.5);
+  assert.deepEqual(log.battles.map((b) => b.result), ["defeat"]);
+});
+
+test("a player who leaves a battle is not resolved with it and does not rejoin by standing on it", () => {
+  const { world, log } = makeWorld("leave");
+  const c = arena();
+  const presenter = spec(c.x, c.y, { derived: { ...DERIVED, maxHp: 100_000 } });
+  const other = spec(c.x + 1, c.y, { derived: STRONG });
+  world.addPlayer(presenter);
+  world.addPlayer(other);
+  world.startBattle("waves", presenter.id);
+  run(world, 0.1);
+  assert.deepEqual(world.battleParticipants(), [presenter.id, other.id]);
+  world.leaveBattle(presenter.id);
+  run(world, 1);
+  assert.ok(Math.hypot((world.playerStatus(presenter.id)?.x ?? 0) - c.x, (world.playerStatus(presenter.id)?.y ?? 0) - c.y) < 3, "still on the arena");
+  assert.deepEqual(world.battleParticipants(), [other.id]);
+  for (let i = 0; i < 2400 && log.battles.length === 0; i++) {
+    fightNearest(world, other.id);
+    world.tick(0.05);
+  }
+  assert.deepEqual(log.battles, [{ id: "waves", result: "victory", participants: [other.id] }]);
+});
+
+test("entering the arena cancels a roll in flight", () => {
+  const { world } = makeWorld("enter-roll");
+  const ring = world.arenaOf("waves");
+  assert.ok(ring);
+  const p = spec(ring.x - ring.radius - 4, ring.y);
+  world.addPlayer(p);
+  world.setInput(p.id, input({ mx: 1, dodge: true }));
+  world.tick(DT);
+  world.setInput(p.id, input());
+  const rolling = world.playerStatus(p.id);
+  assert.ok(world.startBattle("waves", p.id));
+  const placed = world.playerStatus(p.id);
+  assert.ok(rolling && placed && placed.x - rolling.x > 1, "the starter was carried onto the arena");
+  run(world, 0.4);
+  const after = world.playerStatus(p.id);
+  assert.ok(after && Math.hypot(after.x - placed.x, after.y - placed.y) < 0.3, `the roll went on from ${placed.x},${placed.y} to ${after?.x},${after?.y}`);
+});
+
+test("a defend post's HP follows the attackers when people arrive", () => {
+  const chapter = withBattles([{
+    id: "post", title: "봉수대", site: "hwangsan", offset: [4, 0], radius: 8, kind: "defend", timeLimit: 120,
+    defend: { name: "봉수대", sprite: "banner", hp: 40 },
+    waves: [
+      { at: 0, enemies: [{ enemy: "bandit", count: 2, level: 1 }], from: "east" },
+      { at: 1, enemies: [{ enemy: "bandit", count: 2, level: 1 }], from: "east" },
+    ],
+    victory: [], defeat: [],
+  }]);
+  const { world } = makeWorld("post", chapter);
+  const c = arena();
+  const first = spec(c.x - 2, c.y, { derived: { ...DERIVED, maxHp: 100_000 } });
+  world.addPlayer(first);
+  world.startBattle("post", first.id);
+  const post = () => world.entityIds().map((id) => world.inspect(id)).find((e) => e?.name === "봉수대");
+  assert.equal(post()?.maxHp, 40);
+  world.damage(post()?.id ?? -1, 10);
+  world.addPlayer(spec(c.x - 2, c.y + 1, { derived: { ...DERIVED, maxHp: 100_000 } }));
+  run(world, 1.1);
+  assert.equal(post()?.maxHp, 60, "two people: ×1.5 the attackers");
+  assert.equal(world.battleView()?.defend?.hp, 75, "the post keeps its share of HP");
+});
+
+test("a battle's own weather and hour ride on its view; the chapter's apply otherwise", () => {
+  const chapter = withBattles([
+    { id: "night", title: "불타는 밤", site: "hwangsan", offset: [4, 0], radius: 8, kind: "waves", weather: "smoke", hour: 2, waves: [{ enemies: [{ enemy: "bandit", count: 1, level: 1 }] }], victory: [], defeat: [] },
+    { id: "plain", title: "낮", site: "hwangsan", offset: [4, 0], radius: 8, kind: "waves", waves: [{ enemies: [{ enemy: "bandit", count: 1, level: 1 }] }], victory: [], defeat: [] },
+  ]);
+  const { world } = makeWorld("sky", chapter);
+  const c = arena();
+  const p = spec(c.x, c.y);
+  world.addPlayer(p);
+  world.startBattle("night", p.id);
+  assert.equal(world.battleView()?.weather, "smoke");
+  assert.equal(world.battleView()?.hour, 2);
+  world.abortBattle();
+  world.startBattle("plain", p.id);
+  assert.equal(world.battleView()?.weather, undefined);
+  assert.equal(world.battleView()?.hour, undefined);
+});
+
+test("one owner for where a battle is fought: arenaOf before and during the battle", () => {
+  const { world } = makeWorld("arena-of");
+  const before = world.arenaOf("boss");
+  assert.ok(before);
+  const c = arena();
+  const p = spec(c.x - 2, c.y);
+  world.addPlayer(p);
+  world.startBattle("boss", p.id);
+  const view = world.battleView();
+  assert.deepEqual(view && { x: view.x, y: view.y, radius: view.radius }, before);
+  assert.deepEqual(world.query().battleCentre(), before);
+  assert.deepEqual(world.arenaOf("boss"), before);
+  assert.equal(world.arenaOf("nowhere"), null);
+});
+
+test("companion queries: the enemy aiming at a player, and the defend post", () => {
+  const { world } = makeWorld("queries");
+  const c = arena();
+  const a = spec(c.x - 2, c.y, { derived: { ...DERIVED, maxHp: 100_000 } });
+  const b = spec(c.x - 2, c.y + 1, { derived: { ...DERIVED, maxHp: 100_000 } });
+  world.addPlayer(a);
+  world.addPlayer(b);
+  assert.equal(world.query().defendPost(), null, "no battle, no post");
+  world.startBattle("waves", a.id);
+  run(world, 0.1);
+  const q = world.query();
+  const foes = world.entityIds().map((id) => world.inspect(id)).filter((e): e is EntityInfo => e?.alive === true && e.side === "foe");
+  const from = (e: EntityInfo) => Math.hypot(e.x - c.x, e.y - c.y);
+  for (const target of [a.id, b.id]) {
+    const aiming = foes.filter((e) => e.target === target).sort((m, n) => from(m) - from(n));
+    assert.ok(aiming[0], `some bandit aims at ${target}`);
+    assert.equal(q.enemyAiming([target], c.x, c.y, 30)?.id, aiming[0].id, "the nearest enemy aiming at the target");
+  }
+  assert.equal(q.enemyAiming([999], c.x, c.y, 30), null);
+  world.abortBattle();
+  world.startBattle("defend", a.id);
+  const post = world.entityIds().map((id) => world.inspect(id)).find((e) => e?.name === "봉수대");
+  assert.deepEqual(q.defendPost(), post && { x: post.x, y: post.y });
+});
+
 test("boss phases change by HP threshold, shout their line and summon", () => {
   const { world, log } = makeWorld("boss");
   const c = arena();
@@ -179,7 +327,7 @@ test("the boss fights back with telegraphed mechanics", () => {
 });
 
 test("every battle scales with its headcount: humans 1, bots 0.5", () => {
-  for (const id of ["waves", "boss"]) {
+  for (const id of ["waves", "boss", "defend"]) {
     const { world } = makeWorld(`headcount-${id}`);
     const c = arena();
     const ids: number[] = [];
@@ -200,6 +348,10 @@ test("every battle scales with its headcount: humans 1, bots 0.5", () => {
       const body = ENEMIES.boss_wokou_captain;
       assert.ok(boss && body);
       assert.equal(boss.maxHp, Math.round(body.hp * (1 + 0.1 * 7) * 2.3));
+    } else if (id === "defend") {
+      // The post meets twice the attackers; their extra HP is the party's to cut through.
+      const post = ents.find((e) => e?.name === "봉수대");
+      assert.equal(post?.maxHp, 40 * 2, "the post's HP follows the attacker count only");
     } else {
       const bandits = ents.filter((e) => e?.sprite === "bandit");
       const body = ENEMIES.bandit;

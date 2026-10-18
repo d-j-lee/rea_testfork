@@ -196,7 +196,6 @@ export const ch06: ChapterDef = {
       offset: [9, -7],
       radius: 7,
       kind: "boss",
-      scaled: true,
       music: "war",
       weather: "clear",
       intro: ["만령 고개 위에 이시애 군의 방패가 벽처럼 섰다.", "정면은 단단하다. 측면과 뒤를 노려라."],
