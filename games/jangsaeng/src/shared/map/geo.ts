@@ -107,9 +107,11 @@ export const ISLANDS: readonly {
   readonly centre: LonLat;
   readonly rx: number;
   readonly ry: number;
+  /** An island province: owns this island's landmass and the sea nearest it, nothing on the peninsula. */
+  readonly province?: Province;
 }[] = [
   { id: "ganghwa", name: "강화도", centre: [126.44, 37.7], rx: 0.13, ry: 0.11 },
-  { id: "jeju", name: "제주도", centre: [126.55, 33.38], rx: 0.38, ry: 0.17 },
+  { id: "jeju", name: "제주도", centre: [126.55, 33.38], rx: 0.38, ry: 0.17, province: "jeju" },
   { id: "geoje", name: "거제도", centre: [128.62, 34.86], rx: 0.11, ry: 0.11 },
   { id: "hansan", name: "한산도", centre: [128.48, 34.75], rx: 0.05, ry: 0.04 },
   { id: "namhae", name: "남해도", centre: [127.95, 34.8], rx: 0.1, ry: 0.08 },
@@ -128,6 +130,7 @@ export const ISLANDS: readonly {
     centre: [129.32, 34.55],
     rx: 0.1,
     ry: 0.18,
+    province: "tsushima",
   },
   {
     id: "tsushima_s",
@@ -135,6 +138,7 @@ export const ISLANDS: readonly {
     centre: [129.27, 34.25],
     rx: 0.09,
     ry: 0.13,
+    province: "tsushima",
   },
   { id: "ulleung", name: "울릉도", centre: [130.87, 37.5], rx: 0.06, ry: 0.05 },
   { id: "wihwa", name: "위화도", centre: [124.45, 40.07], rx: 0.05, ry: 0.025 },
@@ -427,7 +431,10 @@ export const PROVINCE_NAMES: Readonly<Record<Province, string>> = {
   tsushima: "대마도",
 };
 
-/** Voronoi anchors for provinces (approximate centroids). */
+/**
+ * Voronoi anchors for the provinces of the peninsula and the land beyond the
+ * border (approximate centroids). Island provinces are declared on ISLANDS.
+ */
 export const PROVINCE_ANCHORS: readonly {
   readonly province: Province;
   readonly at: LonLat;
@@ -446,8 +453,6 @@ export const PROVINCE_ANCHORS: readonly {
   { province: "pyeongan", at: [126.4, 40.4] },
   { province: "hamgyeong", at: [127.9, 40.2] },
   { province: "hamgyeong", at: [129.2, 41.6] },
-  { province: "jeju", at: [126.55, 33.4] },
-  { province: "tsushima", at: [129.3, 34.4] },
   { province: "liaodong", at: [124.5, 41.9] },
   { province: "liaodong", at: [126.5, 42.7] },
   { province: "liaodong", at: [129.5, 43.1] },
@@ -760,6 +765,24 @@ export const SITES: readonly SiteSource[] = [
     hanja: "鬱陵島",
     kind: "village",
     at: [130.87, 37.5],
+    station: false,
+  },
+  // Sea battlefields: their fleets' decks are stamped over the water and
+  // moored to the nearest shore (generate.ts#moor).
+  {
+    id: "hansan_sea",
+    name: "한산도 앞바다",
+    hanja: "閑山島",
+    kind: "battlefield",
+    at: [128.47, 34.64],
+    station: false,
+  },
+  {
+    id: "noryang_sea",
+    name: "노량 해협",
+    hanja: "露梁",
+    kind: "battlefield",
+    at: [127.84, 34.67],
     station: false,
   },
 ];

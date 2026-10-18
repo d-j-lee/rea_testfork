@@ -440,14 +440,24 @@ export function generateMap(seed = "jangsaeng"): GameMap {
     }
   }
 
-  // 6. Provinces: Voronoi over anchors, with the Amnok–Duman border.
+  // 6. Provinces: Voronoi over the peninsula's anchors, cut by the Amnok–Duman
+  // border. Island provinces (제주, 대마도) own only their own landmass and
+  // the sea nearer to it than to other land, so their names never spill onto
+  // the peninsula's coast.
   const anchors = PROVINCE_ANCHORS.map((anchor) => ({
     province: anchor.province,
     ...lonLatToTile(anchor.at),
   }));
   const province = new Uint8Array(W * H);
+  const masses = landmasses(land, W, H);
+  const insular = islandProvinces(land, W, H, masses, islandShapes);
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
+      const island = insular[index(x, y)] ?? -1;
+      if (island >= 0) {
+        province[index(x, y)] = island;
+        continue;
+      }
       const [lon, lat] = tileToLonLat(x + 0.5, y + 0.5);
       const border = borderLatitude(lon);
       let chosen: Province;
@@ -497,6 +507,40 @@ export function generateMap(seed = "jangsaeng"): GameMap {
   }
   separateSites(sites, land, W, H);
   for (const site of sites) stampSite(site);
+  /**
+   * Moors a fleet to the peninsula: when no deck touches its walkable shore,
+   * lays a boat bridge (배다리) of deck three boats wide along the shortest
+   * water path to it, so a sea battle is reached on foot and fought across.
+   */
+  function moor(decks: readonly number[]) {
+    const size = W * H;
+    const shore = (i: number) => {
+      const info = TILE_INFO[tiles[i] as TileId];
+      return land[i] === 1 && masses.component[i] === masses.mainland && info.speed > 0 && !info.water;
+    };
+    const landing = (i: number) => neighbours4(i, W, size).some((j) => j >= 0 && shore(j));
+    if (decks.some(landing)) return;
+    const from = new Map<number, number>(decks.map((i) => [i, -1]));
+    const queue = [...decks];
+    for (let head = 0; head < queue.length; head++) {
+      const i = queue[head] as number;
+      for (const j of neighbours4(i, W, size)) {
+        if (j < 0 || land[j] || from.has(j)) continue;
+        from.set(j, i);
+        if (landing(j)) {
+          for (let k = j; k >= 0 && tiles[k] !== Tile.Deck; ) {
+            const back = from.get(k) ?? -1;
+            const side = Math.abs(k - back) === 1 ? W : 1;
+            for (const b of [k, k - side, k + side]) if (b >= 0 && b < size && !land[b]) tiles[b] = Tile.Deck;
+            k = back;
+          }
+          return;
+        }
+        queue.push(j);
+      }
+    }
+  }
+
   function stampSite(site: Site) {
     const { rect } = site;
     const naval = site.kind === "battlefield" && !land[index(site.x, site.y)];
@@ -505,10 +549,14 @@ export function generateMap(seed = "jangsaeng"): GameMap {
       // in even-aligned pairs so each hull renders two rows tall.
       const top = (rect.y + 1) % 2 === 0 ? rect.y + 1 : rect.y + 2;
       const rows = Math.max(2, Math.floor((rect.h - 2) / 2) * 2);
+      const decks: number[] = [];
       for (let y = top; y < top + rows; y++)
         for (let x = rect.x; x < rect.x + rect.w; x++)
-          if (x >= 0 && y >= 0 && x < W && y < H && !land[index(x, y)])
+          if (x >= 0 && y >= 0 && x < W && y < H && !land[index(x, y)]) {
             tiles[index(x, y)] = Tile.Deck;
+            decks.push(index(x, y));
+          }
+      moor(decks);
       if (!land[index(site.x, site.y)] && tiles[index(site.x, site.y)] !== Tile.Deck)
         site.y = top;
       return;
@@ -981,6 +1029,98 @@ function separateSites(sites: Site[], land: Uint8Array, width: number, height: n
     }
     placed.push(site);
   }
+}
+
+/** The four edge neighbours of tile i (−1 off the grid). */
+function neighbours4(i: number, width: number, size: number): readonly number[] {
+  const x = i % width;
+  return [x > 0 ? i - 1 : -1, x < width - 1 ? i + 1 : -1, i >= width ? i - width : -1, i + width < size ? i + width : -1];
+}
+
+interface Landmasses {
+  /** Landmass id per tile (4-neighbour land), −1 at sea. */
+  readonly component: Int32Array;
+  /** Id of the largest landmass: the peninsula and the continent. */
+  readonly mainland: number;
+}
+
+function landmasses(land: Uint8Array, width: number, height: number): Landmasses {
+  const size = width * height;
+  const component = new Int32Array(size).fill(-1);
+  const sizes: number[] = [];
+  const queue = new Int32Array(size);
+  for (let start = 0; start < size; start++) {
+    if (!land[start] || component[start] !== -1) continue;
+    const id = sizes.length;
+    let head = 0;
+    let tail = 0;
+    queue[tail++] = start;
+    component[start] = id;
+    while (head < tail)
+      for (const j of neighbours4(queue[head++] as number, width, size))
+        if (j >= 0 && land[j] && component[j] === -1) {
+          component[j] = id;
+          queue[tail++] = j;
+        }
+    sizes.push(tail);
+  }
+  return { component, mainland: sizes.indexOf(Math.max(...sizes)) };
+}
+
+/**
+ * PROVINCE_LIST index of island provinces per tile, −1 elsewhere. An island
+ * with a province claims its landmass, unless that is the mainland (the
+ * coarse coast merged it into the peninsula), and every sea tile whose
+ * nearest land is that landmass.
+ */
+function islandProvinces(
+  land: Uint8Array,
+  width: number,
+  height: number,
+  masses: Landmasses,
+  islands: readonly { cx: number; cy: number; rx: number; ry: number; province?: Province }[],
+): Int8Array {
+  const size = width * height;
+  const { component, mainland } = masses;
+  const queue = new Int32Array(size);
+  const owner = new Map<number, number>();
+  for (const island of islands) {
+    if (!island.province) continue;
+    // The island's land tile nearest its centre.
+    let best = -1;
+    let bestD = Infinity;
+    for (let y = Math.floor(island.cy - island.ry - 1); y <= Math.ceil(island.cy + island.ry + 1); y++)
+      for (let x = Math.floor(island.cx - island.rx - 1); x <= Math.ceil(island.cx + island.rx + 1); x++) {
+        if (x < 0 || y < 0 || x >= width || y >= height || !land[y * width + x]) continue;
+        const d = Math.hypot(x + 0.5 - island.cx, y + 0.5 - island.cy);
+        if (d < bestD) {
+          bestD = d;
+          best = y * width + x;
+        }
+      }
+    const landmass = best >= 0 ? (component[best] as number) : -1;
+    if (landmass >= 0 && landmass !== mainland) owner.set(landmass, PROVINCE_LIST.indexOf(island.province));
+  }
+  // Sea tiles take the landmass of their nearest land (breadth-first from every coast).
+  const nearest = new Int32Array(size).fill(-1);
+  let head = 0;
+  let tail = 0;
+  for (let i = 0; i < size; i++)
+    if (land[i]) {
+      nearest[i] = component[i] as number;
+      queue[tail++] = i;
+    }
+  while (head < tail) {
+    const i = queue[head++] as number;
+    for (const j of neighbours4(i, width, size))
+      if (j >= 0 && nearest[j] === -1) {
+        nearest[j] = nearest[i] as number;
+        queue[tail++] = j;
+      }
+  }
+  const out = new Int8Array(size).fill(-1);
+  for (let i = 0; i < size; i++) out[i] = owner.get(nearest[i] as number) ?? -1;
+  return out;
 }
 
 /** BFS distance (Chebyshev steps) from cells whose land value equals `target`. */

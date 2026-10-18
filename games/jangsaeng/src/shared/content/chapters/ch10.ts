@@ -233,7 +233,7 @@ export const ch10: ChapterDef = {
       id: "b_noryang",
       title: "노량 — 마지막 바다",
       subtitle: "1598.11.19 · 노량에서 관음포까지",
-      site: "noryang",
+      site: "noryang_sea",
       offset: [0, 0],
       radius: 7,
       kind: "deck",
