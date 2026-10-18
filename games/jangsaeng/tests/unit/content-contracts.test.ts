@@ -1,5 +1,6 @@
 // Contracts between content and the rules that read it: the body-variant
-// condition, the 유파 flags behind P3, and the 대체역사 tag on 나의 실록.
+// condition, the 유파 flags behind P3, the 의병 look and the 대체역사 tag on
+// 나의 실록.
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { CHAPTERS, CONTENT } from "../../src/shared/content/index.ts";
@@ -12,6 +13,7 @@ import {
   createSave,
   discipleGeneration,
   evalCond,
+  heroSprite,
   migrateSave,
 } from "../../src/shared/rules/index.ts";
 import type { BodyVariant } from "../../src/shared/sprites.ts";
@@ -115,4 +117,30 @@ test("counterfactual 실록 lines carry the 대체역사 tag through the save", 
   const start = real.chronicle.length;
   battleResult(CONTENT, real, battle("b_jeongjok"), true);
   for (const entry of real.chronicle.slice(start)) assert.equal(entry.alt, undefined, `real history: ${entry.text}`);
+});
+
+test("joining the 의병 dresses the hero as one until the chapter ends", () => {
+  const hero = save("m", "ch09");
+  assert.notEqual(heroSprite(hero), "hero_righteous");
+  applyEffects(CONTENT, hero, option("p_crossroads", "uibyeong").effects);
+  assert.equal(heroSprite(hero), "hero_righteous", "의병을 일으키다 (1592)");
+  advanceYears(CONTENT, hero, "ch10", { activities: [], offer: false });
+  assert.equal(hero.flags["righteous"], undefined, "a new chapter starts out of the 의병's clothes");
+  assert.notEqual(heroSprite(hero), "hero_righteous");
+
+  // Every other way the hero joins: the 승병, the 1895 의병 in both looks, 신돌석 and the 13도 창의군.
+  const joins: [string, string, keyof typeof CHAPTERS][] = [
+    ["p_crossroads", "monk", "ch09"],
+    ["p_uibyeong_1895", "keep", "ch15"],
+    ["p_uibyeong_1895", "cut", "ch15"],
+    ["p_uibyeong_1895", "keep_f", "ch15"],
+    ["p_uibyeong_1895", "reform_f", "ch15"],
+    ["p_sindolseok", "join", "ch16"],
+    ["p_heowi", "march", "ch16"],
+  ];
+  for (const [promptId, optionId, chapter] of joins) {
+    const joined = save("m", chapter);
+    applyEffects(CONTENT, joined, option(promptId, optionId).effects);
+    assert.equal(joined.flags["righteous"], true, `${promptId}.${optionId}`);
+  }
 });

@@ -38,6 +38,7 @@ export const BOSS = {
   enemy: "boss_wokou_captain",
   name: "아지발도",
   title: "왜구 소년 장수",
+  historical: true,
   level: 8,
   hpScale: 1,
   phases: [

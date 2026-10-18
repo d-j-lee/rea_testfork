@@ -111,6 +111,8 @@ export const ch16: ChapterDef = {
     { kind: "fact", text: "1896년 2월 고종이 러시아 공사관으로 옮겼다(아관파천). 1897년 10월 환구단에서 황제에 즉위하고 국호를 대한제국으로 정했다." },
     { kind: "fact", text: "독립협회는 1898년 만민공동회와 관민공동회로 이권 양여에 반대하고 의회 설립을 추진했으나 그해 12월 해산되었다." },
     { kind: "fact", text: "1904년 1월 국외 중립을 선언했으나 일본은 러일전쟁을 일으키고 서울을 점령한 채 한일의정서와 제1차 한일협약을 강요했다." },
+    { kind: "fact", text: "1905년 2월 일본은 독도를 시마네현에 편입한다고 고시했다. 대한제국은 1900년 칙령 제41호로 울도군이 석도를 관할하게 했고, 1906년 이 편입을 알고 부정하는 지령을 냈다." },
+    { kind: "interp", text: "칙령의 '석도'를 독도로 보는 것은 한국 정부의 공식 입장이며, 일본은 다르게 주장한다." },
     { kind: "fact", text: "1905년 11월 일본은 군대로 궁궐을 에워싼 채 외교권을 빼앗는 을사늑약을 강제했다. 고종은 비준하지 않았고 참정대신 한규설은 끝까지 반대했다." },
     { kind: "interp", text: "한국 학계와 정부는 을사늑약을 무효로 본다." },
     { kind: "fact", text: "1907년 고종이 강제로 물러나고 군대가 해산되었다. 해산 군인이 합류한 의병은 13도 창의군을 이루어 1908년 1월 서울 진공을 꾀했으나 실패했다." },
@@ -325,7 +327,7 @@ export const ch16: ChapterDef = {
     {
       id: "b_seoul_1904",
       title: "도성 문을 닫다",
-      subtitle: "1904.2 · [대체역사] 중립의 실력",
+      subtitle: "1904.2 · 중립의 실력",
       alt: true,
       site: "hanyang",
       offset: [-5, 1],
@@ -357,7 +359,7 @@ export const ch16: ChapterDef = {
     {
       id: "b_jungmyeong",
       title: "중명전 수호",
-      subtitle: "1905.11.17 · [대체역사] 경운궁",
+      subtitle: "1905.11.17 · 경운궁",
       alt: true,
       site: "hanyang",
       offset: [1, -4],
@@ -425,7 +427,7 @@ export const ch16: ChapterDef = {
     {
       id: "b_disband_alt",
       title: "훈련원의 무기고",
-      subtitle: "1907.8.1 · [대체역사] 군대 해산 저지",
+      subtitle: "1907.8.1 · 군대 해산 저지",
       alt: true,
       site: "hanyang",
       offset: [-1, 4],
@@ -499,7 +501,7 @@ export const ch16: ChapterDef = {
     {
       id: "b_seoul_full",
       title: "13도 창의군 서울 진공",
-      subtitle: "1908.1 · [대체역사] 동대문을 넘다",
+      subtitle: "1908.1 · 동대문을 넘다",
       alt: true,
       site: "hanyang",
       offset: [6, 1],
@@ -563,7 +565,7 @@ export const ch16: ChapterDef = {
         { k: "point", point: "honor", add: 20 },
         { k: "exp", add: 4200 },
         { k: "nation", key: "people", add: 3 },
-        { k: "chronicle", text: "1908년 1월, 동대문 밖에서 수비대를 깨뜨렸다. 그러나 성문까지는 닿지 못했다." },
+        { k: "chronicle", text: "1908년 1월, 동대문 밖 삼십 리에서 수비대 진지 하나를 뚫었다. 본대가 닿지 않아 성문까지는 가지 못했다." },
         { k: "prompt", prompt: "p_seoul_mid" },
       ],
       defeat: [{ k: "toast", text: "진지 앞에서 밀렸다. 깃발 아래 다시 모인다.", tone: "warn" }],
@@ -922,8 +924,8 @@ export const ch16: ChapterDef = {
       title: "문 앞에 멈춘 군대",
       style: "history",
       body: [
-        "[게임 속 대체역사] 일본군 선발대는 도성 밖에서 멈춰 섰다. 한일의정서는 맺어지지 않았다.",
-        "[사실] 실제 역사에서 일본군은 1904년 2월 서울을 점령하고 2월 23일 한일의정서를, 8월에 제1차 한일협약을 강요했다.",
+        "일본군 선발대는 도성 밖에서 멈춰 섰다. 한일의정서는 맺어지지 않았다.",
+        "실제 역사에서 일본군은 1904년 2월 서울을 점령하고 2월 23일 한일의정서를, 8월에 제1차 한일협약을 강요했다.",
         "전쟁은 만주에서 계속된다. 일본은 다른 길을 찾을 것이다.",
       ],
       options: [{ id: "go", text: "다음 해로.", effects: [{ k: "exp", add: 1000 }] }],
@@ -1031,7 +1033,7 @@ export const ch16: ChapterDef = {
         {
           id: "guard",
           text: "새벽까지 이 문을 지키겠습니다.",
-          hint: "[대체역사] 중명전 수호 방어전 · 승리 시 B12b",
+          hint: "중명전 수호 방어전 · 승리 시 B12b",
           effects: [
             { k: "point", point: "honor", add: 5 },
             { k: "flag", flag: "ch16_jungmyeong_open" },
@@ -1066,8 +1068,8 @@ export const ch16: ChapterDef = {
       title: "도장이 찍히지 않은 새벽",
       style: "history",
       body: [
-        "[게임 속 대체역사] 대신들은 끝내 끌려 나오지 않았다. 조약은 성립하지 않았다.",
-        "[사실] 실제 역사에서는 11월 18일 새벽 을사늑약이 강제로 성립했고, 1906년 2월 통감부가 설치되었다.",
+        "대신들은 끝내 끌려 나오지 않았다. 조약은 성립하지 않았다.",
+        "실제 역사에서는 11월 18일 새벽 을사늑약이 강제로 성립했고, 1906년 2월 통감부가 설치되었다.",
         "막은 것은 하룻밤이다. 일본의 압박은 차관과 고문과 군대의 모습으로 다시 올 것이다.",
       ],
       options: [{ id: "go", text: "다음 해를 준비한다.", effects: [{ k: "exp", add: 1200 }] }],
@@ -1081,7 +1083,15 @@ export const ch16: ChapterDef = {
         "영해와 평해의 골짜기를 우리는 눈 감고도 다니오. 일본군 수비대가 산을 오르면 산이 그들을 먹을 것이오.",
       ],
       options: [
-        { id: "join", text: "함께 싸우겠소.", hint: "의병 총애 ▲", effects: [{ k: "favor", faction: "uibyeong", add: 10 }] },
+        {
+          id: "join",
+          text: "함께 싸우겠소.",
+          hint: "의병 총애 ▲",
+          effects: [
+            { k: "flag", flag: "righteous" },
+            { k: "favor", faction: "uibyeong", add: 10 },
+          ],
+        },
       ],
     },
     {
@@ -1089,9 +1099,9 @@ export const ch16: ChapterDef = {
       title: "1906년의 압박",
       style: "history",
       body: [
-        "[게임 속 대체역사] 늑약이 없는 대한제국에 일본은 차관을 들이밀고, 군대를 국경 너머에 세워 두었다.",
+        "늑약이 없는 대한제국에 일본은 차관을 들이밀고, 군대를 국경 너머에 세워 두었다.",
         "의병들은 해산하지 않았다. 고을마다 훈련하는 장정이 늘었다.",
-        "[사실] 실제 역사에서는 이 무렵 을사의병이 일어나 민종식·최익현·신돌석 등이 싸웠다.",
+        "실제 역사에서는 이 무렵 을사의병이 일어나 민종식·최익현·신돌석 등이 싸웠다.",
       ],
       options: [{ id: "go", text: "다음 해로.", effects: [{ k: "nation", key: "people", add: 2 }] }],
     },
@@ -1102,7 +1112,7 @@ export const ch16: ChapterDef = {
       body: [
         "1907년 정월, 대구 광문사에서 시작했소. 나라가 진 빚 1,300만 원을 백성이 모아 갚자는 것이오.",
         "사내들은 담배를 끊고, 아낙들은 가락지를 내놓소.",
-        "[사실] 실제 역사에서 이 빚은 통감부 시기 일본에서 들여온 차관이었다. 운동은 통감부의 방해로 좌절되었다.",
+        "(실제 역사에서 이 빚은 통감부 시기 일본에서 들여온 차관이었고, 운동은 통감부의 방해로 좌절되었다.)",
       ],
       options: [
         {
@@ -1155,7 +1165,7 @@ export const ch16: ChapterDef = {
         {
           id: "hold",
           text: "무기고를 지킵시다. 군대는 흩어지지 않습니다.",
-          hint: "[대체역사] 방어전 · 승리 + 민심 55 → B12c",
+          hint: "무기고 방어전 · 승리 + 민심 55 → B12c",
           effects: [{ k: "point", point: "honor", add: 5 }],
         },
       ],
@@ -1192,7 +1202,7 @@ export const ch16: ChapterDef = {
           id: "march",
           text: "가겠소. 닿을 수 있는 사람은 모두 데리고.",
           hint: "국운·분기에 따라 아군 규모가 3단계로 달라진다",
-          effects: [SEOUL_TIER],
+          effects: [{ k: "flag", flag: "righteous" }, SEOUL_TIER],
         },
       ],
     },
@@ -1201,8 +1211,8 @@ export const ch16: ChapterDef = {
       title: "동대문의 아침",
       style: "history",
       body: [
-        "[게임 속 대체역사] 해산되지 않은 군대와 13도의 의진이 같은 아침에 닿았다. 수비대는 용산으로 물러났다.",
-        "[사실] 실제 역사에서는 1908년 1월 허위의 선발대가 동대문 밖 30리까지 나아갔으나 본대가 제때 닿지 못해 밀려났다.",
+        "해산되지 않은 군대와 13도의 의진이 같은 아침에 닿았다. 수비대는 용산으로 물러났다.",
+        "실제 역사에서는 1908년 1월 허위의 선발대가 동대문 밖 30리까지 나아갔으나 본대가 제때 닿지 못해 밀려났다.",
         "오늘의 함성은 시작일 뿐이다. 이 나라를 노리는 뜻은 사라지지 않았다.",
       ],
       options: [{ id: "go", text: "깃발을 내려다본다.", effects: [{ k: "worldEvent", add: 40 }] }],
@@ -1212,8 +1222,8 @@ export const ch16: ChapterDef = {
       title: "삼십 리",
       style: "history",
       body: [
-        "동대문 밖에서 수비대를 깨뜨렸다. 그러나 다른 도의 의진은 끝내 고개를 넘지 못했다.",
-        "[사실] 실제 역사에서도 13도 창의군은 연락과 집결이 어긋나 서울에 닿지 못했다. 총대장 이인영은 부친상으로 고향에 돌아갔다.",
+        "당신과 함께 닿은 의진은 동대문 밖 삼십 리에서 수비대 진지 하나를 뚫었다. 그러나 다른 도의 의진은 끝내 고개를 넘지 못했다.",
+        "실제 역사에서도 13도 창의군은 연락과 집결이 어긋나 서울에 닿지 못했다. 총대장 이인영은 부친상으로 고향에 돌아갔다.",
         "당신이 이어 온 사람들만큼, 조금 더 멀리 갔다.",
       ],
       options: [{ id: "go", text: "물러나 다음 싸움을 준비한다.", effects: [{ k: "worldEvent", add: 25 }] }],
@@ -1261,7 +1271,8 @@ export const ch16: ChapterDef = {
       title: "1909년",
       style: "history",
       body: [
-        "[게임 속 대체역사] 통감부가 서지 않은 대한제국은 여전히 제 법정과 제 군대를 가졌다.",
+        "통감부가 서지 않은 대한제국은 여전히 제 법정과 제 군대를 가졌다.",
+        "실제 역사에서는 이해 7월 기유각서로 대한제국의 사법권과 감옥 사무가 일본에 넘어갔다.",
         "열강은 저울질을 계속한다. 국경 너머의 군대도 물러가지 않았다.",
         "해산되지 않은 군인과 옛 의병들이 새 군대의 뼈대가 되었다. 그러나 이 나라를 노리는 뜻은 사라지지 않았다.",
       ],
@@ -1306,7 +1317,7 @@ export const ch16: ChapterDef = {
     {
       id: "s3",
       year: 1898,
-      narration: ["1898년 3월, 종로 네거리. 공동 실록 '만민공동회와 국채보상' — 모인 사람과 연설이 지지를 쌓는다."],
+      narration: ["1898년 3월, 종로 네거리. 공동 실록 '백성의 공론' — 모인 사람과 연설이 지지를 쌓는다."],
       objectives: [
         { id: "o_b9_intro", text: "서재필을 만난다", kind: "talk", target: "seo_jaepil", site: "hanyang", offset: [-3, 2], prompt: "p_b9_intro" },
         { id: "o_yisangjae", text: "이상재와 이야기한다", kind: "talk", target: "yi_sangjae", site: "hanyang", offset: [-1, 3], optional: true, onComplete: [{ k: "worldEvent", add: 10 }] },
@@ -1356,7 +1367,7 @@ export const ch16: ChapterDef = {
       id: "s9",
       year: 1904,
       objectives: [
-        { id: "o_seoul_1904", text: "[대체역사] 도성 문을 지킨다 (70초)", kind: "battle", target: "b_seoul_1904", requires: ok("B11") },
+        { id: "o_seoul_1904", text: "도성 문을 지킨다 (70초)", kind: "battle", target: "b_seoul_1904", requires: ok("B11") },
         { id: "o_uijeongseo", solemn: true, text: "점령된 서울", kind: "prompt", target: "p_uijeongseo", requires: not(ok("B11")) },
       ],
     },
@@ -1365,7 +1376,7 @@ export const ch16: ChapterDef = {
       year: 1905,
       narration: [
         "1905년 2월, 일본은 독도를 시마네현에 편입한다고 고시했다. 대한제국은 1900년 칙령 제41호로 울도군이 석도를 관할하게 한 바 있으며, 1906년 이를 알고 부정하는 지령을 냈다.",
-        "[해석] 칙령의 '석도'를 독도로 보는 것은 한국 정부의 공식 입장이며, 일본은 다르게 주장한다.",
+        "칙령의 '석도'를 독도로 보는 것은 한국 정부의 공식 입장이며, 일본은 다르게 주장한다.",
         "여름, 열강 사이에 밀약의 소문이 돈다.",
       ],
       objectives: [
@@ -1389,7 +1400,7 @@ export const ch16: ChapterDef = {
       id: "s12",
       year: 1905,
       objectives: [
-        { id: "o_jungmyeong", text: "[대체역사] 새벽까지 중명전 회랑을 지킨다", kind: "battle", target: "b_jungmyeong", requires: { k: "flag", flag: "ch16_jungmyeong_open" } },
+        { id: "o_jungmyeong", text: "새벽까지 중명전 회랑을 지킨다", kind: "battle", target: "b_jungmyeong", requires: { k: "flag", flag: "ch16_jungmyeong_open" } },
       ],
     },
     {
@@ -1410,7 +1421,7 @@ export const ch16: ChapterDef = {
     {
       id: "s14",
       year: 1907,
-      narration: ["1907년 정월. 대구에서 나랏빚을 갚자는 소리가 일어났다. 의연금이 공동 실록 '만민공동회와 국채보상'에 더해진다."],
+      narration: ["1907년 정월. 대구에서 나랏빚을 갚자는 소리가 일어났다. 의연금이 공동 실록 '백성의 공론'에 더해진다."],
       objectives: [
         { id: "o_gukchae", text: "대구에서 서상돈을 만난다", kind: "talk", target: "seo_sangdon", site: "daegu", offset: [1, 1], prompt: "p_gukchae" },
       ],
@@ -1429,7 +1440,7 @@ export const ch16: ChapterDef = {
       year: 1907,
       narration: ["8월 1일 아침, 훈련원."],
       objectives: [
-        { id: "o_disband_alt", text: "[대체역사] 무기고를 지킨다 (80초)", kind: "battle", target: "b_disband_alt", requires: ok("B12b") },
+        { id: "o_disband_alt", text: "무기고를 지킨다 (80초)", kind: "battle", target: "b_disband_alt", requires: ok("B12b") },
         { id: "o_disband_hist", text: "남대문 일대에서 사람들이 빠져나갈 시간을 번다 (75초)", kind: "battle", target: "b_disband_hist", requires: not(ok("B12b")) },
       ],
     },
@@ -1466,8 +1477,8 @@ export const ch16: ChapterDef = {
     },
   ],
   worldEvent: {
-    title: "만민공동회와 국채보상",
-    desc: "만민공동회의 함성과 국채보상의 모금이 쌓인다. 서울 진공의 깃발 아래 모일 사람이 늘어난다.",
+    title: "백성의 공론",
+    desc: "백성이 스스로 모여 나라 일을 논하고 힘을 보탠다. 그 뜻이 쌓일수록 나라를 지키러 나설 사람이 늘어난다.",
     goal: 120,
   },
   companions: 12,

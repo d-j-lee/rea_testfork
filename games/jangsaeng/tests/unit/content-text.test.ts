@@ -3,9 +3,21 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { CHAPTERS, CONTENT } from "../../src/shared/content/index.ts";
-import { HISTORY_NOTE_KINDS, type Effect, type HistoryNote } from "../../src/shared/content/schema.ts";
+import { HISTORY_NOTE_KINDS, type Cond, type Effect, type HistoryNote } from "../../src/shared/content/schema.ts";
 
 const chapters = Object.values(CHAPTERS);
+
+/** Every table the player reads text from. */
+const PLAYER_TABLES = {
+  chapters: CHAPTERS,
+  endings: CONTENT.endings,
+  companions: CONTENT.companions,
+  enemies: CONTENT.enemies,
+  items: CONTENT.items,
+  skills: { ...CONTENT.skills, longevity: CONTENT.longevity },
+  origins: CONTENT.origins,
+  offices: CONTENT.offices,
+};
 
 /** Every string value under `value` with a path, for whole-table scans. */
 function* strings(value: unknown, path: string): Generator<[string, string]> {
@@ -60,9 +72,53 @@ test("the narrator calls the player 당신 in every chapter", () => {
 });
 
 test("dialogue carries no double quotes: speech is marked by the speaker, embedded speech by '…'", () => {
-  const tables = { chapters: CHAPTERS, endings: CONTENT.endings, companions: CONTENT.companions, items: CONTENT.items, skills: CONTENT.skills };
-  const offenders = [...strings(tables, "content")].filter(([, text]) => text.includes('"'));
+  const offenders = [...strings(PLAYER_TABLES, "content")].filter(([, text]) => text.includes('"'));
   assert.deepEqual(offenders, []);
+});
+
+/** A particle or ending that only continues a sentence: a '(' before one split a sentence in two. */
+const PAREN_MID_SENTENCE = /\((는|을|를|라는|이라는|라고|이라고|라며|하고|하며|며)(?=[\s,.!?…']|$)/;
+
+test("parenthesised narration starts a sentence, never mid-sentence", () => {
+  // ch05_policy once read '…장사하게 해 달라 (는 청이다. …)': the request turned into the speaker's own words.
+  const offenders = [...strings(PLAYER_TABLES, "content")].filter(([, text]) => PAREN_MID_SENTENCE.test(text));
+  assert.deepEqual(offenders, []);
+});
+
+/** A kind written into copy: history-note kinds and the 대체역사 marker. */
+const LABEL = /\[(게임 속 )?(대체역사|사실|해석|불확실|창작|원칙)\]/;
+
+test("no player-facing string carries a bracket label: kinds and the 대체역사 tag are data", () => {
+  // Note kinds are HistoryNote.kind; the 대체역사 tag comes from BattleDef.alt (banner and
+  // objective tracker) and ChronicleEntry.alt; a counterfactual card says '실제 역사에서' in words.
+  const offenders = [...strings(PLAYER_TABLES, "content")].filter(([, text]) => /^\s*\[/.test(text) || LABEL.test(text));
+  assert.deepEqual(offenders, []);
+});
+
+/** A won branch is required (directly or inside `all`); `not` turns it into the historical path. */
+function needsWonBranch(cond: Cond | undefined): boolean {
+  if (!cond) return false;
+  if (cond.k === "branch") return cond.ok !== false;
+  if (cond.k === "all") return cond.of.some(needsWonBranch);
+  return false;
+}
+
+test("a counterfactual history card sets the record beside the scene ('실제 역사에서 …')", () => {
+  let cards = 0;
+  for (const chapter of chapters) {
+    const counterfactual = new Set<string>();
+    for (const step of chapter.steps)
+      for (const objective of step.objectives)
+        if (objective.kind === "prompt" && objective.target && needsWonBranch(objective.requires)) counterfactual.add(objective.target);
+    for (const battle of chapter.battles)
+      if (battle.alt) for (const effect of walk(battle.victory)) if (effect.k === "prompt") counterfactual.add(effect.prompt);
+    for (const prompt of chapter.prompts) {
+      if (!counterfactual.has(prompt.id) || prompt.style !== "history") continue;
+      cards++;
+      assert.ok(prompt.body.some((line) => /^\(?실제 역사에서/.test(line)), `${chapter.id} ${prompt.id} '${prompt.title}' states what really happened`);
+    }
+  }
+  assert.ok(cards >= 10, `found ${cards} counterfactual cards`);
 });
 
 test("history notes carry their kind as data, one statement kind per line", () => {
@@ -70,11 +126,9 @@ test("history notes carry their kind as data, one statement kind per line", () =
     ...chapters.flatMap((chapter) => chapter.history.map((note): [string, HistoryNote] => [chapter.id, note])),
     ...CONTENT.endings.historyNote.map((note): [string, HistoryNote] => ["ending", note]),
   ];
-  for (const [where, note] of notes) {
+  // Labels written into the text are caught with every other string below.
+  for (const [where, note] of notes)
     assert.ok((HISTORY_NOTE_KINDS as readonly string[]).includes(note.kind), `${where}: kind ${note.kind}`);
-    assert.ok(!note.text.startsWith("["), `${where}: label prefix in '${note.text}'`);
-    assert.doesNotMatch(note.text, /\[(사실|해석|불확실|창작|원칙)\]/, `${where}: inline label in '${note.text}'`);
-  }
   for (const chapter of chapters) assert.ok(chapter.history.some((note) => note.kind === "fact"), `${chapter.id} has facts`);
   // The fixed disclaimer has one owner (client/ui/title.ts DISCLAIMER); the ending note does not repeat it.
   assert.ok(!CONTENT.endings.historyNote.some((note) => note.text.includes("대체역사 픽션입니다")));

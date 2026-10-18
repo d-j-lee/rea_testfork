@@ -474,6 +474,7 @@ export const ch09: ChapterDef = {
           hint: "민심 ▲ · 의병 원군 ▲ · 곽재우와 합류",
           effects: [
             { k: "flag", flag: "ch09_path", value: "uibyeong" },
+            { k: "flag", flag: "righteous" },
             { k: "nation", key: "people", add: 6 },
             { k: "favor", faction: "uibyeong", add: 20 },
             { k: "favor", faction: "bunjo", add: 10 },
@@ -488,6 +489,7 @@ export const ch09: ChapterDef = {
           lockedText: "출가 신분일 때만 고를 수 있다",
           effects: [
             { k: "flag", flag: "ch09_path", value: "monk" },
+            { k: "flag", flag: "righteous" },
             { k: "point", point: "virtue", add: 50 },
             { k: "favor", faction: "uibyeong", add: 15 },
             { k: "nation", key: "people", add: 4 },

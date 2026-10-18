@@ -448,7 +448,7 @@ export function advanceYears(content: ContentIndex, save: PlayerSave, next: Chap
   save.offeredThisChapter = 0;
   save.aligned = null;
   delete save.position;
-  for (const flag of ["freeReviveUsed", "vouch", "escaped"]) delete save.flags[flag];
+  for (const flag of ["freeReviveUsed", "vouch", "escaped", "righteous"]) delete save.flags[flag];
 
   // 10. Lifespan.
   if (pastLifeEnd(save)) lines.push(...successorTakeover(content, save));
