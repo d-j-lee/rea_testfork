@@ -2,14 +2,21 @@
 // belongs to (from the host's snapshot facts), the placement order, which
 // plates may be dropped in a crowd, and the placement pass itself.
 
-import type { EntitySnap } from "../../shared/types.ts";
+import type { EntitySnap, Marker } from "../../shared/types.ts";
 
 /**
  * Plate roles. Simulated companions (◇) share the "player" team with real
- * people in snapshots; the snapshot's `bot` flag sets them apart, and in a
+ * people in snapshots; their entity kind ("bot") sets them apart, and in a
  * crowd they give way like allies.
  */
 export type PlateRole = "self" | "player" | "boss" | "story" | "companion" | "ally" | "npc" | "enemy";
+
+/**
+ * The static snapshot facts a role reads. The marker is not one of them:
+ * the raw snapshot runs ahead of the render delay, so the caller passes the
+ * marker it draws this frame (EntityTrack.mk).
+ */
+type PlateFacts = Pick<EntitySnap, "k" | "tm" | "hist">;
 
 /** Placement order: lower places first and keeps its spot. */
 const PRIORITY: Readonly<Record<PlateRole, number>> = {
@@ -23,15 +30,15 @@ const PRIORITY: Readonly<Record<PlateRole, number>> = {
   enemy: 6,
 };
 
-export const MAX_NUDGES = 2;
+const MAX_NUDGES = 2;
 /** Companion and ally titles show only while at most this many are on screen. */
 export const PARTY_TITLES_MAX = 3;
 
-export function plateRole(snap: EntitySnap, isSelf: boolean): PlateRole {
-  if (isSelf || snap.tm === "self") return "self";
-  switch (snap.tm) {
+export function plateRole(facts: PlateFacts, marker: Marker | undefined, isSelf: boolean): PlateRole {
+  if (isSelf || facts.tm === "self") return "self";
+  switch (facts.tm) {
     case "player":
-      return snap.bot ? "companion" : "player";
+      return facts.k === "bot" ? "companion" : "player";
     case "boss":
       return "boss";
     case "enemy":
@@ -39,11 +46,9 @@ export function plateRole(snap: EntitySnap, isSelf: boolean): PlateRole {
     case "ally":
       return "ally";
     case "npc":
-      return snap.mk || snap.hist ? "story" : "npc";
+      return marker || facts.hist ? "story" : "npc";
   }
 }
-
-export const platePriority = (role: PlateRole): number => PRIORITY[role];
 
 /** Companions and allies: the party around the player, decluttered together. */
 export const isParty = (role: PlateRole): boolean => role === "companion" || role === "ally";
