@@ -1,7 +1,8 @@
 // Purge (숙청) risk and deterministic resolution, GDD §5.5.3:
 //   R = E × side + 0.4·max(0, favor[loser]) − 0.3·max(0, favor[winner])
 //     + 0.25·suspicion + 10·[rank ≥ 14] + 10·[renowned] − tact − protection
-//   side 0.3 (aligned = winner) | 1.0 (aligned = loser) | 0.6 otherwise
+//   side 0.3 (aligned = winner) | 1.0 (aligned = loser) | 0.6 otherwise, and always 0.6
+//   for an option that stays out of the event (spec.neutral)
 //   protection = min(15, 5 × 열전 bonds ≥ 60) + 5·[vouch]; R = clamp(round(R), 5, 95)
 //   roll = hashRoll(seed, spec.id); roll < R → purged, margin R − roll decides the outcome.
 import type { PurgeSpec } from "../content/schema.ts";
@@ -17,11 +18,20 @@ export interface PurgeTerm {
   value: number;
 }
 
-/** E multiplier by the side the player stands on (neutral included in "otherwise"). */
+/** E multiplier for standing with the winner, with the loser, or with neither (§5.5.3). */
+export const PURGE_SIDE = { winner: 0.3, loser: 1.0, neutral: 0.6 } as const;
+
+/**
+ * E multiplier by the side the player stands on in this event. A neutral
+ * option (`spec.neutral`) stays out of it: 0.6 even when an earlier choice in
+ * the chapter aligned the player with the winner or the loser. This is the
+ * only place `neutral` is read, so the 풍향계 preview and the roll agree.
+ */
 export function purgeSide(save: PlayerSave, spec: PurgeSpec): number {
-  if (save.aligned !== null && save.aligned === spec.winner) return 0.3;
-  if (save.aligned !== null && save.aligned === spec.loser) return 1.0;
-  return 0.6;
+  if (spec.neutral === true) return PURGE_SIDE.neutral;
+  if (save.aligned !== null && save.aligned === spec.winner) return PURGE_SIDE.winner;
+  if (save.aligned !== null && save.aligned === spec.loser) return PURGE_SIDE.loser;
+  return PURGE_SIDE.neutral;
 }
 
 /** 열전 bonds ≥ 60 (5 each, max 15) plus 동료 보증 (5). Family houses are not 열전. */
@@ -70,7 +80,7 @@ export interface PurgeResolution {
   risk: number;
   roll: number;
   verdict: PurgeVerdict;
-  /** Death-sentence crisis: the session must run the escape battle. */
+  /** Death-sentence crisis: the session must show the 사사 위기 card (flee or plead, §3.2). */
   escape: boolean;
   lines: Line[];
 }
@@ -106,8 +116,8 @@ export function resolvePurge(save: PlayerSave, spec: PurgeSpec): PurgeResolution
       lines.push(line(`유배 — 품계 −5 · 천수 −1년 · 다음 시대를 ${siteName(site)}에서 맞는다`, "bad"));
     } else {
       verdict = "sentenced";
-      chronicle(save, "사사(賜死)의 명이 내려지다. 추격을 뚫고 달아나야 한다.", "bad");
-      lines.push(line("사사의 명 — 추격대를 뚫고 탈출하라", "bad"));
+      chronicle(save, "사사(賜死)의 명이 내려지다.", "bad");
+      lines.push(line("사사의 명 — 담을 넘어 달아날지, 끝까지 결백을 주장할지 정해야 한다", "bad"));
     }
   }
   save.flags[`purge:${spec.id}`] = verdict;

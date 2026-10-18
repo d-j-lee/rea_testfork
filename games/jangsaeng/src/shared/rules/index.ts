@@ -11,7 +11,7 @@
 //   nation       nation meters, infiltration, carry-over, ending
 //   save/migrate new characters, demo presets, untrusted-save parsing
 export type { CreateOptions } from "./save.ts";
-export { createSave, REFORM_DRIFT, skillsUnlockedBy } from "./save.ts";
+export { createSave, demoStartIndex, REFORM_DRIFT, skillsUnlockedBy } from "./save.ts";
 export { migrateSave } from "./migrate.ts";
 
 export type { Derived } from "./progression.ts";
@@ -33,11 +33,11 @@ export {
 } from "./progression.ts";
 
 export type { EffectOutcome } from "./effects.ts";
-export { applyEffects, battleResult, evalCond, purgeRisk, purgeRiskShown } from "./effects.ts";
+export { applyEffects, battleResult, evalCond, HOLD_VICTORY_VIRTUE, purgeRisk, purgeRiskShown } from "./effects.ts";
 export { discipleGeneration, hashRoll, isRenowned, virtueEarned } from "./util.ts";
 
 export type { PurgeResolution, PurgeTerm, PurgeVerdict } from "./politics.ts";
-export { purgeProtection, purgeSide, purgeTerms } from "./politics.ts";
+export { PURGE_SIDE, purgeProtection, purgeSide, purgeTerms } from "./politics.ts";
 
 export type { UseResult } from "./lifespan.ts";
 export {
@@ -73,8 +73,11 @@ export type { ActivityDef, SmallEvent, SmallEventContext, YearsChoice } from "./
 export { ACTIVITIES, advanceYears, SMALL_EVENTS, advanceStepYear, smallEventAt, tokensBetween, yearsPlan } from "./years.ts";
 
 export {
+  BRANCH_CHAPTER,
   BRANCH_LABELS,
   carryNation,
+  chapterBranches,
+  closeChapterBranches,
   computeEnding,
   finalInfiltration,
   INFILTRATION_WEIGHTS,

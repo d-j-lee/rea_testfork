@@ -7,7 +7,7 @@ import type { EndingResult, PlayerSave } from "../types.ts";
 import { clamp, discipleGeneration, nationName, numberFlag, virtueEarned } from "./util.ts";
 
 export const BRANCH_LABELS: Readonly<Record<BranchId, string>> = {
-  B1: "장용영 유지 (1800)",
+  B1: "장용영 유지 (1802)",
   B2: "삼정 개혁 유지 (1862)",
   B3: "주체적 개항 교섭 (1866~75)",
   B4: "강화도조약 조항 (1876)",
@@ -22,6 +22,19 @@ export const BRANCH_LABELS: Readonly<Record<BranchId, string>> = {
   B12b: "중명전 수호 (1905)",
   B12c: "군대 해산 저지 (1907)",
 };
+
+/** The chapter whose story decides each branch (GDD §3.5). */
+export const BRANCH_CHAPTER: Readonly<Record<BranchId, ChapterId>> = {
+  B1: "ch13", B2: "ch13",
+  B3: "ch14", B4: "ch14",
+  B5: "ch15", B6: "ch15", B7: "ch15", B8: "ch15",
+  B9: "ch16", B10: "ch16", B11: "ch16", B12a: "ch16", B12b: "ch16", B12c: "ch16",
+};
+
+/** Branches decided in `chapter`, in id order. */
+export function chapterBranches(chapter: ChapterId): BranchId[] {
+  return BRANCH_IDS.filter((id) => BRANCH_CHAPTER[id] === chapter);
+}
 
 /** Infiltration added by each branch that did not succeed (all failed = 100). */
 export const INFILTRATION_WEIGHTS: Readonly<Partial<Record<BranchId, number>>> = {
@@ -67,6 +80,15 @@ export function setBranch(save: PlayerSave, id: BranchId, ok: boolean): void {
     save.infiltration = clamp(save.infiltration - weight, 0, 100);
     delete save.flags[flag];
   }
+}
+
+/**
+ * A chapter that is over leaves no branch undecided: each one it owns that
+ * was never resolved fails now, so save.infiltration already holds what
+ * finalInfiltration will charge for it at the ending.
+ */
+export function closeChapterBranches(save: PlayerSave, chapter: ChapterId): void {
+  for (const id of chapterBranches(chapter)) if (save.branches[id] === undefined) setBranch(save, id, false);
 }
 
 /**

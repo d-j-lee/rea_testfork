@@ -1,12 +1,12 @@
 // New characters and demo-mode chapter presets.
 import type { ContentIndex } from "../content/index.ts";
-import type { BranchId, ChapterDef, ChapterId, NationKey, OriginDef, OriginId, StatKey, WashMethod } from "../content/schema.ts";
+import type { ChapterDef, ChapterId, Effect, NationKey, ObjectiveDef, OriginDef, OriginId, StatKey, WashMethod } from "../content/schema.ts";
 import { CHAPTER_IDS, NATION_KEYS, POINT_KEYS, STAT_KEYS } from "../content/schema.ts";
 import type { BodyVariant } from "../sprites.ts";
 import { AWAKENING_AGE, AWAKENING_YEAR, BASE_LIFESPAN, SAVE_VERSION, type DemoPath, type PlayerSave } from "../types.ts";
 import { apparentAge, suggestName } from "./identity.ts";
-import { meritSubjectTitle } from "./effects.ts";
-import { setBranch, setLongFlag } from "./nation.ts";
+import { applyEffects, battleResult, evalCond, meritSubjectTitle, type EffectOutcome } from "./effects.ts";
+import { chapterBranches, closeChapterBranches, setBranch, setLongFlag } from "./nation.ts";
 import { DEFAULT_ARMOR, DEFAULT_WEAPON, eraGear, LEVEL_CAP, SKILL_SLOTS } from "./progression.ts";
 import { clamp, FAMILY_BONDS } from "./util.ts";
 
@@ -31,21 +31,24 @@ export const DEMO_LIFE_AHEAD = 60;
 export const REFORM_DRIFT = 16;
 
 /**
- * What a well-played run has won by the end of each chapter (reform demo
- * path): branches, long flags (§5.6.3) and story flags later chapters read.
+ * What a well-played run holds besides its won branches by the end of each
+ * chapter (reform demo path): long flags (§5.6.3) and the story flags later
+ * chapters read. Every branch an earlier chapter owns counts as won
+ * (nation.ts BRANCH_CHAPTER).
  */
 const REFORM_GAINS: readonly {
   chapter: ChapterId;
-  branches?: readonly BranchId[];
   longFlags?: readonly (readonly [flag: string, key: NationKey, add: number])[];
   flags?: readonly string[];
 }[] = [
   { chapter: "ch09", longFlags: [["hullyeon_dogam", "defense", 3]] },
   { chapter: "ch11", longFlags: [["sokhwan", "people", 2]] },
-  { chapter: "ch12", longFlags: [["jeonggye_record", "diplomacy", 1]] },
-  { chapter: "ch13", branches: ["B1", "B2"], longFlags: [["jangyongyeong", "defense", 8], ["samjeong", "finance", 3]] },
-  { chapter: "ch14", branches: ["B3", "B4"], longFlags: [["b4_clauses", "finance", 3]] },
-  { chapter: "ch15", branches: ["B5", "B6", "B7", "B8"], longFlags: [["neutral_policy", "diplomacy", 3]], flags: ["ch15_geojung"] },
+  // 세손 맹세 opens ch13's oath; 정계비 기록 opens ch16's 1909 간도 option.
+  { chapter: "ch12", longFlags: [["jeonggye_record", "diplomacy", 1]], flags: ["ch12_vow_seson", "ch12_jeonggye_record"] },
+  { chapter: "ch13", longFlags: [["jangyongyeong", "defense", 8], ["samjeong", "finance", 3]] },
+  // 체불 장부 prepares ch15's B5 audit.
+  { chapter: "ch14", longFlags: [["b4_clauses", "finance", 3]], flags: ["ch14_pay_gap_noted"] },
+  { chapter: "ch15", longFlags: [["neutral_policy", "diplomacy", 3]], flags: ["ch15_geojung"] },
 ];
 /** Demo preset rank by chapter order (ch04 = 정3품 당상 2등 공신). */
 const DEMO_RANK: readonly number[] = [0, 2, 5, 14, 12, 13, 10, 11, 12, 13, 12, 11, 12, 13, 14, 15];
@@ -150,8 +153,15 @@ function demoWashYears(startYear: number): number[] {
   return years;
 }
 
+/** Index of the step a demo of this chapter starts at (ChapterDef.demoStart, else the first). */
+export function demoStartIndex(chapter: ChapterDef): number {
+  if (chapter.demoStart === undefined) return 0;
+  return Math.max(0, chapter.steps.findIndex((step) => step.id === chapter.demoStart));
+}
+
 function applyDemoPreset(content: ContentIndex, save: PlayerSave, chapter: ChapterDef, path: DemoPath): void {
   const order = chapter.order;
+  const entry = demoStartIndex(chapter);
   const level = Math.max(1, Math.min(LEVEL_CAP, chapter.level[0]));
   save.demo = true;
   save.level = level;
@@ -180,7 +190,7 @@ function applyDemoPreset(content: ContentIndex, save: PlayerSave, chapter: Chapt
   // §3.5: lifespan = chapter start + 60 (never below the natural 1861 track).
   save.lifeEnd = Math.max(START_LIFE_END + 4 * (order - 1), chapter.years[0] + DEMO_LIFE_AHEAD);
   save.record.lifeGained = save.lifeEnd - START_LIFE_END;
-  save.year = chapter.years[0];
+  save.year = entry > 0 ? (chapter.steps[entry]?.year ?? chapter.years[0]) : chapter.years[0];
   save.chapter = chapter.id;
   save.step = 0;
 
@@ -194,7 +204,7 @@ function applyDemoPreset(content: ContentIndex, save: PlayerSave, chapter: Chapt
   save.skillSlots = save.skills.slice(-SKILL_SLOTS);
   save.nation = { ...chapter.hist };
   save.infiltration = 0;
-  if (path === "reform") applyReformHistory(save, chapter);
+  applyEarlierChapters(save, chapter, path);
   if (chapter.ruling) save.favor[chapter.ruling] = Math.max(save.favor[chapter.ruling] ?? 0, 20);
   if (order >= 3) for (const family of FAMILY_BONDS) save.bonds[family] = Math.min(48, 4 * order);
 
@@ -218,19 +228,101 @@ function applyDemoPreset(content: ContentIndex, save: PlayerSave, chapter: Chapt
     save.name = playerName;
     save.record.washes = washYears.length;
   }
+  playSkippedSteps(content, save, chapter, entry);
   save.suspicion = DEMO_SUSPICION;
   const pathNote = path === "reform" ? ", 개혁 누적 경로" : "";
   save.chronicle.push({ year: save.year, text: `시연 모드로 「${chapter.title}」에서 시작하다 (${save.year}년${pathNote}).`, tone: "info" });
 }
 
-/** Reform path: every earlier chapter won its branches and passed on the best carry-over. */
-function applyReformHistory(save: PlayerSave, chapter: ChapterDef): void {
+/**
+ * The earlier chapters the path assumes. History: every branch they own
+ * failed, as it did, so save.infiltration already holds what the ending
+ * charges. Reform: every one of them won, with the best carry-over and the
+ * long and story flags a well-played run holds.
+ */
+function applyEarlierChapters(save: PlayerSave, chapter: ChapterDef, path: DemoPath): void {
+  const earlier = CHAPTER_IDS.slice(0, CHAPTER_IDS.indexOf(chapter.id));
+  if (path !== "reform") {
+    for (const id of earlier) closeChapterBranches(save, id);
+    return;
+  }
   for (const key of NATION_KEYS) save.nation[key] = clamp(chapter.hist[key] + REFORM_DRIFT, 0, 100);
-  const order = CHAPTER_IDS.indexOf(chapter.id);
+  for (const id of earlier) for (const branch of chapterBranches(id)) setBranch(save, branch, true);
   for (const gain of REFORM_GAINS) {
-    if (CHAPTER_IDS.indexOf(gain.chapter) >= order) continue;
-    for (const branch of gain.branches ?? []) setBranch(save, branch, true);
+    if (!earlier.includes(gain.chapter)) continue;
     for (const [flag, key, add] of gain.longFlags ?? []) setLongFlag(save, flag, key, add);
     for (const flag of gain.flags ?? []) save.flags[flag] = true;
   }
+}
+
+/** Upper bound on objectives resolved per skipped step (guards malformed content). */
+const SKIP_STEP_BUDGET = 64;
+
+/**
+ * Plays the steps before ChapterDef.demoStart the way 건너뛰기 resolves them:
+ * every visible required objective in order, the first enabled option of each
+ * card it opens, every battle won. The save keeps what that skip run leaves
+ * behind (branches, nation, flags, chronicle); the cards are never shown. A
+ * death-sentence crisis is not played here: the session owns that card.
+ */
+function playSkippedSteps(content: ContentIndex, save: PlayerSave, chapter: ChapterDef, entry: number): void {
+  if (entry === 0) return;
+  const entryYear = save.year;
+  const objectivesOf = (step: number): readonly ObjectiveDef[] => chapter.steps[step]?.objectives ?? [];
+  const done = (objective: ObjectiveDef): boolean => (save.objectives[objective.id] ?? 0) >= (objective.count ?? 1);
+  const visible = (step: number): ObjectiveDef[] =>
+    objectivesOf(step).filter((objective) => evalCond(content, save, objective.requires));
+
+  const follow = (step: number, out: EffectOutcome): void => {
+    for (const id of out.objectives) complete(step, id);
+    for (const id of out.prompts) choose(step, id);
+    for (const id of out.battles) win(step, id);
+  };
+  const run = (step: number, effects: readonly Effect[]): void => {
+    if (effects.length > 0) follow(step, applyEffects(content, save, effects));
+  };
+  const complete = (step: number, id: string): void => {
+    const objective = objectivesOf(step).find((candidate) => candidate.id === id);
+    if (!objective || done(objective)) return;
+    save.objectives[id] = objective.count ?? 1;
+    run(step, objective.onComplete ?? []);
+  };
+  const opening = new Set<string>();
+  const choose = (step: number, promptId: string): void => {
+    const prompt = chapter.prompts.find((candidate) => candidate.id === promptId);
+    const option = prompt?.options.find((candidate) => evalCond(content, save, candidate.requires));
+    // A card that reopens itself (malformed content) is resolved once per chain.
+    if (!prompt || !option || opening.has(prompt.id)) return;
+    if (!save.promptsDone.includes(prompt.id)) save.promptsDone.push(prompt.id);
+    opening.add(prompt.id);
+    run(step, option.effects);
+    opening.delete(prompt.id);
+  };
+  const win = (step: number, battleId: string): void => {
+    const battle = chapter.battles.find((candidate) => candidate.id === battleId);
+    if (!battle) return;
+    follow(step, battleResult(content, save, battle, true));
+    for (const objective of visible(step))
+      if (objective.kind === "battle" && objective.target === battleId) complete(step, objective.id);
+  };
+
+  for (let step = 0; step < entry; step++) {
+    const def = chapter.steps[step];
+    if (!def) break;
+    save.step = step;
+    save.year = def.year;
+    save.objectives = {};
+    run(step, def.onEnter ?? []);
+    for (let budget = SKIP_STEP_BUDGET; budget > 0; budget--) {
+      const next = visible(step).find((objective) => !objective.optional && !done(objective));
+      if (!next) break;
+      const prompt = next.kind === "talk" ? next.prompt : next.kind === "prompt" ? next.target : undefined;
+      if (prompt) choose(step, prompt);
+      else if (next.kind === "battle" && next.target) win(step, next.target);
+      complete(step, next.id);
+    }
+  }
+  save.step = entry;
+  save.year = entryYear;
+  save.objectives = {};
 }
