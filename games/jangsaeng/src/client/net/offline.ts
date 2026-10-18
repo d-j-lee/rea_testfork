@@ -7,12 +7,9 @@ import { createGameHost } from "../../shared/host/host.ts";
 import type { GameHost, ProfileStore } from "../../shared/host/api.ts";
 import type { PlayerSave } from "../../shared/types.ts";
 import { connectLoopback, type Transport } from "./transport.ts";
-import { readJson, readKey, removeKey, writeKey } from "./storage.ts";
+import { isRecord, readJson, readKey, removeKey, writeKey } from "../storage.ts";
 
 export type SessionMode = "offline" | "online";
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
 
 // ── Profile store ───────────────────────────────────────────────────────────
 

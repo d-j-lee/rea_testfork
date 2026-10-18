@@ -116,23 +116,6 @@ export function formatSeconds(sec: number): string {
   return `${m}:${String(s % 60).padStart(2, "0")}`;
 }
 
-/** Safe localStorage access (private windows, blocked storage). */
-export function storageGet(key: string): string | null {
-  try {
-    return window.localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
-
-export function storageSet(key: string, value: string): void {
-  try {
-    window.localStorage.setItem(key, value);
-  } catch {
-    /* storage unavailable: settings stay per-session */
-  }
-}
-
 /** Resolves after `ms`, or immediately when reduced motion is on. */
 export function wait(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
