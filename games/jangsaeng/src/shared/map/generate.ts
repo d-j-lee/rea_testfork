@@ -440,14 +440,23 @@ export function generateMap(seed = "jangsaeng"): GameMap {
     }
   }
 
-  // 6. Provinces: Voronoi over anchors, with the Amnok–Duman border.
+  // 6. Provinces: Voronoi over the peninsula's anchors, cut by the Amnok–Duman
+  // border. Island provinces (제주, 대마도) own only their own landmass and
+  // the sea nearer to it than to other land, so their names never spill onto
+  // the peninsula's coast.
   const anchors = PROVINCE_ANCHORS.map((anchor) => ({
     province: anchor.province,
     ...lonLatToTile(anchor.at),
   }));
   const province = new Uint8Array(W * H);
+  const insular = islandProvinces(land, W, H, islandShapes);
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
+      const island = insular[index(x, y)] ?? -1;
+      if (island >= 0) {
+        province[index(x, y)] = island;
+        continue;
+      }
       const [lon, lat] = tileToLonLat(x + 0.5, y + 0.5);
       const border = borderLatitude(lon);
       let chosen: Province;
@@ -981,6 +990,82 @@ function separateSites(sites: Site[], land: Uint8Array, width: number, height: n
     }
     placed.push(site);
   }
+}
+
+/**
+ * PROVINCE_LIST index of island provinces per tile, −1 elsewhere. An island
+ * with a province claims its connected landmass (4-neighbour land), unless
+ * that landmass is the largest one (the coarse coast merged it into the
+ * peninsula), and every sea tile whose nearest land is that landmass.
+ */
+function islandProvinces(
+  land: Uint8Array,
+  width: number,
+  height: number,
+  islands: readonly { cx: number; cy: number; rx: number; ry: number; province?: Province }[],
+): Int8Array {
+  const size = width * height;
+  const component = new Int32Array(size).fill(-1);
+  const sizes: number[] = [];
+  const queue = new Int32Array(size);
+  const neighbours = (i: number): number[] => {
+    const x = i % width;
+    return [x > 0 ? i - 1 : -1, x < width - 1 ? i + 1 : -1, i >= width ? i - width : -1, i + width < size ? i + width : -1];
+  };
+  for (let start = 0; start < size; start++) {
+    if (!land[start] || component[start] !== -1) continue;
+    const id = sizes.length;
+    let head = 0;
+    let tail = 0;
+    queue[tail++] = start;
+    component[start] = id;
+    while (head < tail)
+      for (const j of neighbours(queue[head++] as number))
+        if (j >= 0 && land[j] && component[j] === -1) {
+          component[j] = id;
+          queue[tail++] = j;
+        }
+    sizes.push(tail);
+  }
+  const mainland = sizes.indexOf(Math.max(...sizes));
+  const owner = new Map<number, number>();
+  for (const island of islands) {
+    if (!island.province) continue;
+    // The island's land tile nearest its centre.
+    let best = -1;
+    let bestD = Infinity;
+    for (let y = Math.floor(island.cy - island.ry - 1); y <= Math.ceil(island.cy + island.ry + 1); y++)
+      for (let x = Math.floor(island.cx - island.rx - 1); x <= Math.ceil(island.cx + island.rx + 1); x++) {
+        if (x < 0 || y < 0 || x >= width || y >= height || !land[y * width + x]) continue;
+        const d = Math.hypot(x + 0.5 - island.cx, y + 0.5 - island.cy);
+        if (d < bestD) {
+          bestD = d;
+          best = y * width + x;
+        }
+      }
+    const landmass = best >= 0 ? (component[best] as number) : -1;
+    if (landmass >= 0 && landmass !== mainland) owner.set(landmass, PROVINCE_LIST.indexOf(island.province));
+  }
+  // Sea tiles take the landmass of their nearest land (breadth-first from every coast).
+  const nearest = new Int32Array(size).fill(-1);
+  let head = 0;
+  let tail = 0;
+  for (let i = 0; i < size; i++)
+    if (land[i]) {
+      nearest[i] = component[i] as number;
+      queue[tail++] = i;
+    }
+  while (head < tail) {
+    const i = queue[head++] as number;
+    for (const j of neighbours(i))
+      if (j >= 0 && nearest[j] === -1) {
+        nearest[j] = nearest[i] as number;
+        queue[tail++] = j;
+      }
+  }
+  const out = new Int8Array(size).fill(-1);
+  for (let i = 0; i < size; i++) out[i] = owner.get(nearest[i] as number) ?? -1;
+  return out;
 }
 
 /** BFS distance (Chebyshev steps) from cells whose land value equals `target`. */
