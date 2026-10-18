@@ -27,10 +27,16 @@ function restart(hash: "#new" | "#demo"): void {
   window.location.reload();
 }
 
+/** One decimal with a true minus sign: the host settles every row and the score to 0.1. */
+function tenth(value: number, plus = false): string {
+  const sign = value < 0 ? "−" : plus && value > 0 ? "+" : "";
+  return `${sign}${Math.abs(value).toFixed(1)}`;
+}
+
 export function endingScreen(e: EndingView): HTMLElement {
-  // The host settles the score; the rows explain it and are never re-summed
-  // here (rounded rows can disagree with the settled score by a tenth).
-  const score = e.score.toFixed(1);
+  // The host settles the score as the sum of the rows, all at 0.1, so the rows
+  // shown here add up to it; the score is never re-summed on the client.
+  const score = tenth(e.score);
   const record = RECORD_LABELS.filter(([k]) => k !== "turncoat" || e.record.turncoat > 0).map(([k, label]) =>
     h("li", null, h("b", null, String(e.record[k])), h("span", null, label)));
   const chron = e.chronicle.length > 14
@@ -57,7 +63,7 @@ export function endingScreen(e: EndingView): HTMLElement {
           h("caption", { class: "sr-only" }, "판정 내역"),
           h("tbody", null,
             ...e.breakdown.map((b) =>
-              h("tr", { class: b.value < 0 ? "neg" : "" }, h("th", { scope: "row" }, b.label), h("td", null, b.value > 0 ? `+${b.value.toFixed(1)}` : b.value.toFixed(1)))),
+              h("tr", { class: b.value < 0 ? "neg" : "" }, h("th", { scope: "row" }, b.label), h("td", null, tenth(b.value, true)))),
             h("tr", { class: "sum" }, h("th", { scope: "row" }, "합계"), h("td", null, score))))),
       h("section", { class: "end-grid" },
         h("div", null,

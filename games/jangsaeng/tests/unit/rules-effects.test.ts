@@ -268,6 +268,7 @@ test("winning a 방어·생존형 battle the first time grants 공덕 +30 (§5.3
     assert.equal(save.points.virtue, virtue + 30, kind);
     assert.equal(virtueEarned(save), earned + 30, `${kind}: counts toward cumulative virtue`);
     assert.ok(texts(out.lines).includes("지켜 낸 싸움 — 공덕 +30"), kind);
+    assert.deepEqual(out.toasts, [{ text: "지켜 낸 싸움 — 공덕 +30", tone: "good" }], `${kind}: shown on the field, which has no result card`);
     battleResult(FIXTURE, save, battle(kind), true);
     assert.equal(save.points.virtue, virtue + 30, `${kind}: once per battle`);
     battleResult(FIXTURE, save, battle(kind), false);

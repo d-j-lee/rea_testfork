@@ -2,9 +2,9 @@
 // must be valid (else null); every other field is type-checked, clamped to
 // its range and defaulted when missing or malformed. Never throws.
 import type { ContentIndex } from "../content/index.ts";
-import type { BranchId, ChapterId, FlagValue, IdentityKind, NationKey, StatKey } from "../content/schema.ts";
+import type { BranchId, ChapterDef, ChapterId, FlagValue, IdentityKind, NationKey, StatKey } from "../content/schema.ts";
 import { BRANCH_IDS, CHAPTER_IDS, NATION_KEYS, POINT_KEYS, STAT_KEYS } from "../content/schema.ts";
-import type { ChronicleEntry, EndingResult, IdentityRecord, PlayerSave } from "../types.ts";
+import type { ChronicleEntry, EndingResult, IdentityRecord, PendingStory, PlayerSave } from "../types.ts";
 import { SAVE_VERSION } from "../types.ts";
 import { ensureEquipment, LEVEL_CAP, RANK_CAP, SKILL_SLOTS, STAT_CAP } from "./progression.ts";
 import { createSave } from "./save.ts";
@@ -104,6 +104,31 @@ function parseEnding(value: unknown): EndingResult | undefined {
     }
   }
   return { nation, personal: personal as EndingResult["personal"], score: value.score, breakdown };
+}
+
+const PENDING_KINDS: readonly PendingStory["kind"][] = ["prompt", "escape", "battle"];
+const MAX_PENDING = 64;
+
+/**
+ * The story the session still owes, in order: each entry must name a card or
+ * battle of the save's chapter (an escape names `<chapter>:<year>` of that
+ * chapter); unknown or repeated entries are dropped.
+ */
+function parsePending(value: unknown, chapter: ChapterDef): PendingStory[] {
+  if (!Array.isArray(value)) return [];
+  const out: PendingStory[] = [];
+  for (const entry of value.slice(0, MAX_PENDING)) {
+    if (!isRecord(entry) || typeof entry.kind !== "string" || !(PENDING_KINDS as readonly string[]).includes(entry.kind)) continue;
+    const kind = entry.kind as PendingStory["kind"];
+    const id = text(entry.id, 96);
+    if (!id || out.some((known) => known.kind === kind && known.id === id)) continue;
+    const known =
+      kind === "prompt" ? chapter.prompts.some((prompt) => prompt.id === id)
+        : kind === "battle" ? chapter.battles.some((battle) => battle.id === id)
+          : new RegExp(`^${chapter.id}:\\d{1,4}$`).test(id);
+    if (known) out.push({ kind, id });
+  }
+  return out;
 }
 
 function parseFlags(value: unknown): Record<string, FlagValue> {
@@ -213,6 +238,9 @@ function parse(content: ContentIndex, raw: unknown): PlayerSave | null {
   save.step = num(raw.step, 0, 0, chapterDef.steps.length);
   save.year = num(raw.year, chapterDef.years[0], 1361, 3000);
   save.objectives = numberRecord(raw.objectives, 0, BIG);
+  save.pending = parsePending(raw.pending, chapterDef);
+  const demoEntry = text(raw.demoEntry, 64);
+  if (save.demo && demoEntry && chapterDef.steps.some((step, index) => index > 0 && step.id === demoEntry)) save.demoEntry = demoEntry;
   save.promptsDone = stringList(raw.promptsDone, 96);
   save.battlesWon = stringList(raw.battlesWon, 96);
   const exile = text(raw.exile, 64);

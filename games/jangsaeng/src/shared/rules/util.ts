@@ -147,6 +147,15 @@ export function gainVirtue(save: PlayerSave, amount: number): number {
   return gained;
 }
 
+/** Grants `amount` virtue while this chapter's counter flag `<kind>:<chapter>` is under `cap`; returns what was granted. */
+export function chapterVirtue(save: PlayerSave, kind: string, cap: number, amount: number): number {
+  const flag = `${kind}:${save.chapter}`;
+  const count = numberFlag(save, flag);
+  if (count >= cap) return 0;
+  save.flags[flag] = count + 1;
+  return gainVirtue(save, amount);
+}
+
 /** This identity has publicly won renown (공신 책록 or a great battle): exposure +0.4. */
 export function isRenowned(save: PlayerSave): boolean {
   return flagTruthy(save.flags["renowned"]);

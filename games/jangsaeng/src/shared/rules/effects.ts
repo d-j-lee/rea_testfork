@@ -383,10 +383,14 @@ export function applyEffectsInto(content: ContentIndex, save: PlayerSave, effect
 /**
  * Purge risk R (5..95) for `spec`. With an option's effects (`preview`) it is
  * the R that option's purge will roll against: the effects before that purge
- * run on a clone, the purge itself never resolves there, and a check that
- * guards it is walked on the side that reaches it. So the 풍향계 equals the
- * 숙청 판정 line and never reveals a hidden verdict. Without a purge on the
- * option's path, R after all its effects.
+ * run on a clone and the purge itself never resolves there. A check with the
+ * purge on exactly one side (success or failure) is walked on that side
+ * without its roll, so the preview shows no hidden verdict; that walk sets no
+ * `check:<id>` flag. Two shapes would break this and content must not use
+ * them (tests/unit/rules-politics.test.ts guards both): a check with the purge
+ * on both sides (its roll runs on the clone, so R could give the verdict
+ * away), and a `check:` flag read on the way to a guarded purge (the preview
+ * reads it unset). Without a purge on the option's path, R after all its effects.
  */
 export function purgeRisk(content: ContentIndex, save: PlayerSave, spec: PurgeSpec, preview?: readonly Effect[]): number {
   if (!preview || preview.length === 0) return computePurgeRisk(save, spec);
@@ -429,7 +433,10 @@ export function battleResult(content: ContentIndex, save: PlayerSave, battle: Ba
   }
   if (battle.kind === "defend" || battle.kind === "survive") {
     const gained = gainVirtue(save, HOLD_VICTORY_VIRTUE);
-    out.lines.push(line(`지켜 낸 싸움 — ${pointName("virtue")} ${signed(gained)}`, "good"));
+    const text = `지켜 낸 싸움 — ${pointName("virtue")} ${signed(gained)}`;
+    out.lines.push(line(text, "good"));
+    // Shown as it happens: the field has no result card.
+    out.toasts.push({ text, tone: "good" });
   }
   applyList(content, save, battle.victory, out, 0);
   return out;

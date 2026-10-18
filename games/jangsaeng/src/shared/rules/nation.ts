@@ -4,7 +4,7 @@ import type { ContentIndex } from "../content/index.ts";
 import type { BranchId, ChapterId, NationKey, NationMeter } from "../content/schema.ts";
 import { BRANCH_IDS, NATION_KEYS } from "../content/schema.ts";
 import type { EndingResult, PlayerSave } from "../types.ts";
-import { clamp, discipleGeneration, nationName, numberFlag, virtueEarned } from "./util.ts";
+import { chapterVirtue, clamp, discipleGeneration, nationName, numberFlag, round1, virtueEarned } from "./util.ts";
 
 export const BRANCH_LABELS: Readonly<Record<BranchId, string>> = {
   B1: "장용영 유지 (1802)",
@@ -45,6 +45,9 @@ export const INFILTRATION_WEIGHTS: Readonly<Partial<Record<BranchId, number>>> =
 export const INFILTRATION_FROM_ORDER = 14;
 /** 공동 실록 bonus P (flag `zeitgeist`), capped at +5. */
 export const ZEITGEIST_MAX = 5;
+/** Taking part in a completed 공동 실록: +40 공덕, at most twice per chapter. */
+export const WORLD_EVENT_VIRTUE = 40;
+export const WORLD_EVENT_VIRTUE_PER_CHAPTER = 2;
 export const P3_BONDS = 6;
 export const P3_GENERATION = 3;
 export const P2_VIRTUE = 2500;
@@ -129,6 +132,25 @@ export function setLongFlag(save: PlayerSave, flag: string, key: NationKey, add:
 }
 
 /**
+ * The channel's 공동 실록 completed with this save in it (§3.8): 시대정신 +1 once
+ * per chapter (flag `zeitgeist`, capped at ZEITGEIST_MAX) and 공덕 +40 at most
+ * twice per chapter. Returns what was actually granted (0 where a cap held).
+ */
+export function completeWorldEvent(save: PlayerSave): { zeitgeist: number; virtue: number } {
+  const counted = `zeitgeist:${save.chapter}`;
+  let zeitgeist = 0;
+  if (save.flags[counted] !== true) {
+    save.flags[counted] = true;
+    const before = numberFlag(save, "zeitgeist");
+    const after = Math.min(ZEITGEIST_MAX, before + 1);
+    save.flags["zeitgeist"] = after;
+    zeitgeist = after - before;
+  }
+  const virtue = chapterVirtue(save, "worldEventVirtue", WORLD_EVENT_VIRTUE_PER_CHAPTER, WORLD_EVENT_VIRTUE);
+  return { zeitgeist, virtue };
+}
+
+/**
  * §5.6.2: d = end − hist[c] − F; start = hist[c+1] + clamp(0.8·d, −20, 20) + F,
  * where F is the long-flag sum, so flags are a fixed bonus and never compound.
  * Returns the carried values without mutating the save.
@@ -161,32 +183,23 @@ export function finalInfiltration(save: PlayerSave): number {
   return clamp(save.infiltration + uncountedWeight(save, (state) => state !== true), 0, 100);
 }
 
-function round2(value: number): number {
-  return Math.round(value * 100) / 100;
-}
-
+/**
+ * The 1910 settlement (§8). Every breakdown row is settled to 0.1, the
+ * precision the ending shows, and the score is exactly their sum: the rows on
+ * the screen always add up to the score the endings were judged on.
+ */
 export function computeEnding(content: ContentIndex, save: PlayerSave): EndingResult {
   void content;
   const breakdown: EndingResult["breakdown"] = [];
-  let score = 0;
-  for (const [key, weight] of WEIGHTS) {
-    const value = round2(save.nation[key] * weight);
-    breakdown.push({ label: `${nationName(key)} ${save.nation[key]} × ${weight}`, value });
-    score += value;
-  }
+  const row = (label: string, value: number) => breakdown.push({ label, value: round1(value) });
+  for (const [key, weight] of WEIGHTS) row(`${nationName(key)} ${save.nation[key]} × ${weight}`, save.nation[key] * weight);
   const succeeded = BRANCH_IDS.filter((id) => save.branches[id] === true).length;
-  breakdown.push({ label: `분기 성공 ${succeeded}개 × 3`, value: 3 * succeeded });
-  score += 3 * succeeded;
+  row(`분기 성공 ${succeeded}개 × 3`, 3 * succeeded);
   const infiltration = finalInfiltration(save);
-  const infiltrationTerm = round2(-0.3 * infiltration);
-  breakdown.push({ label: `침투도 ${infiltration} × −0.3`, value: infiltrationTerm });
-  score += infiltrationTerm;
+  row(`침투도 ${infiltration} × −0.3`, -0.3 * infiltration);
   const zeitgeist = clamp(numberFlag(save, "zeitgeist"), 0, ZEITGEIST_MAX);
-  if (zeitgeist > 0) {
-    breakdown.push({ label: "시대정신 보너스", value: zeitgeist });
-    score += zeitgeist;
-  }
-  score = round2(score);
+  if (zeitgeist > 0) row("시대정신 보너스", zeitgeist);
+  const score = round1(breakdown.reduce((sum, entry) => sum + entry.value, 0));
 
   // §8.2: N1 needs the 중명전 defence (B12b) and the army kept (B12c).
   const ok = (id: BranchId) => save.branches[id] === true;

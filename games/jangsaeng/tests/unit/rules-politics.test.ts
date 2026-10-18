@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { CONTENT } from "../../src/shared/content/index.ts";
-import { CHAPTER_IDS, type Effect, type PurgeSpec } from "../../src/shared/content/schema.ts";
+import { CHAPTER_IDS, type Cond, type Effect, type PurgeSpec } from "../../src/shared/content/schema.ts";
 import {
   applyEffects,
   createSave,
@@ -171,8 +171,9 @@ test("preview walks a guarding check on the side that reaches the purge, without
   assert.equal(outcomes.size, 2, "both check outcomes were exercised");
 });
 
-test("every shipped purge option: the 풍향계 equals the R its purge rolls", () => {
+test("every shipped purge option: the 풍향계 equals the R its purge rolls; a neutral one rolls at side 0.6", () => {
   let compared = 0;
+  let neutral = 0;
   for (const chapter of CHAPTER_IDS) {
     for (const prompt of CONTENT.chapters[chapter].prompts) {
       for (const option of prompt.options) {
@@ -180,8 +181,15 @@ test("every shipped purge option: the 풍향계 equals the R its purge rolls", (
         for (let seed = 1; seed <= 12; seed++) {
           const save = createSave(CONTENT, { token: "t", name: "강휘", variant: "m", origin: "northeast", seed, demoChapter: chapter });
           save.stats.wit = 30;
-          // An earlier align in the chapter must not change what a neutral option rolls.
+          // Every third seed carries a stale alignment with the loser from an earlier card of the chapter.
           if (seed % 3 === 0) save.aligned = option.risk.loser;
+          if (option.risk.neutral) {
+            // Standing aside rolls at 0.6 whatever is aligned; with the stale loser alignment, only that rule keeps it off 1.0.
+            assert.equal(purgeSide(save, option.risk), 0.6, `${prompt.id}/${option.id} seed ${seed}: neutral side`);
+            if (option.risk.loser && save.aligned === option.risk.loser)
+              assert.equal(purgeSide(save, { ...option.risk, neutral: false }), 1.0, `${prompt.id}/${option.id}: the loser's side without the rule`);
+            neutral++;
+          }
           const shown = purgeRiskShown(CONTENT, save, option.risk, option.effects);
           const real = JSON.parse(JSON.stringify(save)) as PlayerSave;
           const rolled = rolledRisk(applyEffects(CONTENT, real, option.effects).lines);
@@ -193,6 +201,70 @@ test("every shipped purge option: the 풍향계 equals the R its purge rolls", (
     }
   }
   assert.ok(compared > 300, `compared ${compared} rolls`);
+  assert.ok(neutral >= 24, `checked ${neutral} neutral stances`);
+});
+
+/** Purge ids reachable from an effect list (through checks and ifs). */
+function purgesIn(effects: readonly Effect[]): string[] {
+  return effects.flatMap((effect) =>
+    effect.k === "purge" ? [effect.spec.id]
+      : effect.k === "check" ? [...purgesIn(effect.success), ...purgesIn(effect.failure)]
+        : effect.k === "if" ? [...purgesIn(effect.then), ...purgesIn(effect.else ?? [])]
+          : []);
+}
+
+/** Flags a condition reads. */
+function condFlags(cond: Cond | undefined): string[] {
+  if (!cond) return [];
+  if (cond.k === "flag") return [cond.flag];
+  if (cond.k === "all" || cond.k === "any") return cond.of.flatMap(condFlags);
+  if (cond.k === "not") return condFlags(cond.of);
+  return [];
+}
+
+/** Flags read by `if` conditions anywhere in an effect list. */
+function flagsRead(effects: readonly Effect[]): string[] {
+  return effects.flatMap((effect) =>
+    effect.k === "if" ? [...condFlags(effect.cond), ...flagsRead(effect.then), ...flagsRead(effect.else ?? [])]
+      : effect.k === "check" ? [...flagsRead(effect.success), ...flagsRead(effect.failure)]
+        : []);
+}
+
+test("shipped content keeps to the shapes the 풍향계 preview is exact for", () => {
+  let guarded = 0;
+  for (const chapter of CHAPTER_IDS) {
+    const def = CONTENT.chapters[chapter];
+    const lists: [string, readonly Effect[]][] = [
+      ...def.prompts.flatMap((prompt) => prompt.options.map((option): [string, readonly Effect[]] => [`${prompt.id}/${option.id}`, option.effects])),
+      ...def.battles.flatMap((battle): [string, readonly Effect[]][] => [[`${battle.id}:victory`, battle.victory], [`${battle.id}:defeat`, battle.defeat]]),
+      ...def.steps.flatMap((step) => [
+        [`${step.id}:enter`, step.onEnter ?? []] as [string, readonly Effect[]],
+        ...step.objectives.map((objective): [string, readonly Effect[]] => [`${step.id}/${objective.id}`, objective.onComplete ?? []]),
+      ]),
+    ];
+    for (const [where, effects] of lists) {
+      const visit = (list: readonly Effect[]): void => {
+        for (const effect of list) {
+          if (effect.k === "check") {
+            const both = purgesIn(effect.success).filter((id) => purgesIn(effect.failure).includes(id));
+            assert.deepEqual(both, [], `${chapter} ${where}: check ${effect.id} has the same purge on both sides`);
+            if (purgesIn([effect]).length > 0) {
+              guarded++;
+              const checkFlags = flagsRead(effects).filter((flag) => flag.startsWith("check:"));
+              assert.deepEqual(checkFlags, [], `${chapter} ${where}: a guarded purge's option reads check flags`);
+            }
+            visit(effect.success);
+            visit(effect.failure);
+          } else if (effect.k === "if") {
+            visit(effect.then);
+            visit(effect.else ?? []);
+          }
+        }
+      };
+      visit(effects);
+    }
+  }
+  assert.ok(guarded >= 1, `found ${guarded} guarded purges (ch13 연판장)`);
 });
 
 test("풍향계: exact with 지략 ≥ 30, else a stable ±10 blur", () => {

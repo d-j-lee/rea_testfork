@@ -304,23 +304,64 @@ test("suspicion 70–89 at a transition flags an inquiry; ≥ 90 forces a wash",
   assert.equal(exposed.flags["inquiry"], undefined);
 });
 
-test("offering and the last grace (next chapter from 1776)", () => {
+test("offering and the last grace (next chapter from 1776), each on its own word", () => {
   const save = ending("ch12");
   save.lifeEnd = 1850;
   save.points.virtue = 350;
   save.points.fame = 30;
-  assert.equal(yearsPlan(FIXTURE, save, "ch13").canOffer, 13);
-  const lines = go(save, "ch13", { activities: ["train"], offer: true });
+  const plan = yearsPlan(FIXTURE, save, "ch13");
+  assert.equal(plan.canOffer, 3, "the offering alone");
+  assert.equal(plan.graceYears, 10, "the grace is offered beside it");
+  const lines = go(save, "ch13", { activities: ["train"], offer: true, grace: true });
   assert.equal(save.lifeEnd, 1863);
   assert.equal(save.graceUsed, true);
-  assert.equal(save.points.virtue, 0, "grace consumes all remaining virtue");
+  assert.equal(save.points.virtue, 0, "grace consumes all virtue the offering left");
   assert.equal(save.points.fame, 20);
   assert.ok(lines.some((text) => text.startsWith("노인성의 마지막 은혜")));
 
   const before = ending("ch11");
   before.lifeEnd = 1850;
   before.points.virtue = 300;
-  assert.equal(yearsPlan(FIXTURE, before, "ch12").canOffer, 3, "ch12 starts 1659: no grace yet");
+  const early = yearsPlan(FIXTURE, before, "ch12");
+  assert.equal(early.canOffer, 3);
+  assert.equal(early.graceYears, undefined, "ch12 starts 1659: no grace yet");
+  go(before, "ch12", { activities: ["train"], grace: true });
+  assert.equal(before.graceUsed, false, "asking early takes nothing");
+});
+
+test("the suggested plan into a chapter from 1776 offers virtue but never spends the last grace", () => {
+  const save = ending("ch12");
+  save.lifeEnd = 1850;
+  save.points.virtue = 350;
+  save.points.fame = 30;
+  const plan = yearsPlan(FIXTURE, save, "ch13");
+  assert.equal(plan.suggested.offer, true, "the offering adds years, so it is suggested");
+  assert.equal(plan.graceYears, 10);
+  const lines = go(save, "ch13", plan.suggested);
+  assert.equal(save.graceUsed, false, "the grace stays for when the player asks");
+  assert.equal(save.lifeEnd, 1853, "only the offering's three years");
+  assert.equal(save.points.virtue, 50);
+  assert.equal(save.points.fame, 30);
+  assert.ok(!lines.some((text) => text.startsWith("노인성의 마지막 은혜")));
+  // Nothing to offer: the suggestion has no offering, and the grace still waits.
+  const poor = ending("ch12");
+  poor.lifeEnd = 1850;
+  poor.points.virtue = 40;
+  const bare = yearsPlan(FIXTURE, poor, "ch13");
+  assert.deepEqual([bare.canOffer, bare.suggested.offer, bare.graceYears], [0, false, 10]);
+});
+
+test("leaving a chapter fails its undecided branches before the carry-over", () => {
+  const save = ending("ch14");
+  save.branches.B3 = true;
+  assert.equal(save.infiltration, 0);
+  const lines = go(save, "ch15", { activities: ["train"] });
+  assert.deepEqual([save.branches.B3, save.branches.B4], [true, false], "B4 was never decided: it failed");
+  assert.equal(save.infiltration, 15, "CH15 carries B4's weight, as the ending will charge it");
+  assert.ok(lines.length > 0);
+  const early = ending("ch13");
+  go(early, "ch14", { activities: ["train"] });
+  assert.deepEqual([early.branches.B1, early.branches.B2], [false, false]);
 });
 
 test("passing lifeEnd hands the run to a successor", () => {
@@ -424,7 +465,7 @@ test("yearsPlan: the tokens span the era in consecutive spans, with matching cop
   assert.ok(late.spans.every((span) => span.to - span.from >= 20));
 });
 
-test("yearsPlan suggests the first open activity and the offering whenever it adds years", () => {
+test("yearsPlan suggests the first open activity and the offering whenever the offering adds years", () => {
   const poor = at(newSave(), "ch04", 1418);
   const plan = yearsPlan(FIXTURE, poor, "ch05");
   assert.deepEqual(plan.suggested, { activities: ["train", "train"], offer: false });
