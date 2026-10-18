@@ -15,6 +15,7 @@ import {
   hostile,
   later,
   playAnim,
+  r6,
   sound,
   telegraph,
   type Actor,
@@ -195,7 +196,7 @@ export function useSkill(sim: Sim, a: Actor, slot: number, aim: Aim | null): voi
       const range = def.range ?? 10;
       const d = aimDir(sim, a, aim, range);
       face(a, d.x, d.y);
-      p.cast = { k: "aim", fireAt: t + 1.2, dx: d.x, dy: d.y, range, coef: def.coef };
+      p.cast = { k: "aim", fireAt: r6(t + 1.2), dx: d.x, dy: d.y, range, coef: def.coef };
       telegraph(sim, { shape: "line", x: a.x, y: a.y, tx: a.x + d.x * range, ty: a.y + d.y * range, ms: 1200 });
       playAnim(sim, a, "cast", t + 1.2);
       return;

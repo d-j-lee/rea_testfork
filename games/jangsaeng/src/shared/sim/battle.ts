@@ -230,7 +230,7 @@ function spawnWave(sim: Sim, b: BattleRuntime, index: number): void {
         a.en.state = "alert";
         a.en.alertUntil = sim.time + 0.3;
         a.markUntil = sim.time + 0.9;
-        a.en.target = b.participants[k % Math.max(1, b.participants.length)] ?? b.starter;
+        a.en.target = b.defendId >= 0 ? b.defendId : (b.participants[k % Math.max(1, b.participants.length)] ?? b.starter);
       }
       w.ids.push(a.id);
       b.enemies.push(a.id);

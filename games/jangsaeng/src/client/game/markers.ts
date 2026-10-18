@@ -4,7 +4,7 @@
 
 import { TILE_PX } from "../../shared/sprites.ts";
 import type { BattleView, ObjectiveView } from "../../shared/types.ts";
-import { drawNamePlate } from "../render/overlays.ts";
+import { drawNamePlate, type NamePlateOptions } from "../render/overlays.ts";
 import { OBANG } from "../render/palette.ts";
 import type { CameraRig } from "./camera.ts";
 import { disc, ring } from "./fx.ts";
@@ -51,7 +51,9 @@ export function drawBattleRing(ctx: CanvasRenderingContext2D, battle: BattleView
 }
 
 /** Pulsing red ellipse and 사경 label around a downed body (ground point). */
-export function drawDownedRing(ctx: CanvasRenderingContext2D, x: number, y: number, timeMs: number): void {
+const downedPlate: NamePlateOptions = { color: "#ff7a68", small: true };
+
+export function drawDownedRing(ctx: CanvasRenderingContext2D, x: number, y: number, timeMs: number, unit: number): void {
   const pulse = 0.5 + 0.5 * Math.sin(timeMs / 180);
   const cx = Math.round(x);
   const cy = Math.round(y);
@@ -76,7 +78,8 @@ export function drawDownedRing(ctx: CanvasRenderingContext2D, x: number, y: numb
   }
   ctx.fill();
   ctx.globalAlpha = prev;
-  drawNamePlate(ctx, "사경", x, y - 12, { color: "#ff7a68", small: true });
+  downedPlate.pixelRatio = unit;
+  drawNamePlate(ctx, "사경", x, y - 12, downedPlate);
 }
 
 let chevron: HTMLCanvasElement | null = null;

@@ -4,7 +4,7 @@
 import type { AudioEngine } from "../audio/types.ts";
 import { creationPanel } from "./creation.ts";
 import { demoPanel } from "./demo.ts";
-import { button, focusFirst, h, type Child } from "./dom.ts";
+import { h, type Child } from "./dom.ts";
 import type { TitleChoice, TitleOptions } from "./index.ts";
 import { paperPanel, seal, segmented } from "./panel.ts";
 import { pitchPanel } from "./pitch.ts";
@@ -69,7 +69,8 @@ export function createTitle(
     audio.sfx("ui_open");
     host.replaceChildren(panel);
     el.classList.add("sub-open");
-    focusFirst(panel);
+    panel.tabIndex = -1;
+    panel.focus({ preventScroll: true });
   };
   const back = () => {
     audio.sfx("ui_close");
@@ -115,8 +116,8 @@ export function createTitle(
   const renderModeNote = () => {
     modeNote.textContent =
       mode === "offline"
-        ? "다른 실제 플레이어 없이, ◇ 시뮬레이션 동료가 마당을 채웁니다."
-        : "서버에 접속해 같은 시대의 장생인과 한 마당에서 만납니다.";
+        ? "실제 플레이어 없이 ◇ 시뮬레이션 동료와 함께"
+        : "같은 시대의 장생인과 한 마당에서";
   };
   renderModeNote();
   const modeSeg = segmented(
@@ -142,7 +143,7 @@ export function createTitle(
   const logo = h(
     "div",
     { class: "logo" },
-    h("h1", { class: "logo-hanja", "aria-label": "장생 오백년" }, h("span", null, "長"), h("span", null, "生")),
+    h("h1", { class: "logo-hanja", "aria-label": "장생 오백년" }, "長生"),
     h("div", { class: "logo-side" },
       seal("五百年", "logo-seal"),
       h("p", { class: "logo-hangul" }, "장생"),

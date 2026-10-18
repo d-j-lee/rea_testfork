@@ -152,7 +152,8 @@ function think(sim: Sim, a: Actor, e: EnemyData): void {
     return;
   }
   const sight = e.battle ? 40 : e.def.sight;
-  let tgt = validTarget(sim, a, e, e.target);
+  const guarding = e.battle && (sim.battle?.defendId ?? -1) >= 0;
+  let tgt = guarding ? null : validTarget(sim, a, e, e.target);
   if (!tgt) tgt = pickTarget(sim, a, e, e.state === "idle" ? sight : sight * 1.5);
   else if (e.token === 0 && !e.boss && !e.battle) {
     const d = Math.hypot(tgt.x - a.x, tgt.y - a.y);
@@ -255,6 +256,17 @@ function melee(sim: Sim, a: Actor, e: EnemyData, tgt: Actor, d: number, speed: n
     const ang = Math.atan2(a.y - tgt.y, a.x - tgt.x) + e.flank * 0.35;
     const ring = 2.6 + (a.id % 3) * 0.35;
     steer(sim, a, tgt.x + Math.cos(ang) * ring, tgt.y + Math.sin(ang) * ring, speed * 0.8, dt, 0.15, false);
+    return;
+  }
+  if (b === "charger" && t >= e.nextSpecialAt && d < 2.5) {
+    // Too close to charge: wheel away to build a run-up.
+    const side = a.id % 2 === 0 ? 1 : -1;
+    const ux = (a.x - tgt.x) / (d || 1);
+    const uy = (a.y - tgt.y) / (d || 1);
+    e.goalX = tgt.x + ux * 4.5 - uy * side * 1.5;
+    e.goalY = tgt.y + uy * 4.5 + ux * side * 1.5;
+    e.goalUntil = t + 1.2;
+    e.state = "reposition";
     return;
   }
   if (lunger(e) && t >= e.nextSpecialAt && e.los) {

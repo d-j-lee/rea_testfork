@@ -22,7 +22,8 @@ export interface ChannelServices {
 }
 
 const FX_RADIUS = 30;
-const SNAP_EVERY = 2;
+/** Snapshot cadence in ticks: 20 Hz in-page (free), 10 Hz over the network. */
+const SNAP_EVERY = { offline: 1, online: 2 } as const;
 
 export class Channel {
   readonly key: string;
@@ -294,7 +295,7 @@ export class Channel {
     this.world.tick(dt);
     const fx = this.world.drainFx();
     if (fx.length) this.#sendFx(fx);
-    if (this.#ticks % SNAP_EVERY === 0)
+    if (this.#ticks % SNAP_EVERY[this.#services.mode] === 0)
       for (const session of this.sessions.values()) {
         const snap = this.world.snapshotFor(session.id);
         session.send({ t: "snap", tick: this.#ticks, ents: snap.ents, gone: snap.gone });

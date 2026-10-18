@@ -53,7 +53,15 @@ function actor(a: Omit<Actor, "animStart" | "home" | "d" | "a"> & { d?: Dir; a?:
   return { d: "down", a: "idle", animStart: 0, home: { x: a.x, y: a.y }, ...a };
 }
 
-export function createMockHost(): GameHost {
+export interface MockOptions {
+  /** Extra wandering townsfolk (load test). */
+  crowd?: number;
+  weather?: ChapterView["weather"];
+  hour?: number;
+}
+
+export function createMockHost(options: MockOptions = {}): GameHost {
+  const chapter: ChapterView = { ...CHAPTER, weather: options.weather ?? CHAPTER.weather, hour: options.hour ?? CHAPTER.hour };
   let send: ((m: ServerMsg) => void) | null = null;
   let tick = 0;
   let started = -1;
@@ -75,6 +83,21 @@ export function createMockHost(): GameHost {
     actor({ id: 21, k: "prop", s: "campfire", tm: "npc", x: CX + 6.0, y: CY + 3.0, hp: 100 }),
     actor({ id: 22, k: "prop", s: "banner", tm: "npc", x: CX - 3.0, y: CY - 3.0, hp: 100 }),
   ];
+  const folk: CharacterSprite[] = ["commoner_m", "commoner_f", "farmer", "merchant", "child", "monk", "soldier_joseon", "scholar"];
+  for (let i = 0; i < (options.crowd ?? 0); i++)
+    actors.push(
+      actor({
+        id: 100 + i,
+        k: i % 3 === 0 ? "bot" : "npc",
+        s: folk[i % folk.length] as CharacterSprite,
+        tm: i % 3 === 0 ? "player" : "npc",
+        x: CX - 9 + ((i * 7.3) % 18),
+        y: CY - 6 + ((i * 3.7) % 12),
+        hp: 100,
+        n: i % 3 === 0 ? `동료${i}` : undefined,
+        a: "walk",
+      }),
+    );
   const byId = new Map(actors.map((a) => [a.id, a]));
   const at = (id: number) => byId.get(id) as Actor;
 
@@ -197,6 +220,13 @@ export function createMockHost(): GameHost {
       } else if (a.a === "hurt" && now - a.animStart > 260) setAnim(a, "idle", now);
       else if (a.a === "idle" && a.hp > 0) a.x += (a.home.x - a.x) * 0.1;
     }
+    for (const a of actors) {
+      if (a.id < 100) continue;
+      const k = a.id * 0.37 + t * 0.6;
+      a.x = a.home.x + Math.sin(k) * 1.5;
+      a.y = a.home.y + Math.cos(k * 0.7) * 0.8;
+      a.d = Math.cos(k) > 0 ? "right" : "left";
+    }
     for (const id of [5, 2]) {
       const a = at(id);
       if ((a.a === "shoot" || a.a === "attack") && now - a.animStart > 420) setAnim(a, "idle", now);
@@ -230,7 +260,7 @@ export function createMockHost(): GameHost {
           started = performance.now();
           last = started;
           emit({ t: "welcome", v: 1, token: "preview", mode: "offline", seed: "jangsaeng", motd: "", resumed: false });
-          emit({ t: "enter", you: 1, chapter: CHAPTER, channel: "preview" });
+          emit({ t: "enter", you: 1, chapter, channel: "preview" });
           emit({ t: "self", self: selfView() });
         },
         close() {

@@ -20,6 +20,7 @@ export class StatusCard {
     h("span", { class: "life-past" }), h("span", { class: "life-left" }), h("span", { class: "life-gap" }),
     h("span", { class: "life-goal", title: `${FINAL_YEAR}년` }));
   readonly #warn = h("p", { class: "st-warn", role: "status" });
+  readonly #short = h("span", { class: "st-short" });
   readonly #susp = meter("meter-susp");
   readonly #suspBand = h("span", { class: "susp-band" });
   readonly #rank = h("span", { class: "st-rank-text" });
@@ -44,7 +45,7 @@ export class StatusCard {
         h("div", { class: "bar-row" }, h("span", { class: "bar-label" }, "기력"), this.#en.root),
         h("div", { class: "bar-row" }, h("span", { class: "bar-label" }, "지구력"), this.#st.root)),
       this.#time,
-      h("div", { class: "st-life" }, h("span", { class: "st-k" }, "천수"), this.#lifeText, this.#lifeTrack),
+      h("div", { class: "st-life" }, h("span", { class: "st-k" }, "천수"), h("span", { class: "st-life-line" }, this.#lifeText, this.#short), this.#lifeTrack),
       this.#warn,
       h("div", { class: "st-susp" },
         h("span", { class: "st-k" }, h("span", { class: "eye", "aria-hidden": "true" }), "의심도"),
@@ -84,6 +85,8 @@ export class StatusCard {
     const short = self.lifeShortfall > 0;
     toggle(this.el, "life-short", short);
     setText(this.#warn, short ? `이대로면 ${self.lifeEnd}년에 천수가 다한다 · ${FINAL_YEAR}년까지 ${self.lifeShortfall}년 부족` : "");
+    setText(this.#short, short ? `−${self.lifeShortfall}년` : "");
+    this.#short.title = this.#warn.textContent ?? "";
 
     const band = SUSPICION_BANDS[self.suspicionBand];
     setMeter(this.#susp, ratio(self.suspicion, 100));

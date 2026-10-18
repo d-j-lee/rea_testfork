@@ -48,10 +48,16 @@ export interface SessionHooks {
 const INPUT_MS = 50;
 const CHANGE_MIN_MS = 30;
 const PING_MS = 2000;
+/**
+ * Interpolation floors per transport. The host snapshots at 20 Hz offline
+ * and 10 Hz online; the store adapts above these from measured interval and
+ * jitter, starting from the expected interval.
+ */
 const DELAYS: Record<"offline" | "online", DelayConfig> = {
   offline: { remoteMin: 50, selfMin: 16 },
-  online: { remoteMin: 100, selfMin: 40 },
+  online: { remoteMin: 110, selfMin: 45 },
 };
+const EXPECTED_SNAP_MS: Record<"offline" | "online", number> = { offline: 50, online: 100 };
 const SELF_TAU: Record<"offline" | "online", number> = { offline: 14, online: 45 };
 const DIR_VEC: Record<Dir, readonly [number, number]> = { down: [0, 1], up: [0, -1], left: [-1, 0], right: [1, 0] };
 
@@ -167,6 +173,7 @@ export class GameClient {
   attach(transport: Transport, hooks: SessionHooks, hello: Extract<ClientMsg, { t: "hello" }>): void {
     this.#transport = transport;
     this.#hooks = hooks;
+    this.store.clock.intervalMs = EXPECTED_SNAP_MS[hooks.mode];
     transport.onMessage((message) => this.handle(message));
     transport.onClose((reason) => {
       if (this.#transport !== transport) return;
@@ -327,7 +334,7 @@ export class GameClient {
       music.battle = this.#self?.battle;
       music.promptKind = this.#promptKind;
       music.ending = this.#ending;
-      this.#music.update(music);
+      this.#music.update(music, now);
       const f = this.#sceneFrame;
       f.now = now;
       f.visualNow = visualNow;

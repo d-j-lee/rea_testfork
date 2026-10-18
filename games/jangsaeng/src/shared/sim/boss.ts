@@ -52,6 +52,8 @@ function enterPhase(sim: Sim, a: Actor, b: BossState, phase: BossPhase, transiti
   const e = a.en;
   if (!e) return;
   const t = sim.time;
+  // The newest phase's mechanic leads the rotation.
+  b.rotation = 0;
   b.guard = phase.mechanic === "guard_front";
   b.frenzy = phase.mechanic === "frenzy";
   e.speedMul = b.frenzy ? 1.35 : 1;

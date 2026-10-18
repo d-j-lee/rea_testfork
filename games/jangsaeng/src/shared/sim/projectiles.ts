@@ -10,6 +10,7 @@ import {
   floatText,
   inFront,
   isDowned,
+  r6,
   sound,
   type Actor,
   type DamageKind,
@@ -260,6 +261,7 @@ export function schedule(sim: Sim, s: Partial<Strike> & Pick<Strike, "at" | "src
     dkind: "skill",
     bind: null,
     ...s,
+    at: r6(s.at),
   });
 }
 

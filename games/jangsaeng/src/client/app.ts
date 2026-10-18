@@ -34,9 +34,11 @@ interface DebugHook {
   frames: number;
   errors: string[];
   version: string;
+  /** Frame timing over the last ~2 s (ms): work = time spent in our frame. */
+  perf: { fps: number; workAvg: number; workP95: number; workMax: number; gapAvg: number; gapMax: number } | null;
 }
 
-const hook: DebugHook = { state: "boot", frames: 0, errors: [], version: "" };
+const hook: DebugHook = { state: "boot", frames: 0, errors: [], version: "", perf: null };
 (globalThis as { __jangsaeng?: DebugHook }).__jangsaeng = hook;
 
 function note(error: unknown): string {
@@ -168,6 +170,10 @@ export async function startApp(options: AppOptions): Promise<void> {
     requestAnimationFrame(frames);
   };
   requestAnimationFrame(frames);
+  setInterval(() => {
+    const s = game.stats.summary();
+    hook.perf = { fps: game.stats.fps, workAvg: s.workAvg, workP95: s.workP95, workMax: s.workMax, gapAvg: s.gapAvg, gapMax: s.gapMax };
+  }, 1000);
 
   const onlineAvailable = await online;
   const saved = savedForTitle(onlineAvailable);

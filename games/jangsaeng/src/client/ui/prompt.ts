@@ -176,7 +176,7 @@ export class PromptDialog {
     const sheet = h(
       "section",
       {
-        class: `prompt pk-${p.kind}${isCard ? " card" : " sheet"}${same ? "" : " enter"}`,
+        class: `prompt paper pk-${p.kind}${isCard ? " card" : " sheet"}${same ? "" : " enter"}`,
         role: "dialog",
         "aria-modal": "true",
         "aria-label": p.title || "대화",

@@ -65,7 +65,7 @@ export class TouchControls {
       input.setVirtualButton("dodge", true);
       window.setTimeout(() => input.setVirtualButton("dodge", false), 140);
     }, () => undefined);
-    const interact = holdButton("상호작용", "手", "tc-interact", () => input.pressInteract(), () => undefined);
+    const interact = holdButton("행동", "手", "tc-interact", () => input.pressInteract(), () => undefined);
     const slots = [1, 2, 3, 4, 5].map((n) => {
       const v = slotView(n, `tc-skill tc-s${n}`, false);
       v.el.addEventListener("pointerdown", (e) => {

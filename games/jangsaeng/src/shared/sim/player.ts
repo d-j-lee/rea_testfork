@@ -16,6 +16,7 @@ import {
   later,
   locomotion,
   playAnim,
+  r6,
   setAnim,
   sound,
   type Actor,
@@ -220,7 +221,7 @@ function startRoll(sim: Sim, a: Actor, p: PlayerData, mx: number, my: number): v
   p.rollY = ry / l;
   face(a, p.rollX, p.rollY);
   p.rollStart = t;
-  p.rollEnd = t + C.ROLL_TIME;
+  p.rollEnd = r6(t + C.ROLL_TIME);
   p.rollLeft = C.ROLL_DIST;
   p.perfectUsed = false;
   setAnim(sim, a, "walk", p.rollEnd);
@@ -240,10 +241,10 @@ function tickMelee(sim: Sim, a: Actor, p: PlayerData, aim: Aim | null): void {
     }
     p.combo = step;
     p.swingStart = t;
-    p.swingEnd = t + (C.MELEE_TIME[step] ?? 0.3);
-    p.swingHitAt = t + (C.MELEE_HIT_DELAY[step] ?? 0.1);
+    p.swingEnd = r6(t + (C.MELEE_TIME[step] ?? 0.3));
+    p.swingHitAt = r6(t + (C.MELEE_HIT_DELAY[step] ?? 0.1));
     p.swingHit = false;
-    p.comboUntil = p.swingEnd + C.COMBO_WINDOW;
+    p.comboUntil = r6(p.swingEnd + C.COMBO_WINDOW);
     p.lastCombat = t;
     playAnim(sim, a, "attack", p.swingEnd);
     sound(sim, "swing", a.x, a.y);

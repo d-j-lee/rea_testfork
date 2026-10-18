@@ -9,6 +9,7 @@ import {
   face,
   inFront,
   playAnim,
+  r6,
   setAnim,
   sound,
   targetable,
@@ -19,7 +20,7 @@ import {
 } from "./state.ts";
 
 function action(k: EnemyAction["k"], at: number, end: number): EnemyAction {
-  return { k, at, end, done: false, x: 0, y: 0, tx: 0, ty: 0, r: 0, coef: 1, heavy: false, dx: 0, dy: 0, dist: 0, moved: 0, speed: 0, hit: [], n: 1 };
+  return { k, at: r6(at), end: r6(end), done: false, x: 0, y: 0, tx: 0, ty: 0, r: 0, coef: 1, heavy: false, dx: 0, dy: 0, dist: 0, moved: 0, speed: 0, hit: [], n: 1 };
 }
 
 function begin(sim: Sim, a: Actor, act: EnemyAction, anim: "attack" | "shoot" | "cast"): void {
@@ -286,7 +287,7 @@ export function tickAction(sim: Sim, a: Actor, dt: number): void {
     case "spin":
       if (act.n > 0 && t >= act.at) {
         act.n--;
-        act.at += 0.35;
+        act.at = r6(act.at + 0.35);
         act.done = true;
         const src = sourceOf(sim, a, "plain");
         emit(sim, { k: "slash", x: a.x, y: a.y, angle: Math.atan2(a.fy, a.fx), d: a.dir, color: "#ff8a7a" });
@@ -348,11 +349,11 @@ function tickCharge(sim: Sim, a: Actor, act: EnemyAction, dt: number): void {
     act.hit = [];
     act.dist = Math.min(act.dist, Math.hypot(tgt.x - a.x, tgt.y - a.y) + 1.5);
     const ms = Math.max(400, act.r * 0.75);
-    act.at = t + ms / 1000 + C.GRACE;
+    act.at = r6(t + ms / 1000 + C.GRACE);
     telegraph(sim, { shape: "line", x: a.x, y: a.y, tx: a.x + d.x * act.dist, ty: a.y + d.y * act.dist, ms });
     return;
   }
   act.done = true;
-  act.end = t + 0.5;
+  act.end = r6(t + 0.5);
   setAnim(sim, a, "idle", act.end);
 }

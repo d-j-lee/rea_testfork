@@ -87,7 +87,7 @@ export class SkillState {
       null;
     for (const it of this.#items) {
       const q = this.#quick;
-      setText(it.glyph, q ? q.name.slice(0, 2) : "");
+      setText(it.glyph, q ? q.name : "");
       setText(it.count, q ? String(q.count) : "");
       it.el.title = q ? `${q.name} 사용 — ${q.desc}` : "쓸 수 있는 소모품이 없다";
       toggle(it.el, "empty", !q);

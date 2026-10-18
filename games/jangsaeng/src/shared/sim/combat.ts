@@ -60,7 +60,11 @@ export function hit(sim: Sim, src: HitSource, target: Actor, o: HitOpts): number
   if (!target.alive || target.removed || isDowned(target) || target.side === src.side) return 0;
   if (target.side === "none") return 0;
   const battle = sim.battle;
-  if (battle && battle.def.kind === "duel" && target.en?.battle && src.owner !== battle.starter) return 0;
+  if (battle && battle.def.kind === "duel") {
+    // Duels are one-on-one both ways.
+    if (target.en?.battle && src.owner !== battle.starter) return 0;
+    if (target.pl && target.id !== battle.starter && sim.actors.get(src.owner)?.en?.battle) return 0;
+  }
   const fromX = o.fromX ?? src.x;
   const fromY = o.fromY ?? src.y;
   const pl = target.pl;

@@ -20,7 +20,7 @@ const PILLARS: readonly { glyph: string; title: string; text: string }[] = [
     text: "황산, 행주, 명량, 남한산성, 정족산성. 실시간 액션 전투로 역사의 현장에 선다. 실존 인물의 결정적 행위는 플레이어가 대신하지 않는다.",
   },
   {
-    glyph: "錄",
+    glyph: "記",
     title: "함께 쓰는 실록",
     text: "같은 시대에 선 장생인끼리 한 마당에서 만나 함께 싸우고, 쓰러진 동료를 일으킨다. 선택은 저마다의 실록으로 남고, 결말은 1910년에 정산된다.",
   },
@@ -49,7 +49,7 @@ export function pitchPanel(handlers: { onBack(): void; onNew(): void; onDemo(): 
     {
       title: "장생(長生): 오백년",
       kicker: "게임 소개",
-      glyph: "錄",
+      glyph: "記",
       onClose: handlers.onBack,
       class: "pitch-panel",
       footer: h("div", { class: "foot-actions" },

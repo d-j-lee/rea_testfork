@@ -1,5 +1,6 @@
 // Browser smoke test of the built client (npm run test:e2e).
 //   node tests/e2e/run.mjs [--target=single|served|both] [--build] [--seconds=10]
+//                          [--dist=dir] [--device=laptop|phone]
 // For each target it opens the page in headless Chromium (playwright-core),
 // clicks through the title into offline play, plays for a few seconds with
 // the keyboard, then asserts: no page errors, frames keep rendering, the
@@ -14,29 +15,40 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { chromium } from "playwright-core";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-const dist = join(root, "dist");
-const outDir = join(root, "test-results");
 const args = new Map(
   process.argv.slice(2).map((arg) => {
     const [key, value = "true"] = arg.replace(/^--/, "").split("=");
     return [key, value];
   }),
 );
+const dist = resolve(args.get("dist") ?? join(root, "dist"));
+const outDir = join(root, "test-results");
 const targetArg = args.get("target") ?? "both";
 const targets = targetArg === "both" ? ["single", "served"] : [targetArg];
 const playSeconds = Number(args.get("seconds") ?? 10);
+const DEVICES = {
+  laptop: { viewport: { width: 1280, height: 720 } },
+  phone: { viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true },
+};
+const deviceName = args.get("device") ?? "laptop";
+const device = DEVICES[deviceName] ?? DEVICES.laptop;
 
 function log(line) {
   console.log(`[e2e] ${line}`);
 }
 
-if (args.has("build") || !existsSync(join(dist, "jangsaeng.html")) || !existsSync(join(dist, "client/index.html"))) {
+const built = () => existsSync(join(dist, "jangsaeng.html")) && existsSync(join(dist, "client/index.html"));
+if (args.has("build") || (!args.has("dist") && !built())) {
   log("building…");
   const result = spawnSync(process.execPath, [join(root, "scripts/build.mjs")], { cwd: root, stdio: "inherit" });
   if (result.status !== 0) {
     console.error("[e2e] FAIL: build failed");
     process.exit(1);
   }
+}
+if (!built()) {
+  console.error(`[e2e] FAIL: no build in ${dist}`);
+  process.exit(1);
 }
 
 const TYPES = {
@@ -93,7 +105,13 @@ async function clickFirst(page, selectors) {
   for (const selector of selectors) {
     const locator = page.locator(selector).filter({ visible: true }).first();
     if ((await locator.count()) > 0) {
-      await locator.click({ timeout: 2000 }).catch(() => {});
+      // A real click first; if something overlays it, fall back to a DOM click.
+      const clicked = await locator
+        .click({ timeout: 800 })
+        .then(() => true)
+        .catch(() => false);
+      if (!clicked)
+        await locator.evaluate((el) => el instanceof HTMLElement && el.click(), undefined, { timeout: 800 }).catch(() => {});
       return selector;
     }
   }
@@ -158,7 +176,8 @@ const KEY_SCRIPT = [
 async function runTarget(browser, target) {
   const problems = [];
   const consoleErrors = [];
-  const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+  const page = await browser.newPage(device);
+  page.setDefaultTimeout(5000);
   // No network beyond the page itself: web fonts are optional decoration.
   await page.route(/^https?:\/\/(?!127\.0\.0\.1)/, (route) => route.abort());
   page.on("pageerror", (error) => problems.push(`pageerror: ${error.message}`));
@@ -174,7 +193,7 @@ async function runTarget(browser, target) {
     server = await serveStatic(join(dist, "client"));
     url = `http://127.0.0.1:${server.address().port}/`;
   } else url = pathToFileURL(join(dist, "jangsaeng.html")).href;
-  const shot = join(outDir, `e2e-${target}.png`);
+  const shot = join(outDir, `e2e-${target}${deviceName === "laptop" ? "" : `-${deviceName}`}.png`);
   const result = { target, ok: false, steps: [], screenshot: shot };
   try {
     log(`${target}: open ${url}`);
@@ -197,12 +216,22 @@ async function runTarget(browser, target) {
     const until = Date.now() + playSeconds * 1000;
     let dismissed = 0;
     let presses = 0;
+    let stuck = 0;
     for (let i = 0; Date.now() < until; i++) {
-      if (await unblock(page)) {
-        dismissed++;
-        await sleep(350);
-        continue;
-      }
+      // Dismiss dialogs, but never spend the whole run on one that will not
+      // close: after four tries, play a few keys and try again.
+      if (stuck < 4) {
+        const t0 = Date.now();
+        const was = await unblock(page);
+        if (process.env.E2E_VERBOSE) log(`${target}: unblock → ${was} (${Date.now() - t0} ms)`);
+        if (was) {
+          dismissed++;
+          stuck++;
+          await sleep(300);
+          continue;
+        }
+        stuck = 0;
+      } else if (++stuck > 10) stuck = 0;
       const [key, hold] = KEY_SCRIPT[i % KEY_SCRIPT.length];
       await page.keyboard.down(key);
       await sleep(hold);
@@ -210,6 +239,11 @@ async function runTarget(browser, target) {
       presses++;
     }
     const hook = await waitForHook(page, () => true, 1000, "hook");
+    const perf = await page.evaluate(() => globalThis.__jangsaeng?.perf ?? null);
+    if (perf)
+      result.steps.push(
+        `frame timing (last ~2 s): fps ${perf.fps}, work avg ${perf.workAvg.toFixed(2)} ms, p95 ${perf.workP95.toFixed(2)} ms, max ${perf.workMax.toFixed(2)} ms, frame gap avg ${perf.gapAvg.toFixed(1)} ms, max ${perf.gapMax.toFixed(1)} ms`,
+      );
     const frames = hook.frames - framesBefore;
     result.steps.push(`played ${playSeconds}s: ${frames} frames, ${presses} key presses, ${dismissed} dialogs dismissed`);
     const health = await canvasHealth(page);

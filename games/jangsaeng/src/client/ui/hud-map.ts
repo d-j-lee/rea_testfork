@@ -69,7 +69,7 @@ export class MapPanel {
         "button",
         {
           type: "button",
-          class: `hud-btn${b.opt ? " opt" : ""}`,
+          class: `hud-btn${b.opt ? " hb-opt" : ""}`,
           "aria-label": `${b.label} (${b.key})`,
           title: `${b.label} · ${b.key}`,
           "data-cmd": b.cmd,

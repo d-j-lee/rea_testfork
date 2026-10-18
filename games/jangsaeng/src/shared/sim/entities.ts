@@ -153,7 +153,7 @@ export function spawnEnemy(sim: Sim, def: EnemyDef, x: number, y: number, o: Ene
     leash: o.leash ?? !o.battle,
     thinkAt: sim.time + (a.id % 4) * 0.05,
     nextAttackAt: sim.time + 0.4 + sim.rng.range(0, 0.6),
-    nextSpecialAt: sim.time + 1 + sim.rng.range(0, 1.5),
+    nextSpecialAt: sim.time + (def.behavior === "charger" ? 0.3 : 1) + sim.rng.range(0, 1.5),
     act: null,
     poise: def.poise,
     maxPoise: def.poise,

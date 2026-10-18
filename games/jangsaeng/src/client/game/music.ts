@@ -34,25 +34,29 @@ export function moodFor(state: MusicState): MusicMood | null {
   return state.chapter?.music ?? null;
 }
 
+/** In game the router owns the music; re-assert it this often (ms). */
+const REASSERT_MS = 1000;
+
 export class MusicRouter {
   readonly #audio: AudioEngine;
   #current: MusicMood | null | undefined = undefined;
+  #at = 0;
 
   constructor(audio: AudioEngine) {
     this.#audio = audio;
   }
 
-  /** Call whenever state may have changed; cheap when nothing did. */
-  update(state: MusicState): void {
+  /**
+   * Call every frame in game. Tells the engine on changes, and re-asserts
+   * the mood now and then so a late title-screen cue (e.g. an audio unlock
+   * that resolves after the game started) cannot stick. setMusic with the
+   * current mood is a no-op in the engine.
+   */
+  update(state: MusicState, now: number): void {
     const mood = moodFor(state);
-    if (mood === this.#current) return;
+    if (mood === this.#current && now - this.#at < REASSERT_MS) return;
     this.#current = mood;
-    this.#audio.setMusic(mood);
-  }
-
-  /** Forces a mood (title screen) and forgets the routed choice. */
-  force(mood: MusicMood | null): void {
-    this.#current = mood;
+    this.#at = now;
     this.#audio.setMusic(mood);
   }
 }

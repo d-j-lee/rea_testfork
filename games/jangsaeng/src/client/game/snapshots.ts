@@ -30,9 +30,13 @@ export class SnapClock {
     this.lagMs = 0;
   }
 
-  /** Timeline timestamp for a snapshot of `tick` that arrived at `arrival`. */
-  stamp(tick: number, arrival: number): number {
+  /**
+   * Timeline timestamp for a snapshot of `tick` that arrived at `arrival`,
+   * or null for a stale snapshot (older than one already applied).
+   */
+  stamp(tick: number, arrival: number): number | null {
     const dTick = tick - this.#lastTick;
+    if (dTick < 0 && dTick > -20) return null;
     let ts: number;
     if (!(dTick >= 0 && dTick <= 100)) {
       // First snapshot, host restart or a long stall: re-anchor.
@@ -235,6 +239,7 @@ export class EntityStore {
 
   applySnap(tick: number, ents: readonly EntitySnap[], gone: readonly number[], arrival: number): void {
     const ts = this.clock.stamp(tick, arrival);
+    if (ts === null) return;
     this.#lastStamp = ts;
     for (const snap of ents) {
       if (!snap || typeof snap.id !== "number" || !Number.isFinite(snap.x) || !Number.isFinite(snap.y)) continue;

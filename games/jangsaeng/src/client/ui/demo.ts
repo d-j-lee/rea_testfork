@@ -45,7 +45,7 @@ export function demoPanel(
     h(
       "div",
       { class: "demo-intro" },
-      h("p", null, "원하는 장을 고르면 그 장의 권장 레벨·장비·관계로 미리 설정된 시연용 인물로 바로 시작합니다. 화면 상단의 ‘시연: 건너뛰기’로 현재 목표를 즉시 완료할 수 있습니다."),
+      h("p", null, "장을 고르면 그 장의 권장 레벨·장비·관계로 미리 설정된 시연용 인물로 바로 시작합니다. 게임 중 ‘시연: 건너뛰기’로 현재 목표를 바로 완료할 수 있습니다."),
       segmented("시연 인물 외형", [{ value: "m", label: "남" }, { value: "f", label: "여" }] as const, variant, (v) => {
         variant = v;
         audio.sfx("ui_click");

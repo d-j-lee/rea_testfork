@@ -14,7 +14,13 @@ import type { ChapterView, SelfView, Team } from "../../shared/types.ts";
 import { characterHeight, drawCharacter, type DrawCharacterOptions } from "../render/characters.ts";
 import { EffectSystem } from "../render/effects.ts";
 import { drawAtmosphere, type AtmosphereOptions } from "../render/lighting.ts";
-import { drawEmote, drawHpBar, drawNamePlate, drawSelectionRing } from "../render/overlays.ts";
+import {
+  drawEmote,
+  drawHpBar,
+  drawNamePlate,
+  drawSelectionRing,
+  type NamePlateOptions,
+} from "../render/overlays.ts";
 import { TEAM_COLORS } from "../render/palette.ts";
 import { drawProp, propHeight } from "../render/props.ts";
 import type { Drawable } from "../render/types.ts";
@@ -126,6 +132,8 @@ export class Scene {
   readonly #views = new Map<number, EntityView>();
   readonly #drawables: Drawable[] = [];
   readonly #visible: EntityView[] = [];
+  /** Reused plate options; `pixelRatio` sizes plate text for the display. */
+  readonly #plate: NamePlateOptions = { color: TEAM_COLORS.npc };
   readonly #atmosphere: AtmosphereOptions = { hour: 12, weather: "clear", timeMs: 0, pixelScale: 1 };
   #byDepth = (a: Drawable, b: Drawable) => a.sortY - b.sortY;
 
@@ -185,7 +193,7 @@ export class Scene {
     const battle = f.self?.battle;
     if (battle) drawBattleRing(ctx, battle, view, f.now);
     f.fx.drawTelegraphs(ctx, f.now);
-    for (const v of this.#visible) if (v.track.down && v.character) drawDownedRing(ctx, v.wx, v.wy, f.now);
+    for (const v of this.#visible) if (v.track.down && v.character) drawDownedRing(ctx, v.wx, v.wy, f.now, f.unit);
     this.effects.update(f.visualDt);
     this.effects.draw(ctx, t);
     this.#drawPlates(ctx, f, t);
@@ -269,7 +277,8 @@ export class Scene {
 
   #drawPlates(ctx: CanvasRenderingContext2D, f: SceneFrame, t: number): void {
     const s = f.rig.camera.scale;
-    const mult = s >= 5 ? 2 : 1;
+    // Plate text scale as overlays picks it from `pixelRatio`.
+    const mult = Math.max(1, Math.round(f.unit));
     const selfId = f.store.selfId;
     for (const v of this.#visible) {
       const track = v.track;
@@ -296,7 +305,13 @@ export class Scene {
       if (snap.n) {
         const small = !boss && tm !== "self" && tm !== "player";
         const title = snap.title ?? (snap.hist ? "역사 인물" : undefined);
-        drawNamePlate(ctx, snap.n, v.wx, y, { color: teamColor(tm), title, level: snap.lvl, small });
+        const o = this.#plate;
+        o.color = teamColor(tm);
+        o.title = title;
+        o.level = snap.lvl;
+        o.small = small;
+        o.pixelRatio = f.unit;
+        drawNamePlate(ctx, snap.n, v.wx, y, o);
         y -= (((small ? 11 : 12) + 6 + (title ? 13 : 0)) * mult) / s;
       }
       if (track.mk) {

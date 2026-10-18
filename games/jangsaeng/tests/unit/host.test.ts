@@ -94,6 +94,10 @@ function autoplay(client: ScriptedClient, advance: (ms: number) => void, maxRoun
 test("rejects malformed messages and requires hello first", () => {
   const { connect, advance } = setup();
   const client = connect();
+  client.connection?.receive({ t: "teleport", x: 1, y: 1 });
+  client.connection?.receive({ t: "choose", prompt: 5, option: null });
+  client.connection?.receive("not an object");
+  // Lenient numbers are clamped rather than rejected; still needs hello.
   client.connection?.receive({ t: "input", mx: "fast" });
   client.connection?.receive({ t: "chat", text: "안녕" });
   advance(100);

@@ -14,6 +14,11 @@ export interface NamePlateOptions {
   title?: string;
   level?: number;
   small?: boolean;
+  /**
+   * Canvas pixels per CSS pixel. When given, text is sized for CSS-pixel
+   * legibility (phones render the canvas below devicePixelRatio).
+   */
+  pixelRatio?: number;
 }
 
 // ------------------------------------------------------------ name plates --
@@ -137,7 +142,8 @@ export function drawNamePlate(
   opts: NamePlateOptions,
 ): void {
   const d = deviceScale(ctx);
-  const mult = d.s >= 5 ? 2 : 1;
+  const mult =
+    opts.pixelRatio !== undefined ? Math.max(1, Math.round(opts.pixelRatio)) : d.s >= 5 ? 2 : 1;
   const small = !!opts.small;
   let list = plates.get(text);
   let plate: Surface | undefined;

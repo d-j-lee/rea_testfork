@@ -442,6 +442,9 @@ export function locomotion(sim: Sim, a: Actor): void {
 
 const q = (v: number): number => Math.round(v * 100) / 100;
 
+/** Rounds a time to the microsecond grid the clock uses (exact tick compares). */
+export const r6 = (v: number): number => Math.round(v * 1e6) / 1e6;
+
 export function emit(sim: Sim, e: FxEvent): void {
   e.x = q(e.x);
   e.y = q(e.y);
@@ -491,7 +494,7 @@ export function flushFeel(sim: Sim): void {
 
 export function delayFx(sim: Sim, at: number, e: FxEvent): void {
   if (at <= sim.time) emit(sim, e);
-  else sim.delayed.push({ at, e });
+  else sim.delayed.push({ at: r6(at), e });
 }
 
 /** Defers a hook call to the end of the current tick (re-entrancy safety). */
