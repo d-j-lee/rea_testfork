@@ -767,4 +767,22 @@ export const SITES: readonly SiteSource[] = [
     at: [130.87, 37.5],
     station: false,
   },
+  // Sea battlefields: their fleets' decks are stamped over the water and
+  // moored to the nearest shore (generate.ts#moor).
+  {
+    id: "hansan_sea",
+    name: "한산도 앞바다",
+    hanja: "閑山島",
+    kind: "battlefield",
+    at: [128.47, 34.64],
+    station: false,
+  },
+  {
+    id: "noryang_sea",
+    name: "노량 해협",
+    hanja: "露梁",
+    kind: "battlefield",
+    at: [127.84, 34.67],
+    station: false,
+  },
 ];

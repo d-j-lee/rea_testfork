@@ -270,7 +270,7 @@ export const ch09: ChapterDef = {
       id: "b_hansan",
       title: "한산도 앞바다 — 학익진",
       subtitle: "1592.7.8 · 판옥선 갑판",
-      site: "tongyeong",
+      site: "hansan_sea",
       offset: [0, 0],
       radius: 8,
       kind: "deck",

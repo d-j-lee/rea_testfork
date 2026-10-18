@@ -449,7 +449,8 @@ export function generateMap(seed = "jangsaeng"): GameMap {
     ...lonLatToTile(anchor.at),
   }));
   const province = new Uint8Array(W * H);
-  const insular = islandProvinces(land, W, H, islandShapes);
+  const masses = landmasses(land, W, H);
+  const insular = islandProvinces(land, W, H, masses, islandShapes);
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
       const island = insular[index(x, y)] ?? -1;
@@ -506,6 +507,40 @@ export function generateMap(seed = "jangsaeng"): GameMap {
   }
   separateSites(sites, land, W, H);
   for (const site of sites) stampSite(site);
+  /**
+   * Moors a fleet to the peninsula: when no deck touches its walkable shore,
+   * lays a boat bridge (배다리) of deck three boats wide along the shortest
+   * water path to it, so a sea battle is reached on foot and fought across.
+   */
+  function moor(decks: readonly number[]) {
+    const size = W * H;
+    const shore = (i: number) => {
+      const info = TILE_INFO[tiles[i] as TileId];
+      return land[i] === 1 && masses.component[i] === masses.mainland && info.speed > 0 && !info.water;
+    };
+    const landing = (i: number) => neighbours4(i, W, size).some((j) => j >= 0 && shore(j));
+    if (decks.some(landing)) return;
+    const from = new Map<number, number>(decks.map((i) => [i, -1]));
+    const queue = [...decks];
+    for (let head = 0; head < queue.length; head++) {
+      const i = queue[head] as number;
+      for (const j of neighbours4(i, W, size)) {
+        if (j < 0 || land[j] || from.has(j)) continue;
+        from.set(j, i);
+        if (landing(j)) {
+          for (let k = j; k >= 0 && tiles[k] !== Tile.Deck; ) {
+            const back = from.get(k) ?? -1;
+            const side = Math.abs(k - back) === 1 ? W : 1;
+            for (const b of [k, k - side, k + side]) if (b >= 0 && b < size && !land[b]) tiles[b] = Tile.Deck;
+            k = back;
+          }
+          return;
+        }
+        queue.push(j);
+      }
+    }
+  }
+
   function stampSite(site: Site) {
     const { rect } = site;
     const naval = site.kind === "battlefield" && !land[index(site.x, site.y)];
@@ -514,10 +549,14 @@ export function generateMap(seed = "jangsaeng"): GameMap {
       // in even-aligned pairs so each hull renders two rows tall.
       const top = (rect.y + 1) % 2 === 0 ? rect.y + 1 : rect.y + 2;
       const rows = Math.max(2, Math.floor((rect.h - 2) / 2) * 2);
+      const decks: number[] = [];
       for (let y = top; y < top + rows; y++)
         for (let x = rect.x; x < rect.x + rect.w; x++)
-          if (x >= 0 && y >= 0 && x < W && y < H && !land[index(x, y)])
+          if (x >= 0 && y >= 0 && x < W && y < H && !land[index(x, y)]) {
             tiles[index(x, y)] = Tile.Deck;
+            decks.push(index(x, y));
+          }
+      moor(decks);
       if (!land[index(site.x, site.y)] && tiles[index(site.x, site.y)] !== Tile.Deck)
         site.y = top;
       return;
@@ -992,26 +1031,24 @@ function separateSites(sites: Site[], land: Uint8Array, width: number, height: n
   }
 }
 
-/**
- * PROVINCE_LIST index of island provinces per tile, −1 elsewhere. An island
- * with a province claims its connected landmass (4-neighbour land), unless
- * that landmass is the largest one (the coarse coast merged it into the
- * peninsula), and every sea tile whose nearest land is that landmass.
- */
-function islandProvinces(
-  land: Uint8Array,
-  width: number,
-  height: number,
-  islands: readonly { cx: number; cy: number; rx: number; ry: number; province?: Province }[],
-): Int8Array {
+/** The four edge neighbours of tile i (−1 off the grid). */
+function neighbours4(i: number, width: number, size: number): readonly number[] {
+  const x = i % width;
+  return [x > 0 ? i - 1 : -1, x < width - 1 ? i + 1 : -1, i >= width ? i - width : -1, i + width < size ? i + width : -1];
+}
+
+interface Landmasses {
+  /** Landmass id per tile (4-neighbour land), −1 at sea. */
+  readonly component: Int32Array;
+  /** Id of the largest landmass: the peninsula and the continent. */
+  readonly mainland: number;
+}
+
+function landmasses(land: Uint8Array, width: number, height: number): Landmasses {
   const size = width * height;
   const component = new Int32Array(size).fill(-1);
   const sizes: number[] = [];
   const queue = new Int32Array(size);
-  const neighbours = (i: number): number[] => {
-    const x = i % width;
-    return [x > 0 ? i - 1 : -1, x < width - 1 ? i + 1 : -1, i >= width ? i - width : -1, i + width < size ? i + width : -1];
-  };
   for (let start = 0; start < size; start++) {
     if (!land[start] || component[start] !== -1) continue;
     const id = sizes.length;
@@ -1020,14 +1057,32 @@ function islandProvinces(
     queue[tail++] = start;
     component[start] = id;
     while (head < tail)
-      for (const j of neighbours(queue[head++] as number))
+      for (const j of neighbours4(queue[head++] as number, width, size))
         if (j >= 0 && land[j] && component[j] === -1) {
           component[j] = id;
           queue[tail++] = j;
         }
     sizes.push(tail);
   }
-  const mainland = sizes.indexOf(Math.max(...sizes));
+  return { component, mainland: sizes.indexOf(Math.max(...sizes)) };
+}
+
+/**
+ * PROVINCE_LIST index of island provinces per tile, −1 elsewhere. An island
+ * with a province claims its landmass, unless that is the mainland (the
+ * coarse coast merged it into the peninsula), and every sea tile whose
+ * nearest land is that landmass.
+ */
+function islandProvinces(
+  land: Uint8Array,
+  width: number,
+  height: number,
+  masses: Landmasses,
+  islands: readonly { cx: number; cy: number; rx: number; ry: number; province?: Province }[],
+): Int8Array {
+  const size = width * height;
+  const { component, mainland } = masses;
+  const queue = new Int32Array(size);
   const owner = new Map<number, number>();
   for (const island of islands) {
     if (!island.province) continue;
@@ -1057,7 +1112,7 @@ function islandProvinces(
     }
   while (head < tail) {
     const i = queue[head++] as number;
-    for (const j of neighbours(i))
+    for (const j of neighbours4(i, width, size))
       if (j >= 0 && nearest[j] === -1) {
         nearest[j] = nearest[i] as number;
         queue[tail++] = j;
