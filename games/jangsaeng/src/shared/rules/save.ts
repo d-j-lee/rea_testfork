@@ -157,8 +157,8 @@ export function createSave(content: ContentIndex, options: CreateOptions): Playe
 /**
  * Years of past washes for a demo identity history: the last one 15 years
  * before the chapter, the others spread evenly from 1361 about every 35 years
- * and moved up to 4 years either way (stable per save), so the names last
- * 30–40 years over a long history. None before CH04's own 호패법 wash.
+ * and moved up to DEMO_WASH_JITTER (3) years either way (stable per save), so the names last
+ * about 28–43 years over a long history. None before CH04's own 호패법 wash.
  */
 function demoWashYears(seed: number, startYear: number): number[] {
   const last = startYear - DEMO_LAST_WASH_AGO;
