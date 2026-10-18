@@ -509,24 +509,35 @@ export function leaveBattle(sim: Sim, id: number): void {
  * up with (an ally's revive gives C.REVIVE_HP, a self-revive C.SELF_REVIVE_HP).
  */
 const WITHDRAW_HP = 0.25;
+/** Hostiles this far beyond the rim are kept clear of a withdrawal spot (tiles). */
+const WITHDRAW_CLEAR = 12;
+/** Seconds a withdrawn fighter cannot be hit while they get away. */
+const WITHDRAW_GRACE = 4;
 
 /**
  * A lost battle's fallen get up and withdraw: every participant lying
  * downed stands up at WITHDRAW_HP on the arena's rim on their side, a tile
- * of their own each. The enemies are already routed off the field (flee), so
- * the rim is not kept clear of them. Nobody is left lying out a down timer
- * after the fight is over, and it costs no 천수: it is no revive (standUp
- * fires no onRevived); the host reports the defeat.
+ * of their own each, away from anything still hostile near the ring (the
+ * battle's enemies flee, but ambient patrols may stand close), and cannot be
+ * hit for WITHDRAW_GRACE seconds. Nobody is left lying out a down timer after
+ * the fight is over, and it costs no 천수: it is no revive (standUp fires no
+ * onRevived); the host reports the defeat.
  */
 function withdraw(sim: Sim, b: BattleRuntime): void {
   const { arena } = b;
   const used = new Set<number>();
+  // Stand clear of anything still hostile near the ring (ambient patrols, not only the battle's own enemies).
+  const hostile: { x: number; y: number }[] = [];
+  for (const e of sim.actors.values())
+    if (e.alive && e.en && e.en.state !== "flee" && Math.hypot(e.x - arena.x, e.y - arena.y) <= arena.radius + WITHDRAW_CLEAR)
+      hostile.push({ x: e.x, y: e.y });
   for (const id of b.participants) {
     const a = sim.players.get(id);
     if (!a || !isDowned(a)) continue;
-    const p = rimSpot(arena, Math.atan2(a.y - arena.y, a.x - arena.x), [], used);
+    const p = rimSpot(arena, Math.atan2(a.y - arena.y, a.x - arena.x), hostile, used);
     placePlayer(sim, a, p.x, p.y);
     standUp(sim, a, WITHDRAW_HP);
+    a.invulnUntil = Math.max(a.invulnUntil, sim.time + WITHDRAW_GRACE);
   }
 }
 

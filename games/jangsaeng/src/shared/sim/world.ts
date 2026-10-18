@@ -564,6 +564,8 @@ export interface WorldQuery {
   battleCentre(): { x: number; y: number; radius: number } | null;
   /** The standing post a running defend battle holds, if any. */
   defendPost(): { x: number; y: number } | null;
+  /** The running battle's named commander while it stands on the field (not in a duel). */
+  battleBoss(): { id: number; x: number; y: number } | null;
   /** True when the tile is walkable. */
   walkable(x: number, y: number): boolean;
 }
@@ -594,6 +596,12 @@ function makeQuery(sim: Sim): WorldQuery {
       const a = sim.players.get(id);
       if (!a?.pl) return null;
       return { x: a.x, y: a.y, hp: a.hp, maxHp: a.maxHp, downed: a.pl.downedAt >= 0 };
+    },
+    battleBoss() {
+      const b = sim.battle;
+      if (!b || b.def.kind === "duel" || b.bossId < 0 || b.bossDead) return null;
+      const boss = sim.actors.get(b.bossId);
+      return boss?.alive ? { id: boss.id, x: boss.x, y: boss.y } : null;
     },
     battleCentre() {
       const ring = sim.battle?.arena;

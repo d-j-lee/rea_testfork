@@ -2,6 +2,7 @@
 // markers and post stations; with a 마패 the stations offer fast travel.
 import { siteAt, type GameMap } from "../../../shared/map/generate.ts";
 import type { PlayerAction } from "../../../shared/protocol.ts";
+import { josa } from "../../../shared/rules/index.ts";
 import type { SelfView } from "../../../shared/types.ts";
 import { drawMinimapMarker } from "../../render/minimap.ts";
 import { button, h } from "../dom.ts";
@@ -129,7 +130,7 @@ export function mapTab(
         h("li", null,
           h("span", null, siteAt(s, year).name, d <= 3 && pos ? h("small", null, " · 지금 여기") : null),
           hasMapae && d > 3
-            ? button("이동", () => act({ kind: "travel", site: s.id }), { class: "btn btn-small", "aria-label": `${siteAt(s, year).name}(으)로 이동` })
+            ? button("이동", () => act({ kind: "travel", site: s.id }), { class: "btn btn-small", "aria-label": `${josa(siteAt(s, year).name, "으로/로")} 이동` })
             : null))),
     h("p", { class: "bm-legend" },
       h("span", { class: "lg-self" }, "나"), h("span", { class: "lg-obj" }, "목표"), h("span", { class: "lg-station" }, "역참")),

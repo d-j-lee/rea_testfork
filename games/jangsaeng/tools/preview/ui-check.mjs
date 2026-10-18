@@ -210,11 +210,9 @@ try {
     await t.close();
   }
   {
-    // A write that fails (quota) keeps the legacy settings for the next load.
+    // A write that fails (quota) keeps the legacy settings, applied this session.
     const legacy = { music: 0.25, sfx: 2, muted: true, touch: "off", motion: "reduced" };
     const seedFull = (value) => {
-      if (sessionStorage.getItem("seeded")) return;
-      sessionStorage.setItem("seeded", "1");
       localStorage.setItem("jangsaeng.settings.v1", value);
       // This load only: the settings key does not fit.
       const setItem = Storage.prototype.setItem;
@@ -232,11 +230,8 @@ try {
       }));
     const first = await read();
     check("settings: a failed write keeps the legacy settings (and applies them this session)", first.owned === null && first.legacy !== null && first.motion === "reduced", JSON.stringify(first));
-    await t.page.reload();
-    await t.page.waitForFunction(() => window.__ready === true);
-    const second = await read();
-    const want = { music: 0.25, sfx: 0.8, muted: true, touch: "off", motion: "reduced" };
-    check("settings: the next load carries them over and only then removes the legacy key", JSON.stringify(second.owned) === JSON.stringify(want) && second.legacy === null, JSON.stringify(second));
+    // That the next load then carries them over is pinned in tests/unit/client-storage.test.ts:
+    // a second page load here races Chromium's storage commit across navigations.
     await t.close();
   }
   {
@@ -368,6 +363,14 @@ try {
     await t.page.evaluate(() => window.__ui.handle({ t: "prompt", prompt: window.__mock.STORY_PROMPT }));
     await toast("목표 달성 — 카드 뒤");
     const story = { top: await top(), holds: await holds() };
+    await t.page.evaluate(() => window.__ui.handle({ t: "toast", text: "물러났다 — 카드 위의 경고", tone: "bad" }));
+    await t.page.waitForTimeout(150);
+    const docked = await t.page.evaluate(() => {
+      const opts = [...document.querySelectorAll(".prompt .opt")].map((el) => el.getBoundingClientRect());
+      const bad = [...document.querySelectorAll(".toast-dock .toast")].map((el) => el.getBoundingClientRect());
+      return { bad: bad.length, hits: bad.filter((r) => opts.some((o) => r.top < o.bottom && r.bottom > o.top && r.left < o.right && r.right > o.left)).length };
+    });
+    check("toasts: an error shown under a story sheet never covers its options", docked.bad >= 1 && docked.hits === 0, JSON.stringify(docked));
     await t.page.evaluate(() => window.__ui.handle({ t: "prompt", prompt: null }));
     check("toasts: none over a story sheet", story.top === 0 && (await top()) >= 1, JSON.stringify(story));
     check("world: a story card does not hold the world (the host holds its battle)", story.holds === false, JSON.stringify(story));
@@ -386,7 +389,7 @@ try {
     await self({ hp: 0, downed: { secondsLeft: 9 }, battle: undefined });
     const ended = { ...(await downed()), top: await top() };
     check("downed: the overlay counts down while others can help; toasts wait", !down.hidden && !down.alone && down.count === "12" && down.top === 0, JSON.stringify(down));
-    check("downed: the battle ended — the overlay closes to a self-revive plate, toasts play", !ended.hidden && ended.alone && ended.count === null && ended.revive && ended.top >= 1, JSON.stringify(ended));
+    check("downed: only the host's timer decides — a battle view going away does not close the countdown", !ended.hidden && !ended.alone && ended.count === "9", JSON.stringify(ended));
     await self({});
     await self({ hp: 0, downed: { secondsLeft: 0.3 } });
     await t.page.waitForTimeout(700);
@@ -395,6 +398,13 @@ try {
     const expired = await downed();
     check("downed: the countdown never shows 0초 (the host's own zero is awaited)", !late.alone && late.count === "1", JSON.stringify(late));
     check("downed: the host's timer ran out — the overlay closes to the self-revive plate", expired.alone && expired.count === null && expired.revive, JSON.stringify(expired));
+    await toast("사경 뒤의 다른 소식");
+    const lanes = await t.page.evaluate(() => {
+      const plate = document.querySelector(".downed .dn-center")?.getBoundingClientRect();
+      const toasts = [...document.querySelectorAll(".toasts .toast")].map((el) => el.getBoundingClientRect());
+      return { plate: plate && { top: plate.top, bottom: plate.bottom, left: plate.left, right: plate.right }, hits: toasts.filter((r) => plate && r.top < plate.bottom && r.bottom > plate.top && r.left < plate.right && r.right > plate.left).length, toasts: toasts.length };
+    });
+    check("downed: the self-revive plate stays out of the toast lane", !!lanes.plate && lanes.toasts >= 1 && lanes.hits === 0, JSON.stringify(lanes));
     await self({});
     check("downed: up again, nothing is left", (await downed()).hidden);
     check("modals: no page errors", t.errors.length === 0, t.errors.join(" | "));

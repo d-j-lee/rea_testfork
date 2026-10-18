@@ -160,7 +160,7 @@ test("a lost battle's fallen get up on its rim for free, and it starts again onl
   assert.equal(hero.save.lifeEnd, lifeEnd);
   assert.equal(hero.save.record.selfRevives, selfRevives);
   assert.ok(!hero.toasts.some((text) => text.startsWith("스스로 일어서다")), hero.toasts.join(" / "));
-  assert.ok(hero.toasts.some((text) => text.includes("물러났다") && text.includes("다시 들어서면")), hero.toasts.join(" / "));
+  assert.ok(hero.toasts.some((text) => text.includes("물러났다") && text.includes("돌아오면 다시 싸운다")), hero.toasts.join(" / "));
   // Standing at the ring it lost does not start it again.
   tick(channel, 6);
   assert.equal(world.battleView(), null, "the lost battle does not restart by itself");

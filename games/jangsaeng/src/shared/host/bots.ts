@@ -207,6 +207,10 @@ export class Bot {
     const inBattle = battle !== null && Math.hypot(battle.x - me.x, battle.y - me.y) < battle.radius + 22;
     if (inBattle && leader) {
       const post = query.defendPost();
+      // Once a named commander is on the field, half the companions go for him,
+      // so the climax is the commander and not the clock.
+      const boss = this.id % 2 === 0 ? query.battleBoss() : null;
+      if (boss) return this.#fight(me, boss, null);
       const enemy =
         query.nearestEnemy(me.x, me.y, SELF_DEFENCE) ??
         query.nearestEnemy(leader.x, leader.y, GUARD_RADIUS) ??

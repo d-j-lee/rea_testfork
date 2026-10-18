@@ -117,10 +117,11 @@ export class PromptDialog {
   handleKey(e: KeyboardEvent): boolean {
     const p = this.#prompt;
     if (!p || this.#sent) return false;
-    const scroll = this.#scroll;
     const step = e.key === "ArrowDown" ? 48 : e.key === "ArrowUp" ? -48 : e.key === "PageDown" ? 1 : e.key === "PageUp" ? -1 : 0;
-    if (scroll && step) {
-      scroll.scrollBy({ top: Math.abs(step) === 1 ? step * scroll.clientHeight * 0.85 : step });
+    // Scroll whatever actually overflows: the text region, or on short screens the whole sheet.
+    const scroller = [this.#scroll, this.#scroll?.closest(".prompt")].find((el): el is HTMLElement => !!el && el.scrollHeight > el.clientHeight + 1);
+    if (scroller && step) {
+      scroller.scrollBy({ top: Math.abs(step) === 1 ? step * scroller.clientHeight * 0.85 : step });
       return true;
     }
     if (this.#typing && (e.key === "Enter" || e.key === " " || /^[1-9]$/.test(e.key))) {

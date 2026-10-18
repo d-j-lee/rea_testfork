@@ -27,6 +27,7 @@ import {
   equipItem,
   evalCond,
   heroSprite,
+  josa,
   LONGEVITY_MAX_PER_CHAPTER,
   longevityBlocker,
   reviveVirtue,
@@ -541,7 +542,7 @@ export class Session {
     if (this.#settled()) return;
     const def = this.content.items[item];
     this.#apply([{ k: "item", item, add: 1 }]);
-    if (def) this.send({ t: "toast", text: `${def.name}을(를) 얻었다.`, tone: def.id === "ginseng" ? "epic" : "info" });
+    if (def) this.send({ t: "toast", text: `${josa(def.name, "을/를")} 얻었다.`, tone: def.id === "ginseng" ? "epic" : "info" });
     for (const objective of this.#visibleObjectives()) this.#checkCollect(objective);
   }
 
@@ -564,15 +565,17 @@ export class Session {
         if (objective.kind === "battle" && objective.target === battle.id) this.#completeObjective(objective.id);
     } else {
       this.#withdrawnFrom = battle.id;
-      this.send({ t: "toast", text: `${battle.title} — 물러났다. 전장을 벗어났다가 다시 들어서면 다시 싸운다.`, tone: "bad" });
+      this.send({ t: "toast", text: `${battle.title}: 물러났다. 전장 밖으로 나갔다 돌아오면 다시 싸운다.`, tone: "bad" });
     }
     this.#markSelf();
     this.persist();
   }
 
   onDowned(): void {
-    // Who could come to help: in a battle its other fighters, elsewhere anyone in the channel.
     const channel = this.channel;
+    // Queued downs can arrive after a lost battle already stood the player up.
+    if (!channel?.world.playerStatus(this.id)?.downed) return;
+    // Who could come to help: in a battle its other fighters, elsewhere anyone in the channel.
     const fighters = channel?.world.battleParticipants() ?? [];
     const helpers = fighters.includes(this.id) ? fighters : [...(channel?.sessions.keys() ?? []), ...(channel?.bots.keys() ?? [])];
     const help = helpers.some((id) => id !== this.id && channel?.world.playerStatus(id)?.downed === null);

@@ -75,6 +75,6 @@ export function lifeGraph(lifeEnd: number, gained: number, spent: number): HTMLE
     svg,
     h("ul", { class: "lg-legend", "aria-hidden": "true" },
       item("lg-base", "타고난 천수", `${base}년`),
-      item("lg-gain", "얻은 세월", `+${gained}년`),
-      item("lg-spent", "쓴 세월", `−${spent}년`)));
+      item("lg-gain", "얻은 세월", gained > 0 ? `+${gained}년` : "0년"),
+      item("lg-spent", "쓴 세월", spent > 0 ? `−${spent}년` : "0년")));
 }

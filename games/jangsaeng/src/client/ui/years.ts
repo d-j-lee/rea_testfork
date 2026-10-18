@@ -13,7 +13,7 @@ import type { PromptView, YearsPlanView } from "../../shared/types.ts";
 import { AWAKENING_YEAR, FINAL_YEAR } from "../../shared/types.ts";
 import type { AudioEngine } from "../audio/types.ts";
 import { button, h, ratio, wait } from "./dom.ts";
-import { validateName, WASH_GLYPH } from "./labels.ts";
+import { lifeWarning, validateName, WASH_GLYPH } from "./labels.ts";
 import { paperPanel } from "./panel.ts";
 
 interface YearsSubmit {
@@ -34,7 +34,7 @@ const signedYears = (years: number): string => `${years < 0 ? "−" : "+"}${Math
 /** The parts of the projection the planner names under the lifespan line. */
 const PROJECTION_PARTS: readonly (readonly [Exclude<keyof YearsProjection, "lifeEnd" | "offerable">, string])[] = [
   ["activities", "활동"],
-  ["wash", "세탁"],
+  ["wash", "신분 세탁"],
   ["resonance", "노인성 감응"],
   ["offer", "봉헌"],
   ["grace", "마지막 은혜"],
@@ -190,12 +190,22 @@ export class YearsPlanner {
     };
     // The rules project the plan from its own numbers; the planner only shows them.
     const renderProjection = () => {
+      // An offering the plan can no longer pay for turns itself off (e.g. after 구휼 is taken out).
+      if (offer && projectYears(plan, { activities: chosen, wash, offer: true, grace }).offerable <= 0) {
+        offer = false;
+        offerBtn.setAttribute("aria-checked", "false");
+        offerBtn.classList.remove("on");
+      }
       const p = projectYears(plan, { activities: chosen, wash, offer, grace });
       const end = p.lifeEnd;
       const added = end - plan.lifeEnd;
       const axis = Math.max(FINAL_YEAR, end) - AWAKENING_YEAR;
       const at = (y: number) => ratio(y - AWAKENING_YEAR, axis).toFixed(4);
       const short = FINAL_YEAR - end;
+      // The same calm-or-urgent reading the HUD gives this lifespan.
+      const life = lifeWarning({ year: plan.toYear, lifeEnd: end, lifeShortfall: Math.max(0, short) });
+      summary.dataset.life = life;
+      projection.dataset.life = life;
       const parts = PROJECTION_PARTS.filter(([key]) => p[key] !== 0).map(([key, label]) => `${label} ${signedYears(p[key])}`);
       // A gain reads green; a loss (전사 위장 alone) stays in ink.
       const tone = added > 0 ? { class: "good" } : null;

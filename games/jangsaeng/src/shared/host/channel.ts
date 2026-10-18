@@ -5,6 +5,7 @@ import type { ContentIndex } from "../content/index.ts";
 import type { BattleDef, ChapterDef, ChapterId, EnemyDef } from "../content/schema.ts";
 import type { GameMap } from "../map/generate.ts";
 import type { ServerMsg } from "../protocol.ts";
+import { josa } from "../rules/index.ts";
 import { createRng, type Rng } from "../rng.ts";
 import { World } from "../sim/world.ts";
 import type { FxEvent, Marker, RosterEntry, SelfView } from "../types.ts";
@@ -278,7 +279,7 @@ export class Channel {
     if (this.worldEventProgress >= event.goal) {
       this.#worldEventDone = true;
       for (const session of this.sessions.values()) session.onWorldEventComplete(event.title);
-      this.#system(`공동 실록 「${event.title}」이(가) 완성되었다.`);
+      this.#system(`공동 실록 ${josa(`「${event.title}」`, "이/가")} 완성되었다.`);
     }
   }
 

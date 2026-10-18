@@ -45,7 +45,7 @@ export class CompactBar {
     const life = lifeWarning(self);
     setText(this.#life, life === "ok" ? `천수 ${Math.max(0, self.lifeEnd - self.year)}년` : `천수 ${self.lifeEnd} −${self.lifeShortfall}`);
     this.#life.dataset.life = life;
-    this.#life.title = life === "ok" ? "" : `이대로면 ${self.lifeEnd}년에 천수가 다한다 · ${FINAL_YEAR}년까지 ${self.lifeShortfall}년 부족`;
+    this.#life.title = life === "ok" ? "" : life === "near" ? `이대로면 ${self.lifeEnd}년에 천수가 다한다 · ${FINAL_YEAR}년까지 ${self.lifeShortfall}년 부족` : `${FINAL_YEAR}년에 닿으려면 천수가 ${self.lifeShortfall}년 더 필요하다`;
     const band = SUSPICION_BANDS[self.suspicionBand];
     setText(this.#susp, band.label);
     this.#susp.title = `의심도 ${Math.round(self.suspicion)} · ${band.label}`;

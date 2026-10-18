@@ -205,7 +205,7 @@ export const ch10: ChapterDef = {
       boss: {
         enemy: "boss_japanese_general",
         name: "갈고리대장",
-        title: "왜 수군 선봉선",
+        title: "왜 수군 선봉선 장수",
         historical: false,
         level: 32,
         hpScale: 1.2,

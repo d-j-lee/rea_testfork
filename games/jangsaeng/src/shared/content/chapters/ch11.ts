@@ -217,7 +217,7 @@ export const ch11: ChapterDef = {
         { at: 20, from: "east", enemies: [{ enemy: "qing_archer", count: 3, level: 33 }, { enemy: "qing_rider", count: 1, level: 33 }], line: "화살이 화톳불을 노린다! 방패를 세워라." },
         { at: 40, from: "south", enemies: [{ enemy: "qing_armored", count: 2, level: 34 }], line: "철갑병이다. 느리지만 쓰러지지 않는다 — 다리를 노려라." },
         { at: 58, from: "around", enemies: [{ enemy: "qing_rider", count: 2, level: 34 }, { enemy: "qing_archer", count: 2, level: 34 }], line: "사방에서 온다. 불을 지켜라!" },
-        { at: 75, from: "north", enemies: [{ enemy: "qing_rider", count: 1, level: 34 }], line: "기병대장이 직접 돌진한다 — 붉은 선을 피하라! 그를 쓰러뜨리면 포위가 풀린다." },
+        { at: 75, from: "north", enemies: [{ enemy: "qing_rider", count: 1, level: 34 }], line: "기병대장이 직접 돌진한다 — 붉은 선을 피하라! 그를 쓰러뜨리면 오늘 밤 공세가 꺾인다." },
       ],
       boss: {
         enemy: "boss_qing_general",

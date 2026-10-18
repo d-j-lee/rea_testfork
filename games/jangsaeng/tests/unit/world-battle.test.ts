@@ -679,3 +679,28 @@ test("every boss mechanic runs with its telegraph", () => {
   assert.ok(texts.has("막음"), "guard_front blocks frontal blows");
   assert.ok(world.entityIds().filter((id) => world.inspect(id)?.name === "반란군 방패병").length >= 2, "shield wall");
 });
+
+test("a lost battle's fallen withdraw clear of a patrol at the ring and are not felled again at once", () => {
+  const { world, log } = makeWorld("withdraw-patrol");
+  const ring = world.arenaOf("waves");
+  assert.ok(ring);
+  // West of the centre, so the hero's own side of the rim is the west.
+  const hero = spec(ring.x - 1.5, ring.y, { derived: { ...DERIVED, maxHp: 120 } });
+  world.addPlayer(hero);
+  assert.ok(world.startBattle("waves", hero.id));
+  run(world, 0.1);
+  // An ambient patrol (not one of the battle's enemies) waits just outside the rim on the hero's side.
+  const patrol = world.spawnEnemy("bandit", ring.x - ring.radius - 0.5, ring.y, 30);
+  assert.ok(patrol !== null);
+  world.damage(hero.id, 1_000_000);
+  for (let i = 0; i < 600 && log.battles.length === 0; i++) world.tick(0.05);
+  assert.equal(log.battles.at(-1)?.result, "defeat");
+  run(world, 0.1);
+  const up = world.query().player(hero.id);
+  assert.ok(up && !up.downed, "the fallen hero is up after the defeat");
+  const p = world.inspect(patrol);
+  assert.ok(p);
+  assert.ok(Math.hypot(up.x - p.x, up.y - p.y) > 4, `withdrawn clear of the patrol (${Math.hypot(up.x - p.x, up.y - p.y).toFixed(1)} tiles)`);
+  run(world, 3);
+  assert.equal(world.query().player(hero.id)?.downed, false, "not felled again during the withdrawal grace");
+});

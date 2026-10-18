@@ -488,6 +488,8 @@ html[data-touch="on"] .chat-open::after { content: none; }
 .toast-layer { display: contents; }
 /* Errors while a document is open sit above its footer (the primary button, "눌러서 계속"). */
 .toast-dock { position: absolute; left: 50%; bottom: calc(var(--sab) + 96px); transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 6px; width: min(560px, calc(100vw - 32px)); pointer-events: none; }
+/* A bottom sheet holds the options there: errors dock in the top lane instead. */
+.ui-root.modal-open .toast-dock { top: calc(var(--sat) + 12px); bottom: auto; }
 .toasts { position: absolute; left: 50%; top: calc(var(--sat) + 96px); transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 6px; width: min(560px, calc(100vw - 32px)); pointer-events: none; }
 .toast { display: flex; align-items: center; gap: 8px; padding: 8px 18px; font-size: 15.5px; line-height: 1.4; text-align: center; color: #f8efdc; border-radius: 3px; background: linear-gradient(90deg, rgba(14, 12, 11, 0), rgba(14, 12, 11, .86) 14%, rgba(14, 12, 11, .86) 86%, rgba(14, 12, 11, 0)); text-shadow: 0 1px 2px #000; animation: toast-in .35s ease both; }
 .toast.out { animation: fadeout .4s ease forwards; }
@@ -514,7 +516,7 @@ html[data-touch="on"] .chat-open::after { content: none; }
 /* Nobody can help any more (the timer ran out or the battle ended): the
    overlay closes to a small self-revive plate, never a "0초" countdown. */
 .dn-alone { display: none; margin-bottom: 10px; font-size: 15px; color: #f0d7cc; }
-.downed.alone { background: none; animation: none; }
+.downed.alone { place-items: end center; padding: 0 0 calc(var(--g) + var(--sab, 0px) + 112px); background: none; animation: none; }
 .downed.alone .dn-center { padding: 12px 22px 14px; border-radius: 6px; background: rgba(14, 6, 6, .84); box-shadow: 0 6px 18px rgba(0, 0, 0, .45), inset 0 0 0 1px rgba(224, 87, 76, .35); }
 .downed.alone .dn-title { font-size: 28px; }
 .downed.alone .dn-title small { font-size: 15px; }
@@ -563,7 +565,7 @@ html[data-touch="on"] .chat-open::after { content: none; }
 .prompt.card .pr-title { font-size: 29px; }
 .pr-year { flex: none; align-self: flex-start; padding: 2px 9px; font-size: 13.5px; font-weight: 700; color: var(--red); border: 1.5px solid var(--red); border-radius: 2px; font-variant-numeric: tabular-nums; }
 /* Text and result list scroll as one region; the options below stay put. */
-.pr-scroll { flex: 0 1 auto; min-height: 0; overflow-y: auto; padding-right: 4px; overscroll-behavior: contain; touch-action: pan-y; }
+.pr-scroll { flex: 0 1 auto; min-height: min(4.5em, 18vh); overflow-y: auto; padding-right: 4px; overscroll-behavior: contain; touch-action: pan-y; }
 .pr-scroll.more { -webkit-mask-image: linear-gradient(#000 calc(100% - 36px), transparent); mask-image: linear-gradient(#000 calc(100% - 36px), transparent); }
 .pr-options { flex: none; }
 .pr-body { font-size: 17px; line-height: 1.8; }

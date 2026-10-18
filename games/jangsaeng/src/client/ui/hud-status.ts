@@ -85,7 +85,7 @@ export class StatusCard {
     // A shortfall decades away is a calm amber note; red only when life runs out.
     const life = lifeWarning(self);
     this.el.dataset.life = life;
-    setText(this.#warn, life === "near" ? `이대로면 ${self.lifeEnd}년에 천수가 다한다` : life === "far" ? `${FINAL_YEAR}년까지 ${self.lifeShortfall}년을 더 이어야 한다` : "");
+    setText(this.#warn, life === "near" ? `이대로면 ${self.lifeEnd}년에 천수가 다한다` : life === "far" ? `${FINAL_YEAR}년에 닿으려면 천수가 ${self.lifeShortfall}년 더 필요하다` : "");
     setText(this.#short, life === "ok" ? "" : `−${self.lifeShortfall}년`);
     this.#short.title = life === "ok" ? "" : `${FINAL_YEAR}년까지 ${self.lifeShortfall}년 부족`;
 
