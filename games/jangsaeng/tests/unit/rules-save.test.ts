@@ -360,7 +360,7 @@ test("demo presets give a sane save for every chapter", () => {
   assert.equal(newSave({ demoChapter: "ch04" }).rank, 14);
   assert.equal(newSave({ demoChapter: "ch04" }).flags["renowned"], true);
   assert.equal(newSave({ demoChapter: "ch01" }).rank, 0);
-  assert.ok(newSave({ demoChapter: "ch16" }).record.washes >= 4, "about one wash per 120 years");
+  assert.equal(newSave({ demoChapter: "ch16" }).record.washes, 15, "about one wash per 35 years");
   assert.deepEqual(newSave({ demoChapter: "ch16" }).equipment, { weapon: "jangyong_hwando", armor: "jangyong_armor" }, "ERA_GEAR: empire gear from 1897");
   assert.deepEqual(newSave({ demoChapter: "ch09" }).equipment, { weapon: "ssangsudo", armor: "gyeongbeongap" });
 });
@@ -373,6 +373,41 @@ test("demo presets also work with the shipped content", () => {
     assert.ok(save.lifeEnd >= CONTENT.chapters[id].years[0] + 60);
     assert.notEqual(migrateSave(CONTENT, JSON.parse(JSON.stringify(save))), null);
   }
+});
+
+test("demo presets carry the record and the names of the chapters already lived (endings never read empty)", () => {
+  let previous: PlayerSave["record"] | null = null;
+  for (const id of CHAPTER_IDS) {
+    const chapter = CONTENT.chapters[id];
+    const save = createSave(CONTENT, { token: "t", name: "강휘", variant: "m", origin: "northeast", seed: 5, demoChapter: id });
+    const lived = chapter.order - 1;
+    const { record } = save;
+    const where = `demo ${id}`;
+    // Content gives the battles, bosses and purges; the rest is per chapter lived.
+    const bosses = CHAPTER_IDS.slice(0, lived).reduce((sum, earlier) =>
+      sum + CONTENT.chapters[earlier].battles.filter((battle) => battle.boss && !battle.alt).length, 0);
+    assert.equal(record.bossKills, bosses, where);
+    assert.deepEqual([record.revivesGiven, record.selfRevives, record.lifeSpent], [4 * lived, lived, 2 * lived], where);
+    assert.equal(record.lifeGained - record.lifeSpent, save.lifeEnd - 1861, `${where}: the 천수 graph adds up`);
+    assert.equal(record.turncoat, 0, where);
+    if (lived > 0) assert.ok(record.kills >= 10 * lived && record.kills <= 100 * lived, `${where}: ${record.kills} kills`);
+    else assert.deepEqual(record, { kills: 0, bossKills: 0, selfRevives: 0, revivesGiven: 0, washes: 0, purgesSurvived: 0, turncoat: 0, lifeGained: 0, lifeSpent: 0 });
+    if (previous) {
+      for (const key of ["kills", "bossKills", "purgesSurvived", "revivesGiven", "lifeSpent"] as const)
+        assert.ok(record[key] >= previous[key], `${where}: ${key} grows with the chapters lived`);
+    }
+    previous = record;
+    // A wash about every 35 years (30~40년마다 신분 세탁), none before CH04's own.
+    const spans = save.identities.slice(0, -1).map((identity) => (identity.to ?? 0) - identity.from);
+    if (chapter.order <= 4) assert.equal(save.record.washes, 0, where);
+    else assert.ok(spans.every((years) => years >= 28 && years <= 50), `${where}: ${spans.join(",")}`);
+    assert.equal(save.year - save.identity.startYear, chapter.order > 4 ? 15 : save.year - 1361, where);
+  }
+  const ch16 = createSave(CONTENT, { token: "t", name: "강휘", variant: "m", origin: "northeast", seed: 5, demoChapter: "ch16" });
+  const spans = ch16.identities.slice(0, -1).map((identity) => (identity.to ?? 0) - identity.from);
+  assert.ok(spans.every((years) => years >= 28 && years <= 42), spans.join(","));
+  assert.deepEqual(new Set(ch16.identities.slice(1).map((identity) => identity.kind)), new Set(["descendant", "exam", "merchant"]));
+  assert.equal(ch16.chronicle.filter((entry) => entry.text.includes("의 이름을 버리고")).length, ch16.record.washes, "one chronicle line per wash");
 });
 
 test("migrateSave rejects garbage", () => {

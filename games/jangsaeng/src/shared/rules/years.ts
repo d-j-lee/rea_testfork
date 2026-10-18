@@ -2,9 +2,10 @@
 // follows the fixed processing order of §5.7.2.
 import type { ContentIndex } from "../content/index.ts";
 import type { ChapterId, Effect, WashMethod } from "../content/schema.ts";
-import type { PlayerSave, ResultView, YearsPlanView } from "../types.ts";
+import type { PlayerSave, ResultView, YearsActivityView, YearsPlanView, YearsWashView } from "../types.ts";
 import { applyEffectsInto, emptyOutcome } from "./effects.ts";
 import {
+  almsVirtue,
   BAND_NAMES,
   changeSuspicion,
   cleanName,
@@ -17,19 +18,22 @@ import {
   washIdentity,
   WASH_METHODS,
 } from "./identity.ts";
-import { applyGrace, applyResonance, graceAvailable, GRACE_YEARS, offerableYears, offerVirtue } from "./lifespan.ts";
+import { applyGrace, applyResonance, graceAvailable, GRACE_YEARS, offerVirtue, offerYears, resonanceDue } from "./lifespan.ts";
 import { carryNation, closeChapterBranches, INFILTRATION_FROM_ORDER } from "./nation.ts";
 import { promote, refreshEraGear } from "./progression.ts";
 import { pastLifeEnd, successorTakeover } from "./succession.ts";
 import {
+  cloneSave,
   FAMILY_BONDS,
   hashRoll,
   hasSchool,
   isFamilyBond,
+  josa,
   line,
   nationName,
   round1,
   statName,
+  virtueEarned,
   type Line,
 } from "./util.ts";
 
@@ -111,11 +115,48 @@ export interface ActivityDef {
   desc: string;
   /** Planner hint for this save. */
   effect: (save: PlayerSave) => string;
+  /** Why it cannot run for this save, beside a purse that cannot pay its 전 (see activityBlocker). */
   blocker?: (save: PlayerSave) => string | undefined;
-  /** Pure effects for one token. */
+  /**
+   * Pure effects for one token. They are the one owner of what a token does:
+   * the token runs them, and the planner reads its 천수, 공덕 and 전 from them
+   * (activityYield) for the projection.
+   */
   effects: (save: PlayerSave, ruling: string | undefined) => Effect[];
   /** Changes with no Effect kind (free points, bond decay); returns notes. */
   extra?: (save: PlayerSave) => string[];
+}
+
+/** What a token blocked when its turn comes runs instead (§5.7.3). */
+const FALLBACK_ACTIVITY = "train";
+
+/** The numbers of a token's effects the planner projects: 천수 years, 공덕 gained, 전 earned (+) or spent (−). */
+interface ActivityYield {
+  life: number;
+  virtue: number;
+  money: number;
+}
+
+/** Reads the projected numbers off a token's effects (activities run no checks or branches). */
+function activityYield(effects: readonly Effect[]): ActivityYield {
+  const result: ActivityYield = { life: 0, virtue: 0, money: 0 };
+  for (const effect of effects) {
+    if (effect.k === "life") result.life += Math.round(effect.add);
+    else if (effect.k === "point" && effect.point === "virtue" && effect.add > 0) result.virtue += Math.round(effect.add);
+    else if (effect.k === "point" && effect.point === "money") result.money += Math.round(effect.add);
+  }
+  return result;
+}
+
+/**
+ * Why `def` cannot run a token for this save now: its own blocker, or a purse
+ * that cannot pay what its effects spend. The planner (on the purse after the
+ * salary) and each token (on the purse it finds) ask the same question.
+ */
+function activityBlocker(save: PlayerSave, def: ActivityDef, money: number): string | undefined {
+  const own = def.blocker?.(save);
+  if (own) return own;
+  return save.points.money + money < 0 ? `전 ${josa(String(-money), "이/가")} 필요하다` : undefined;
 }
 
 export const ACTIVITIES: readonly ActivityDef[] = [
@@ -162,7 +203,6 @@ export const ACTIVITIES: readonly ActivityDef[] = [
   },
   {
     id: "charity", name: "선행·구휼", desc: "굶주린 이웃에게 곡식을 나눈다.", effect: () => "공덕 +60 · 민심 +1 · 전 −150",
-    blocker: (save) => (save.points.money >= 150 ? undefined : "전 150이 필요하다"),
     effects: () => [
       { k: "point", point: "money", add: -150 },
       { k: "point", point: "virtue", add: 60 },
@@ -186,13 +226,16 @@ export const ACTIVITIES: readonly ActivityDef[] = [
   },
 ];
 
-/** Runs one token; a blocked or unknown activity falls back to 무예 수련. */
+const FALLBACK_DEF = ACTIVITIES.find((activity) => activity.id === FALLBACK_ACTIVITY) as ActivityDef;
+
+/** Runs one token; a blocked or unknown activity falls back to FALLBACK_ACTIVITY (무예 수련). */
 function runActivity(content: ContentIndex, save: PlayerSave, id: string, label: string): { lines: Line[]; ran: string } {
+  const ruling = content.chapters[save.chapter]?.ruling;
   const def = ACTIVITIES.find((activity) => activity.id === id);
-  const blocked = def ? def.blocker?.(save) : "알 수 없는 활동";
-  const chosen = def && !blocked ? def : (ACTIVITIES[0] as ActivityDef);
+  const blocked = def ? activityBlocker(save, def, activityYield(def.effects(save, ruling)).money) : "알 수 없는 활동";
+  const chosen = def && !blocked ? def : FALLBACK_DEF;
   const out = emptyOutcome();
-  applyEffectsInto(content, save, chosen.effects(save, content.chapters[save.chapter]?.ruling), out);
+  applyEffectsInto(content, save, chosen.effects(save, ruling), out);
   const notes = chosen.extra?.(save) ?? [];
   const detail = [...out.lines.map((entry) => entry.text), ...notes].join(" · ");
   const prefix = blocked ? `${label} · ${def?.name ?? id} 불가(${blocked}) → ${chosen.name}` : `${label} · ${chosen.name}`;
@@ -309,33 +352,55 @@ function projectedSuspicion(save: PlayerSave, toYear: number): number {
   return round1(value);
 }
 
+function activityView(save: PlayerSave, def: ActivityDef, ruling: string | undefined): YearsActivityView {
+  const { life, virtue, money } = activityYield(def.effects(save, ruling));
+  const view: YearsActivityView = { id: def.id, name: def.name, desc: def.desc, effect: def.effect(save) };
+  const disabled = activityBlocker(save, def, money);
+  if (disabled) view.disabled = disabled;
+  if (life !== 0) view.life = life;
+  if (virtue !== 0) view.virtue = virtue;
+  if (money !== 0) view.money = money;
+  return view;
+}
+
+function washView(save: PlayerSave, method: WashMethod): YearsWashView {
+  const spec = WASH_METHODS[method];
+  const view: YearsWashView = { id: method, name: spec.name, desc: washDesc(save, method) };
+  const disabled = washBlocker(save, method);
+  if (disabled) view.disabled = disabled;
+  if (spec.life !== 0) view.life = spec.life;
+  if (spec.cost !== "all") view.cost = washCost(save, method);
+  if (spec.alms) view.alms = spec.alms;
+  return view;
+}
+
 /**
  * Planner view for the years between the current chapter and `next`. The
  * tokens stand for the whole era (chapter start → next start, §5.7.1), so the
  * view carries those spans and the copy; fromYear → toYear is only what the
- * year counter still has to move. `suggested` is the plan a plain confirm or a
- * demo skip submits: the first open activity, and the offering whenever it adds
- * years. The last grace is offered (`graceYears`) but never suggested; this and
- * advanceYears decide it on the same save, before the passage moves lifeEnd.
+ * year counter still has to move. Activities and washes are shown as they will
+ * meet the save: after step 1 (salary and promotion), with the purse that
+ * leaves, and they carry the numbers projectYears needs. `suggested` is the
+ * plan a plain confirm or a demo skip submits: the first open activity, and the
+ * offering whenever it adds years. The last grace is offered (`graceYears`)
+ * but never suggested; this and advanceYears decide it on the same save,
+ * before the passage moves lifeEnd.
  */
 export function yearsPlan(content: ContentIndex, save: PlayerSave, next: ChapterId): YearsPlanView {
   const toYear = Math.max(save.year, content.chapters[next]?.years[0] ?? save.year);
   const era = eraOf(content, save, next);
   const tokens = tokensBetween(era.from, era.to);
-  const washes: YearsPlanView["washes"] = [];
+  const ready = cloneSave(save);
+  paySalary(content, ready);
+  const ruling = content.chapters[save.chapter]?.ruling;
+  const washes: YearsWashView[] = [];
   for (const method of WASH_ORDER) {
-    const blocked = washBlocker(save, method);
-    if (WASH_METHODS[method].needsWar && blocked && blocked.startsWith("전쟁")) continue;
-    const view = { id: method, name: WASH_METHODS[method].name, desc: washDesc(save, method) };
-    washes.push(blocked ? { ...view, disabled: blocked } : view);
+    const view = washView(ready, method);
+    if (WASH_METHODS[method].needsWar && view.disabled?.startsWith("전쟁")) continue;
+    washes.push(view);
   }
-  const activities = ACTIVITIES.map((activity): YearsPlanView["activities"][number] => {
-    const disabled = activity.blocker?.(save);
-    const view = { id: activity.id, name: activity.name, desc: activity.desc, effect: activity.effect(save) };
-    return disabled ? { ...view, disabled } : view;
-  });
-  const firstOpen = activities.find((activity) => !activity.disabled)?.id ?? (ACTIVITIES[0] as ActivityDef).id;
-  const canOffer = offerableYears(save);
+  const activities = ACTIVITIES.map((def) => activityView(ready, def, ruling));
+  const firstOpen = activities.find((activity) => !activity.disabled)?.id ?? FALLBACK_ACTIVITY;
   const plan: YearsPlanView = {
     type: "years",
     fromYear: save.year,
@@ -350,15 +415,93 @@ export function yearsPlan(content: ContentIndex, save: PlayerSave, next: Chapter
     washAdvised: save.suspicion >= WASH_ADVISED_AT || projectedSuspicion(save, toYear) >= 90,
     lifeEnd: save.lifeEnd,
     virtue: save.points.virtue,
-    canOffer,
-    suggested: { activities: Array.from({ length: tokens }, () => firstOpen), offer: canOffer > 0 },
+    purse: ready.points.money,
+    suggested: { activities: Array.from({ length: tokens }, () => firstOpen), offer: false },
     suggestedName: plannedName(save, next),
   };
+  const resonance = resonanceDue(save, save.chapter);
+  if (resonance) {
+    plan.resonance = { years: resonance.years, bonus: resonance.bonus, bonusAt: Math.max(0, resonance.threshold - virtueEarned(save)) };
+  }
   if (graceAvailable(content, save, next)) plan.graceYears = GRACE_YEARS;
+  plan.suggested.offer = projectYears(plan, { ...plan.suggested, grace: false }).offerable > 0;
   return plan;
 }
 
+export interface YearsProjectionChoice {
+  activities: readonly string[];
+  wash?: string | null;
+  offer: boolean;
+  grace: boolean;
+}
+
+/** What a plan does to 천수, part by part (years; offerable is what the offering would buy, counted only when chosen). */
+export interface YearsProjection {
+  lifeEnd: number;
+  activities: number;
+  wash: number;
+  resonance: number;
+  offerable: number;
+  offer: number;
+  grace: number;
+}
+
+/**
+ * 천수 after the passage a plan describes, read from the plan alone so the
+ * planner shows what advanceYears will do with the choices it offers: the
+ * tokens in order on the purse (one the planner shows closed, or that the
+ * purse cannot pay when its turn comes, runs FALLBACK_ACTIVITY), the wash on
+ * what is left (출가 turns it into 공덕), 노인성 감응 with its bonus once the
+ * 공덕 gained reaches it, the offering on the 공덕 then held, and the last
+ * grace when chosen. Chance is not foretold: small events (역병, 호환…) and
+ * what the years bring after the plan (a forced flight at 발각, a successor)
+ * show in the result. 치부's take and the 상인 행세 discount are the plan's,
+ * as of planning (an 인맥 쌓기 that lifts 백가 past 60 first is not counted).
+ */
+export function projectYears(plan: YearsPlanView, choice: YearsProjectionChoice): YearsProjection {
+  const fallback = plan.activities.find((activity) => activity.id === FALLBACK_ACTIVITY);
+  let purse = plan.purse;
+  let virtue = 0;
+  let activities = 0;
+  for (let index = 0; index < plan.tokens; index++) {
+    const wanted = plan.activities.find((activity) => activity.id === choice.activities[index]);
+    const token = wanted && !wanted.disabled && purse + (wanted.money ?? 0) >= 0 ? wanted : fallback;
+    if (!token) continue;
+    purse += token.money ?? 0;
+    virtue += token.virtue ?? 0;
+    activities += token.life ?? 0;
+  }
+  let wash = 0;
+  const method = choice.wash ? plan.washes.find((candidate) => candidate.id === choice.wash) : undefined;
+  if (method && !method.disabled && purse >= (method.cost ?? 0)) {
+    wash = method.life ?? 0;
+    if (method.alms) virtue += almsVirtue(method.alms, purse);
+  }
+  const due = plan.resonance;
+  const resonance = due ? due.years + (virtue >= due.bonusAt ? due.bonus : 0) : 0;
+  const offerable = offerYears(plan.virtue + virtue);
+  const offer = choice.offer ? offerable : 0;
+  const grace = choice.grace ? plan.graceYears ?? 0 : 0;
+  return { lifeEnd: plan.lifeEnd + activities + wash + resonance + offer + grace, activities, wash, resonance, offerable, offer, grace };
+}
+
 // ── Advance ──────────────────────────────────────────────────────────────
+
+/** Step 1 (§5.7.2): the salary of the chapter that is ending, then promotion under its regime. */
+function paySalary(content: ContentIndex, save: PlayerSave): Line[] {
+  const lines: Line[] = [];
+  const pay = SALARY_PER_RANK * save.rank;
+  if (save.exile) lines.push(line("유배지에서 세월을 견디다 — 녹봉 없음", "bad"));
+  else if (save.flags["salarySuspended"] === true) {
+    if (pay > 0) lines.push(line("파직의 여파로 녹봉이 끊겼다", "bad"));
+  } else if (pay > 0) {
+    save.points.money += pay;
+    lines.push(line(`녹봉 ${pay}전`, "good"));
+  }
+  delete save.flags["salarySuspended"];
+  lines.push(...promote(save, content.chapters[save.chapter]?.ruling).lines);
+  return lines;
+}
 
 /** Successor factions start at 50% of their lineage's favor (kept if already set). */
 function inheritFactions(content: ContentIndex, save: PlayerSave, next: ChapterId): void {
@@ -391,16 +534,7 @@ export function advanceYears(content: ContentIndex, save: PlayerSave, next: Chap
   const lines: Line[] = [line(`${fromYear}년 → ${toYear}년 · 세월이 흐른다 (${tokens}토큰)`, "info")];
 
   // 1. Salary, then promotion under the regime that is ending.
-  const pay = SALARY_PER_RANK * save.rank;
-  if (save.exile) lines.push(line("유배지에서 세월을 견디다 — 녹봉 없음", "bad"));
-  else if (save.flags["salarySuspended"] === true) {
-    if (pay > 0) lines.push(line("파직의 여파로 녹봉이 끊겼다", "bad"));
-  } else if (pay > 0) {
-    save.points.money += pay;
-    lines.push(line(`녹봉 ${pay}전`, "good"));
-  }
-  delete save.flags["salarySuspended"];
-  lines.push(...promote(save, content.chapters[leaving]?.ruling).lines);
+  lines.push(...paySalary(content, save));
 
   // 2. Activities and small events, one per token.
   const chosen = Array.isArray(choice.activities) ? choice.activities : [];
@@ -460,7 +594,6 @@ export function advanceYears(content: ContentIndex, save: PlayerSave, next: Chap
   save.objectives = {};
   save.pending = [];
   save.longevityUses = 0;
-  save.offeredThisChapter = 0;
   save.aligned = null;
   delete save.position;
   for (const flag of ["freeReviveUsed", "vouch", "escaped", "righteous"]) delete save.flags[flag];

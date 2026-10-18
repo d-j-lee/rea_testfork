@@ -227,7 +227,6 @@ function parse(content: ContentIndex, raw: unknown): PlayerSave | null {
   save.lifeEnd = num(raw.lifeEnd, base.lifeEnd, 1361, 3000);
   save.graceUsed = bool(raw.graceUsed, false);
   save.longevityUses = num(raw.longevityUses, 0, 0, 3);
-  save.offeredThisChapter = num(raw.offeredThisChapter, 0, 0, 5);
   save.suspicion = round1(num(raw.suspicion, 0, 0, 100, false));
   save.rank = num(raw.rank, 0, 0, RANK_CAP);
   if (raw.meritSubject === 1 || raw.meritSubject === 2 || raw.meritSubject === 3 || raw.meritSubject === 4) {

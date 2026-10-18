@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { BranchId } from "../../src/shared/content/schema.ts";
 import { BRANCH_IDS } from "../../src/shared/content/schema.ts";
-import { applyEffects, computeEnding, finalInfiltration, nationValue } from "../../src/shared/rules/index.ts";
+import { applyEffects, computeEnding, ENDING_RULE, finalInfiltration, nationValue } from "../../src/shared/rules/index.ts";
 import type { PlayerSave } from "../../src/shared/types.ts";
 import { at, FIXTURE, newSave } from "./rules-fixture.ts";
 
@@ -110,6 +110,26 @@ test("historical path (GDD): every branch failed → infiltration 100, S ≈ −
   const untouched = at(newSave(), "ch16", 1910);
   untouched.nation = { defense: 15, diplomacy: 20, finance: 15, people: 40, reform: 35 };
   assert.equal(computeEnding(FIXTURE, untouched).score, -4.9);
+});
+
+test("「역사의 길」 (N3) comes from the score and B12b, not from infiltration reaching 100 (ENDING_RULE)", () => {
+  assert.deepEqual(
+    { n2: ENDING_RULE.n2, infiltration: ENDING_RULE.infiltration, allFailed: ENDING_RULE.allFailed },
+    { n2: { score: 45, branch: "B12b" }, infiltration: -0.3, allFailed: 100 },
+  );
+  // As reviewed: B9 and B12a won, infiltration 85, yet the run settles N3.
+  const below = finalSave([20, 25, 20, 35, 35], ["B9", "B12a"]);
+  assert.equal(finalInfiltration(below), 85);
+  const n3 = computeEnding(FIXTURE, below);
+  assert.ok(n3.score < ENDING_RULE.n2.score, `score ${n3.score}`);
+  assert.equal(n3.nation, "N3", "below 100: N3 all the same");
+  assert.equal(n3.breakdown.find((row) => row.label.startsWith("침투도"))?.value, 85 * ENDING_RULE.infiltration);
+  // The same infiltration with the score at the line, or with B12b won: N2.
+  const atLine = finalSave([75, 70, 70, 70, 70], ["B9", "B12a"]);
+  assert.equal(finalInfiltration(atLine), 85);
+  assert.ok(computeEnding(FIXTURE, atLine).score >= ENDING_RULE.n2.score);
+  assert.equal(computeEnding(FIXTURE, atLine).nation, "N2");
+  assert.equal(computeEnding(FIXTURE, finalSave([20, 25, 20, 35, 35], ["B9", "B12a", ENDING_RULE.n2.branch])).nation, "N2");
 });
 
 test("B12b alone guarantees N2; zeitgeist is capped at +5", () => {

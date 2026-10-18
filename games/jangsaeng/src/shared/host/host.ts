@@ -6,7 +6,8 @@ import { generateMap, type GameMap } from "../map/generate.ts";
 import { PROTOCOL_VERSION, type ClientMsg, type ServerMsg } from "../protocol.ts";
 import { hashString } from "../rng.ts";
 import { createSave, migrateSave } from "../rules/index.ts";
-import type { PlayerSave } from "../types.ts";
+import type { ChapterId } from "../content/schema.ts";
+import { DEFAULT_DEMO_PATH, type DemoPath, type PlayerSave } from "../types.ts";
 import type { ConnectionMeta, GameHost, HostConnection, HostOptions, HostStats } from "./api.ts";
 import { Channel, channelKey } from "./channel.ts";
 import { parseClientMsg, sanitizeName } from "./parse.ts";
@@ -15,6 +16,16 @@ import { Session } from "./session.ts";
 const STEP_MS = 50;
 const MAX_STEPS_PER_TICK = 10;
 const EMPTY_CHANNEL_TTL = 60;
+
+/**
+ * The seed of a new save. A demo's comes from its chapter and path, not its
+ * token: a presenter replaying the same chapter and path meets the same rolls
+ * (판정, 숙청, 풍향계 readings, small events) and the same names every time.
+ * A real character's comes from its token.
+ */
+function saveSeed(token: string, demo: ChapterId | undefined, path: DemoPath | undefined): number {
+  return hashString(demo ? `demo:${demo}:${path ?? DEFAULT_DEMO_PATH}` : token);
+}
 
 function randomToken(): string {
   const bytes = new Uint8Array(16);
@@ -116,7 +127,7 @@ class Host implements GameHost {
         name,
         variant: message.variant,
         origin: message.origin,
-        seed: hashString(token),
+        seed: saveSeed(token, message.demo, message.demoPath),
       };
       if (message.demo) options.demoChapter = message.demo;
       if (message.demoPath) options.demoPath = message.demoPath;

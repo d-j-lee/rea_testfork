@@ -1,10 +1,11 @@
 // Nation meters (국운), infiltration (침투도), carry-over between chapters
 // and the 1910 settlement. GDD §4.6 / §6.
+import { NATION_ENDINGS } from "../content/endings.ts";
 import type { ContentIndex } from "../content/index.ts";
 import type { BranchId, ChapterId, NationKey, NationMeter } from "../content/schema.ts";
 import { BRANCH_IDS, NATION_KEYS } from "../content/schema.ts";
 import type { EndingResult, PlayerSave } from "../types.ts";
-import { chapterVirtue, clamp, discipleGeneration, nationName, numberFlag, virtueEarned } from "./util.ts";
+import { chapterVirtue, clamp, discipleGeneration, josa, nationName, numberFlag, virtueEarned } from "./util.ts";
 
 export const BRANCH_LABELS: Readonly<Record<BranchId, string>> = {
   B1: "장용영 유지 (1802)",
@@ -184,6 +185,36 @@ const WEIGHTS: readonly (readonly [NationKey, number])[] = [
 const BRANCH_WEIGHT = 300;
 const INFILTRATION_WEIGHT = -30;
 
+/**
+ * §8.2, the nation ending's thresholds: computeEnding decides with them and the
+ * copy that explains infiltration (the 국운 tab, the ending) quotes them.
+ * N1 needs score, 국방 and both branches; N2 the score or the first branch;
+ * anything else is N3. `infiltration` is the score per point of final
+ * infiltration, and `allFailed` the infiltration when no weighted branch is won.
+ */
+export const ENDING_RULE = {
+  n1: { score: 70, defense: 60, branches: ["B12b", "B12c"] },
+  n2: { score: 45, branch: "B12b" },
+  infiltration: INFILTRATION_WEIGHT / 100,
+  allFailed: Math.min(100, Object.values(INFILTRATION_WEIGHTS).reduce((sum, weight) => sum + weight, 0)),
+} as const satisfies {
+  n1: { score: number; defense: number; branches: readonly BranchId[] };
+  n2: { score: number; branch: BranchId };
+  infiltration: number;
+  allFailed: number;
+};
+
+/**
+ * What infiltration does at the 1910 settlement, in the words of ENDING_RULE,
+ * for the meter's caption (국운 tab, ending): it costs score, and 「역사의 길」
+ * comes from the score and B12b, not from the meter reaching 100.
+ */
+export const INFILTRATION_NOTE =
+  `외세의 침투. 놓친 분기마다 오르고(모두 놓치면 ${ENDING_RULE.allFailed}), `
+  + `1910년 판정에서 1마다 −${Math.abs(ENDING_RULE.infiltration)}점이다. `
+  + `판정이 ${ENDING_RULE.n2.score}점에 못 미치고 ${ENDING_RULE.n2.branch}까지 놓치면 `
+  + `${josa(`「${NATION_ENDINGS.N3.title}」`, "으로/로")} 간다.`;
+
 /** Hundredths settled to whole tenths, half up: 재정 57 × 0.15 = 855 → 86 (8.6). */
 const tenths = (hundredths: number): number => Math.floor((Math.round(hundredths) + 5) / 10);
 
@@ -214,9 +245,10 @@ export function computeEnding(content: ContentIndex, save: PlayerSave): EndingRe
 
   // §8.2: N1 needs the 중명전 defence (B12b) and the army kept (B12c).
   const ok = (id: BranchId) => save.branches[id] === true;
+  const { n1, n2 } = ENDING_RULE;
   let nation: EndingResult["nation"] = "N3";
-  if (score >= 70 && save.nation.defense >= 60 && ok("B12b") && ok("B12c")) nation = "N1";
-  else if (score >= 45 || ok("B12b")) nation = "N2";
+  if (score >= n1.score && save.nation.defense >= n1.defense && n1.branches.every(ok)) nation = "N1";
+  else if (score >= n2.score || ok(n2.branch)) nation = "N2";
 
   // §8.5, first match wins.
   const strongBonds = Object.values(save.bonds).filter((value) => value >= 60).length;

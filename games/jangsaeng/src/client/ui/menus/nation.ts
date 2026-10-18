@@ -1,7 +1,7 @@
 // 국운: radar of the five nation values, infiltration (from CH14), branch
 // checklist B1–B12c (unknown stays 미정), court factions and the world event.
 import { BRANCH_IDS, NATION_NAMES, type BranchId } from "../../../shared/content/schema.ts";
-import { BRANCH_LABELS } from "../../../shared/rules/index.ts";
+import { BRANCH_LABELS, INFILTRATION_NOTE } from "../../../shared/rules/index.ts";
 import type { SelfView } from "../../../shared/types.ts";
 import { radarChart } from "../charts.ts";
 import { h, meter, ratio, setMeter } from "../dom.ts";
@@ -21,12 +21,13 @@ export function branchList(get: (id: BranchId) => { label: string; ok: boolean |
   );
 }
 
+/** The meter and what it does at the 1910 settlement, in the rules' own words (INFILTRATION_NOTE). */
 export function infiltrationBar(value: number): HTMLElement {
   const m = meter("meter-infil");
   setMeter(m, ratio(value, 100));
   m.text.textContent = String(Math.round(value));
   return h("div", { class: "infil" }, h("span", { class: "st-k" }, NATION_NAMES.infiltration), m.root,
-    h("small", { class: "muted" }, "외세의 침투. 실패한 분기마다 오르고, 100이면 역사의 길이다."));
+    h("small", { class: "muted" }, INFILTRATION_NOTE));
 }
 
 export function nationTab(self: SelfView): HTMLElement {

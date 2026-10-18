@@ -8,12 +8,13 @@ import {
   advanceYears,
   apparentAge,
   carryNation,
+  projectYears,
   smallEventAt,
   tokensBetween,
   yearsPlan,
   type YearsChoice,
 } from "../../src/shared/rules/index.ts";
-import type { PlayerSave } from "../../src/shared/types.ts";
+import type { PlayerSave, YearsPlanView } from "../../src/shared/types.ts";
 import { at, FIXTURE, newSave } from "./rules-fixture.ts";
 
 const texts = (lines: readonly { text: string }[]) => lines.map((entry) => entry.text);
@@ -36,6 +37,9 @@ function ending(chapter: ChapterId, year?: number): PlayerSave {
 
 const go = (save: PlayerSave, next: ChapterId, choice: Partial<YearsChoice> = {}) =>
   texts(advanceYears(FIXTURE, save, next, { activities: [], offer: false, ...choice }));
+
+/** Years the offering buys with the plan as suggested (무예 수련 adds no 공덕). */
+const offerable = (plan: YearsPlanView) => projectYears(plan, { activities: [], offer: true, grace: false }).offerable;
 
 test("tokens = clamp(ceil((next start − current start) / 15), 1, 5), 37 in a full run", () => {
   assert.equal(tokensBetween(1361, 1365), 1);
@@ -166,7 +170,6 @@ test("processing order: salary before activities, wash before the years, vouch a
   assert.equal(save.identity.startYear, 1413, "the wash happens before the years pass");
   assert.equal(save.flags["tutorialWashUsed"], true, "the ch04 tutorial wash was free");
   assert.equal(save.suspicion, 0, "10 after the wash − 10 for the vouch; a fresh face does not grow for years");
-  assert.equal(save.offeredThisChapter, 0, "counters reset after the offering");
   assert.equal(save.lifeEnd, 1864);
   const order = ["녹봉", "1번째 세월", "신분 세탁", "동료 보증", "노인성 제단", "의심도", "국운 이월"].map((prefix) =>
     lines.findIndex((text) => text.startsWith(prefix)));
@@ -254,7 +257,6 @@ test("chapter counters reset (incl. aligned = null and per-chapter flags)", () =
   save.step = 2;
   save.objectives = { o1: 3 };
   save.longevityUses = 2;
-  save.offeredThisChapter = 5;
   save.position = { x: 10, y: 20 };
   save.aligned = "bangwon";
   save.flags["freeReviveUsed"] = true;
@@ -266,7 +268,6 @@ test("chapter counters reset (incl. aligned = null and per-chapter flags)", () =
   assert.equal(save.step, 0);
   assert.deepEqual(save.objectives, {});
   assert.equal(save.longevityUses, 0);
-  assert.equal(save.offeredThisChapter, 0);
   assert.equal(save.position, undefined);
   assert.equal(save.aligned, null);
   assert.equal(save.flags["freeReviveUsed"], undefined);
@@ -310,7 +311,7 @@ test("offering and the last grace (next chapter from 1776), each on its own word
   save.points.virtue = 350;
   save.points.fame = 30;
   const plan = yearsPlan(FIXTURE, save, "ch13");
-  assert.equal(plan.canOffer, 3, "the offering alone");
+  assert.equal(offerable(plan), 3, "the offering alone");
   assert.equal(plan.graceYears, 10, "the grace is offered beside it");
   const lines = go(save, "ch13", { activities: ["train"], offer: true, grace: true });
   assert.equal(save.lifeEnd, 1863);
@@ -323,7 +324,7 @@ test("offering and the last grace (next chapter from 1776), each on its own word
   before.lifeEnd = 1850;
   before.points.virtue = 300;
   const early = yearsPlan(FIXTURE, before, "ch12");
-  assert.equal(early.canOffer, 3);
+  assert.equal(offerable(early), 3);
   assert.equal(early.graceYears, undefined, "ch12 starts 1659: no grace yet");
   go(before, "ch12", { activities: ["train"], grace: true });
   assert.equal(before.graceUsed, false, "asking early takes nothing");
@@ -335,7 +336,7 @@ test("the last grace is decided on the save the plan was made from: what the pas
   offered.lifeEnd = 1907;
   offered.points.virtue = 500;
   const plan = yearsPlan(FIXTURE, offered, "ch13");
-  assert.deepEqual([plan.canOffer, plan.graceYears], [5, 10], "the planner offers both");
+  assert.deepEqual([offerable(plan), plan.graceYears], [5, 10], "the planner offers both");
   const lines = go(offered, "ch13", { activities: ["train"], offer: true, grace: true });
   assert.equal(offered.graceUsed, true, "the grace the player turned on is taken");
   assert.equal(offered.lifeEnd, 1907 + 5 + 10, "as the planner projected it");
@@ -368,7 +369,7 @@ test("the suggested plan into a chapter from 1776 offers virtue but never spends
   poor.lifeEnd = 1850;
   poor.points.virtue = 40;
   const bare = yearsPlan(FIXTURE, poor, "ch13");
-  assert.deepEqual([bare.canOffer, bare.suggested.offer, bare.graceYears], [0, false, 10]);
+  assert.deepEqual([offerable(bare), bare.suggested.offer, bare.graceYears], [0, false, 10]);
 });
 
 test("leaving a chapter fails its undecided branches before the carry-over", () => {
@@ -425,7 +426,7 @@ test("yearsPlan lists activities, washes, advice and offering", () => {
   assert.equal(plan.washes.find((wash) => wash.id === "descendant")?.disabled, undefined, "the tutorial wash is free");
   assert.ok(plan.washes.find((wash) => wash.id === "descendant")?.desc.startsWith("비용 면제"));
   assert.equal(plan.washAdvised, false);
-  assert.equal(plan.canOffer, 0);
+  assert.equal(offerable(plan), 0);
 
   const war = at(newSave(), "ch02", 1387);
   war.points.virtue = 820;
@@ -435,7 +436,7 @@ test("yearsPlan lists activities, washes, advice and offering", () => {
   assert.ok(warPlan.washes.find((wash) => wash.id === "exam")?.disabled?.includes("1402"));
   assert.ok(warPlan.washes.find((wash) => wash.id === "descendant")?.disabled?.includes("300"));
   assert.equal(warPlan.washAdvised, true);
-  assert.equal(warPlan.canOffer, 5);
+  assert.equal(offerable(warPlan), 5);
 });
 
 test("transition is deterministic for a seed", () => {
@@ -492,7 +493,7 @@ test("yearsPlan suggests the first open activity and the offering whenever the o
   const devout = at(newSave(), "ch04", 1418);
   devout.points.virtue = 250;
   const offering = yearsPlan(FIXTURE, devout, "ch05");
-  assert.equal(offering.canOffer, 2);
+  assert.equal(offerable(offering), 2);
   assert.equal(offering.suggested.offer, true);
 });
 
