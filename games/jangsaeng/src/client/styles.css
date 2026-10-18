@@ -209,10 +209,13 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 .demo-card.great { border-top-color: var(--red); }
 .demo-card.montage { border-top-style: double; }
 .demo-card:hover, .demo-card:focus-visible { transform: translateY(-2px); border-color: var(--ink); box-shadow: 0 6px 14px rgba(60, 40, 10, .18); }
-.demo-top { display: flex; justify-content: space-between; font-size: 13px; }
+.demo-top { display: flex; align-items: baseline; gap: 8px; font-size: 13px; }
+.demo-level { color: var(--blue); font-weight: 700; }
+.demo-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+.demo-head .tag { font-size: 11.5px; line-height: 18px; padding: 0 5px; }
 .demo-no { color: var(--red); font-weight: 700; letter-spacing: .06em; }
-.demo-years { color: var(--ink-mute); font-variant-numeric: tabular-nums; }
-.demo-title { font: 18px/1.3 var(--f-title); font-weight: 400; }
+.demo-years { margin-left: auto; color: var(--ink-mute); font-variant-numeric: tabular-nums; }
+.demo-title { margin-right: 2px; font: 18px/1.3 var(--f-title); font-weight: 400; }
 .demo-line { flex: 1; font-size: 13.5px; line-height: 1.5; color: var(--ink-2); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .demo-tags { display: flex; flex-wrap: wrap; gap: 4px; }
 
@@ -807,6 +810,7 @@ html[data-touch="on"] .hud-skills { display: none; }
 .tc-interact .tc-glyph, .tc-shoot .tc-glyph, .tc-dodge .tc-glyph { font-size: 22px; }
 .tc-skill { width: 48px; height: 48px; border-radius: 50%; }
 .tc-skill .sk-glyph { font-size: 21px; transform: none; }
+.tc-skill.empty { opacity: .35; }
 .tc-skill .sk-key { left: 50%; top: auto; bottom: 1px; transform: translateX(-50%); font-size: 10px; }
 .tc-s1 { right: 203px; bottom: 83px; }
 .tc-s2 { right: 183px; bottom: 138px; }
@@ -1013,6 +1017,18 @@ html[data-layout="compact"] .hud[data-drawer="chat"] .chat-toggle { display: non
   .title-foot { padding-bottom: calc(8px + var(--sab)); }
   .title-foot .disclaimer { font-size: 11.5px; max-width: 70em; }
   .title-canopus { left: 52%; top: 22%; }
+  .panel-head { padding: calc(8px + var(--sat)) 18px 6px; }
+  .panel-title { font-size: 21px; }
+  .panel-kicker { font-size: 11.5px; }
+  .panel-glyph { font-size: 44px; }
+  .panel-body { padding: 10px 18px 12px; }
+  .panel-foot { padding: 8px 18px calc(8px + var(--sab)); }
+  .btn-wide { min-height: 40px; padding: 8px 22px; font-size: 16px; }
+  .yr-foot { flex-direction: row; }
+  .card-channel { display: none; }
+  .card-title { font-size: clamp(32px, 9vh, 54px); }
+  .card-brief p { font-size: 15px; line-height: 1.6; }
+  .card-skip { bottom: calc(10px + var(--sab)); }
 }
 
 /* ── Motion ───────────────────────────────────────────────────────────── */
