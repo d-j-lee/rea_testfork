@@ -51,7 +51,7 @@ export const ch11: ChapterDef = {
     {
       id: "yi_gwi",
       name: "이귀",
-      title: "서인 무장",
+      title: "반정을 꾀한 서인",
       sprite: "official_blue",
       site: "hanyang",
       offset: [-3, -3],
@@ -319,7 +319,7 @@ export const ch11: ChapterDef = {
       speaker: { name: "정충신", sprite: "general_joseon" },
       body: [
         "이괄이 도성에 들어와 흥안군을 왕으로 세웠소. 주상께서는 공주로 몸을 피하셨소.",
-        "도원수 장만 공이 길마재 꼭대기를 먼저 잡으라 하셨소. 위에서 아래로 치면 수가 적어도 이길 수 있소.",
+        "길마재 꼭대기를 먼저 잡자고 도원수 장만 공께 청했소. 위에서 아래로 치면 수가 적어도 이길 수 있소.",
         "다만 바람이 걱정이오. 동풍이 불면 먼지를 우리가 다 마시게 되오.",
       ],
       options: [

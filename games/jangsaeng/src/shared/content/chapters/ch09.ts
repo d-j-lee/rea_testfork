@@ -761,7 +761,7 @@ export const ch09: ChapterDef = {
     {
       id: "s5",
       year: 1592,
-      narration: ["4월 29일 밤. 도성은 텅 비어 간다. 궁궐 쪽 하늘이 붉다."],
+      narration: ["4월 29일 밤. 도성은 텅 비어 간다. 사람들이 짐을 지고 성문으로 몰린다."],
       objectives: [
         { id: "o_crossroads", text: "류성룡과 갈 길을 정한다", kind: "talk", target: "ryu_seongryong", site: "hanyang", offset: [2, -2], prompt: "p_crossroads" },
         { id: "o_fan", text: "송상현의 부채를 남행 전령에게 맡긴다", kind: "talk", target: "fan_messenger", site: "hanyang", offset: [-3, 2], prompt: "p_fan", optional: true, requires: { k: "item", item: "letter" } },
