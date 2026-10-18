@@ -151,6 +151,8 @@ export interface EntitySnap {
   down?: boolean;
   /** Historical figure badge. */
   hist?: boolean;
+  /** Simulated companion (◇): on team "player" but not a real person. */
+  bot?: boolean;
 }
 
 export type Telegraph =
