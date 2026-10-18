@@ -128,13 +128,17 @@ export class Input {
     }
     if (!this.#enabled) return;
     if (down) {
-      // 1-4: skill slots; 5 (or R): 노인성 일섬.
-      if (/^Digit[1-5]$/.test(event.code))
-        this.#skill = Number(event.code.slice(5));
-      else if (/^Numpad[1-5]$/.test(event.code))
-        this.#skill = Number(event.code.slice(6));
-      else if (event.code === "KeyR") this.#skill = 5;
-      if (event.code === "KeyE" || event.code === "KeyF") this.#interact = true;
+      // Skills and interact are presses, not holds: keyboard auto-repeat
+      // must not re-fire them (each press is sent to the host at once).
+      if (!event.repeat) {
+        // 1-4: skill slots; 5 (or R): 노인성 일섬.
+        if (/^Digit[1-5]$/.test(event.code))
+          this.#skill = Number(event.code.slice(5));
+        else if (/^Numpad[1-5]$/.test(event.code))
+          this.#skill = Number(event.code.slice(6));
+        else if (event.code === "KeyR") this.#skill = 5;
+        if (event.code === "KeyE" || event.code === "KeyF") this.#interact = true;
+      }
       this.#down.add(event.code);
     } else this.#down.delete(event.code);
     if (

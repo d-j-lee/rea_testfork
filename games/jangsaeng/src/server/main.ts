@@ -9,6 +9,7 @@ import { WebSocketServer, type RawData } from "ws";
 import { createGameHost } from "../shared/host/host.ts";
 import type { HostConnection } from "../shared/host/api.ts";
 import { createStaticHandler } from "./static.ts";
+import { ABUSE_FACTOR, RateGate } from "./rate.ts";
 import { JsonProfileStore } from "./store.ts";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -40,6 +41,7 @@ const server = createServer((request, response) => {
 });
 
 const MAX_MESSAGE_BYTES = 8 * 1024;
+/** Per-socket budget; excess is dropped, ABUSE_FACTOR × this closes (rate.ts). */
 const MESSAGES_PER_SECOND = 40;
 const wss = new WebSocketServer({
   server,
@@ -49,8 +51,7 @@ const wss = new WebSocketServer({
 
 wss.on("connection", (socket, request) => {
   const remote = request.socket.remoteAddress ?? "unknown";
-  let budget = MESSAGES_PER_SECOND;
-  let windowStart = performance.now();
+  const gate = new RateGate(MESSAGES_PER_SECOND);
   let connection: HostConnection | null = host.connect(
     (message) => {
       if (socket.readyState === socket.OPEN)
@@ -64,15 +65,18 @@ wss.on("connection", (socket, request) => {
   };
   socket.on("message", (data: RawData, isBinary) => {
     if (!connection) return;
-    const now = performance.now();
-    if (now - windowStart >= 1000) {
-      windowStart = now;
-      budget = MESSAGES_PER_SECOND;
-    }
-    if (--budget < 0 || isBinary) {
-      socket.close(1008, budget < 0 ? "rate limit" : "binary unsupported");
+    if (isBinary) {
+      socket.close(1008, "binary unsupported");
       return;
     }
+    const verdict = gate.admit(performance.now());
+    if (verdict === "close") {
+      log(`rate limit: closing ${remote} (over ${MESSAGES_PER_SECOND * ABUSE_FACTOR} messages in one second)`);
+      socket.close(1008, "rate limit");
+      close("rate limit");
+      return;
+    }
+    if (verdict === "drop") return;
     let message: unknown;
     try {
       message = JSON.parse(data.toString());
