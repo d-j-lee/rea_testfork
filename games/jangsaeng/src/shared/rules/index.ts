@@ -71,6 +71,7 @@ export {
   BRANCH_CHAPTER,
   BRANCH_LABELS,
   carryNation,
+  chapterBranches,
   closeChapterBranches,
   completeWorldEvent,
   computeEnding,
