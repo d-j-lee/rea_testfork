@@ -385,6 +385,56 @@ test("transition is deterministic for a seed", () => {
   assert.deepEqual(one, two);
 });
 
+test("an in-chapter year jump settles the suspicion bands like a transition", () => {
+  const watched = at(newSave(), "ch05", 1420);
+  watched.suspicion = 75;
+  const lines = texts(advanceStepYear(FIXTURE, watched, 1421));
+  assert.equal(watched.flags["inquiry"], true, "the session raises the 사헌부 card from this flag");
+  assert.ok(lines.some((text) => text.startsWith("사헌부")), lines.join(" / "));
+  assert.ok(!texts(advanceStepYear(FIXTURE, watched, 1422)).some((text) => text.startsWith("사헌부")), "flagged once");
+
+  const exposed = at(newSave(), "ch05", 1420);
+  exposed.suspicion = 95;
+  exposed.points.money = 1000;
+  const forced = texts(advanceStepYear(FIXTURE, exposed, 1421));
+  assert.ok(forced.some((text) => text.startsWith("정체가 드러났다")), forced.join(" / "));
+  assert.equal(exposed.identity.kind, "forced");
+  assert.equal(exposed.suspicion, 0);
+  assert.equal(exposed.points.money, 300);
+});
+
+test("yearsPlan: the tokens span the era in consecutive spans, with matching copy", () => {
+  CHAPTER_IDS.slice(0, -1).forEach((id, index) => {
+    const next = CHAPTER_IDS[index + 1] as ChapterId;
+    const save = at(newSave(), id, FIXTURE.chapters[id].years[1]);
+    const plan = yearsPlan(FIXTURE, save, next);
+    const [eraFrom, eraTo] = [FIXTURE.chapters[id].years[0], FIXTURE.chapters[next].years[0]];
+    assert.deepEqual([plan.eraFrom, plan.eraTo], [eraFrom, eraTo], `${id} era`);
+    assert.equal(plan.spans.length, plan.tokens, `${id}: one span per token`);
+    assert.equal(plan.spans[0]?.from, eraFrom);
+    assert.equal(plan.spans.at(-1)?.to, eraTo);
+    plan.spans.forEach((span, i) => {
+      assert.ok(span.to > span.from, `${id} span ${i}: ${span.from}–${span.to} is not empty`);
+      if (i > 0) assert.equal(span.from, plan.spans[i - 1]?.to, `${id} span ${i} follows on`);
+    });
+    assert.equal(plan.summary, `${eraFrom}~${eraTo}년, 이 시대를 어떻게 보냈나 · ${plan.tokens}마디`);
+  });
+  const late = yearsPlan(FIXTURE, at(newSave(), "ch12", 1775), "ch13");
+  assert.deepEqual([late.fromYear, late.toYear, late.tokens], [1775, 1776, 5], "one year still to pass, five tokens of era");
+  assert.ok(late.spans.every((span) => span.to - span.from >= 20));
+});
+
+test("yearsPlan suggests the first open activity and the offering whenever it adds years", () => {
+  const poor = at(newSave(), "ch04", 1418);
+  const plan = yearsPlan(FIXTURE, poor, "ch05");
+  assert.deepEqual(plan.suggested, { activities: ["train", "train"], offer: false });
+  const devout = at(newSave(), "ch04", 1418);
+  devout.points.virtue = 250;
+  const offering = yearsPlan(FIXTURE, devout, "ch05");
+  assert.equal(offering.canOffer, 2);
+  assert.equal(offering.suggested.offer, true);
+});
+
 test("advanceStepYear grows suspicion inside a chapter", () => {
   const save = at(newSave(), "ch02", 1365);
   save.rank = 3;

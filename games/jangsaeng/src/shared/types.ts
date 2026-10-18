@@ -222,9 +222,17 @@ export interface YearsActivityView {
 
 export interface YearsPlanView {
   type: "years";
+  /** The year counter moves from fromYear to toYear when the plan is confirmed. */
   fromYear: number;
   toYear: number;
+  /** The era the tokens stand for: this chapter's start → the next chapter's start. */
+  eraFrom: number;
+  eraTo: number;
   tokens: number;
+  /** One consecutive span of the era per token. */
+  spans: { from: number; to: number }[];
+  /** Planner heading for the tokens, e.g. "1659~1776년, 이 시대를 어떻게 보냈나 · 5마디". */
+  summary: string;
   activities: YearsActivityView[];
   washes: { id: string; name: string; desc: string; disabled?: string }[];
   /** Suggest washing when suspicion is high. */
@@ -232,6 +240,8 @@ export interface YearsPlanView {
   lifeEnd: number;
   virtue: number;
   canOffer: number;
+  /** The plan a plain confirm submits; the planner starts from it. */
+  suggested: { activities: string[]; offer: boolean };
 }
 
 export interface ResultView {
@@ -361,13 +371,17 @@ export interface RosterEntry {
   title: string;
 }
 
+/** The 1910 settlement as decided: every number is the one the ending was judged on. */
 export interface EndingView {
   nation: { id: string; title: string; body: string[] };
   personal: { id: string; title: string; body: string[] };
+  /** The settled score; the breakdown rows add up to it (display both with the same rounding). */
   score: number;
   breakdown: { label: string; value: number }[];
+  /** Meters at the settlement; infiltration is the final value (unresolved branches counted as failed). */
   nationValues: Record<NationMeter, number>;
-  branches: { id: BranchId; label: string; ok: boolean | null }[];
+  /** Branch states settled for 1910: anything not won counts as failed. */
+  branches: { id: BranchId; label: string; ok: boolean }[];
   identities: IdentityRecord[];
   lifeline: { lifeEnd: number; gained: number; spent: number };
   chronicle: ChronicleEntry[];

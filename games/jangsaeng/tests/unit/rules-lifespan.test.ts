@@ -14,6 +14,12 @@ import {
   useLongevity,
   virtueEarned,
 } from "../../src/shared/rules/index.ts";
+import {
+  LONGEVITY_MAX_PER_CHAPTER,
+  longevityBlocker,
+  reviveVirtue,
+  worldEventVirtue,
+} from "../../src/shared/rules/lifespan.ts";
 import { at, FIXTURE, newSave } from "./rules-fixture.ts";
 
 test("changeLife records gains and losses", () => {
@@ -87,6 +93,35 @@ test("노인성 일섬: 3 per chapter, not with ≤ 1 year left, never for a suc
   heir.lifeEnd = 1499;
   successorTakeover(FIXTURE, heir);
   assert.equal(useLongevity(heir), false, "a mortal successor cannot");
+});
+
+test("longevityBlocker is the one gate and names the reason", () => {
+  const save = newSave();
+  save.year = 1500;
+  assert.equal(longevityBlocker(save), null);
+  save.longevityUses = LONGEVITY_MAX_PER_CHAPTER;
+  assert.match(longevityBlocker(save) ?? "", /3\/3/);
+  save.longevityUses = 0;
+  save.lifeEnd = 1501;
+  assert.match(longevityBlocker(save) ?? "", /천수/);
+  assert.equal(useLongevity(save), false);
+  const heir = newSave();
+  heir.year = 1500;
+  heir.lifeEnd = 1499;
+  successorTakeover(FIXTURE, heir);
+  assert.match(longevityBlocker(heir) ?? "", /계승자/);
+});
+
+test("공덕 for reviving: +8, ten times per chapter; for a 공동 실록: +40, twice per chapter", () => {
+  const save = at(newSave(), "ch04");
+  const gained = Array.from({ length: 11 }, () => reviveVirtue(save));
+  assert.deepEqual(gained, [8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 0]);
+  assert.deepEqual([worldEventVirtue(save), worldEventVirtue(save), worldEventVirtue(save)], [40, 40, 0]);
+  assert.equal(save.points.virtue, 160);
+  assert.equal(virtueEarned(save), 160, "counts toward 노인성 감응 and P2");
+  save.chapter = "ch05";
+  assert.equal(reviveVirtue(save), 8, "a new chapter, a new allowance");
+  assert.equal(worldEventVirtue(save), 40);
 });
 
 test("the first self-revive each chapter is free", () => {

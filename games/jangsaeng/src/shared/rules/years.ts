@@ -52,9 +52,24 @@ export function tokensBetween(currentStart: number, nextStart: number): number {
   return Math.min(MAX_TOKENS, Math.max(1, Math.ceil((nextStart - currentStart) / 15)));
 }
 
+/** The era the tokens stand for: this chapter's start to the next chapter's start (§5.7.1). */
+function eraOf(content: ContentIndex, save: PlayerSave, next: ChapterId): { from: number; to: number } {
+  const from = content.chapters[save.chapter]?.years[0] ?? save.year;
+  return { from, to: Math.max(from, content.chapters[next]?.years[0] ?? from) };
+}
+
 function tokensFor(content: ContentIndex, save: PlayerSave, next: ChapterId): number {
-  const start = content.chapters[save.chapter]?.years[0] ?? save.year;
-  return tokensBetween(start, content.chapters[next]?.years[0] ?? start);
+  const era = eraOf(content, save, next);
+  return tokensBetween(era.from, era.to);
+}
+
+/** Splits the era into `tokens` consecutive spans (one per 세월 token). */
+export function tokenSpans(from: number, to: number, tokens: number): YearsPlanView["spans"] {
+  const length = Math.max(0, to - from);
+  return Array.from({ length: tokens }, (_, index) => ({
+    from: from + Math.round((length * index) / tokens),
+    to: from + Math.round((length * (index + 1)) / tokens),
+  }));
 }
 
 function commerceGain(save: PlayerSave): number {
@@ -286,9 +301,17 @@ function projectedSuspicion(save: PlayerSave, toYear: number): number {
   return round1(value);
 }
 
-/** Planner view for the years between the current chapter and `next`. */
+/**
+ * Planner view for the years between the current chapter and `next`. The
+ * tokens stand for the whole era (chapter start → next start, §5.7.1), so the
+ * view carries those spans and the copy; fromYear → toYear is only what the
+ * year counter still has to move. `suggested` is the plan a plain confirm or a
+ * demo skip submits: the first open activity, and the offering whenever it adds years.
+ */
 export function yearsPlan(content: ContentIndex, save: PlayerSave, next: ChapterId): YearsPlanView {
   const toYear = Math.max(save.year, content.chapters[next]?.years[0] ?? save.year);
+  const era = eraOf(content, save, next);
+  const tokens = tokensBetween(era.from, era.to);
   const washes: YearsPlanView["washes"] = [];
   for (const method of WASH_ORDER) {
     const blocked = washBlocker(save, method);
@@ -296,21 +319,29 @@ export function yearsPlan(content: ContentIndex, save: PlayerSave, next: Chapter
     const view = { id: method, name: WASH_METHODS[method].name, desc: washDesc(save, method) };
     washes.push(blocked ? { ...view, disabled: blocked } : view);
   }
+  const activities = ACTIVITIES.map((activity): YearsPlanView["activities"][number] => {
+    const disabled = activity.blocker?.(save);
+    const view = { id: activity.id, name: activity.name, desc: activity.desc, effect: activity.effect(save) };
+    return disabled ? { ...view, disabled } : view;
+  });
+  const firstOpen = activities.find((activity) => !activity.disabled)?.id ?? (ACTIVITIES[0] as ActivityDef).id;
+  const canOffer = offerableYears(save) + (graceAvailable(content, save, next) ? GRACE_YEARS : 0);
   return {
     type: "years",
     fromYear: save.year,
     toYear,
-    tokens: tokensFor(content, save, next),
-    activities: ACTIVITIES.map((activity) => {
-      const disabled = activity.blocker?.(save);
-      const view = { id: activity.id, name: activity.name, desc: activity.desc, effect: activity.effect(save) };
-      return disabled ? { ...view, disabled } : view;
-    }),
+    eraFrom: era.from,
+    eraTo: era.to,
+    tokens,
+    spans: tokenSpans(era.from, era.to, tokens),
+    summary: `${era.from}~${era.to}년, 이 시대를 어떻게 보냈나 · ${tokens}마디`,
+    activities,
     washes,
     washAdvised: save.suspicion >= WASH_ADVISED_AT || projectedSuspicion(save, toYear) >= 90,
     lifeEnd: save.lifeEnd,
     virtue: save.points.virtue,
-    canOffer: offerableYears(save) + (graceAvailable(content, save, next) ? GRACE_YEARS : 0),
+    canOffer,
+    suggested: { activities: Array.from({ length: tokens }, () => firstOpen), offer: canOffer > 0 },
   };
 }
 
@@ -414,15 +445,8 @@ export function advanceYears(content: ContentIndex, save: PlayerSave, next: Chap
   // 10. Lifespan.
   if (pastLifeEnd(save)) lines.push(...successorTakeover(content, save));
 
-  // 11. Suspicion: exposed → forced flight; inquiry → 사헌부 card at the next chapter start.
-  const settled = suspicionBand(save.suspicion);
-  if (settled === "exposed") {
-    lines.push(line("정체가 드러났다! 쫓기듯 이름을 버린다", "bad"));
-    lines.push(...washIdentity(content, save, "forced", suggestName(save, `forced:${toYear}:${save.record.washes}`)));
-  } else if (settled === "inquiry") {
-    save.flags["inquiry"] = true;
-    lines.push(line("사헌부가 그대의 내력을 캐기 시작했다 — 새 시대 첫머리에 조사가 있다", "bad"));
-  }
+  // 11. Suspicion bands.
+  lines.push(...settleSuspicion(content, save));
 
   // 12. Era gear.
   lines.push(...refreshEraGear(content, save));
@@ -430,12 +454,34 @@ export function advanceYears(content: ContentIndex, save: PlayerSave, next: Chap
 }
 
 /**
- * In-chapter year change (a step with a later year): suspicion grows for
- * the elapsed years and the successor takes over past lifeEnd.
+ * §5.4.3 band consequences once years have passed (between chapters and at an
+ * in-chapter year jump): exposed → forced flight wash at once; inquiry → flag
+ * `inquiry`, which the session turns into the 사헌부 card at the next story beat.
+ */
+export function settleSuspicion(content: ContentIndex, save: PlayerSave): Line[] {
+  const band = suspicionBand(save.suspicion);
+  if (band === "exposed") {
+    return [
+      line("정체가 드러났다! 쫓기듯 이름을 버린다", "bad"),
+      ...washIdentity(content, save, "forced", suggestName(save, `forced:${save.year}:${save.record.washes}`)),
+    ];
+  }
+  if (band === "inquiry" && save.flags["inquiry"] !== true) {
+    save.flags["inquiry"] = true;
+    return [line("사헌부가 그대의 내력을 캐기 시작했다 — 곧 조사가 닥친다", "bad")];
+  }
+  return [];
+}
+
+/**
+ * In-chapter year change (a step with a later year): suspicion grows for the
+ * elapsed years, the successor takes over past lifeEnd, then the bands settle.
  */
 export function advanceStepYear(content: ContentIndex, save: PlayerSave, toYear: number): ResultView["lines"] {
   if (!Number.isFinite(toYear) || toYear <= save.year) return [];
   growSuspicion(save, save.year, toYear);
   save.year = Math.floor(toYear);
-  return pastLifeEnd(save) ? successorTakeover(content, save) : [];
+  const lines = pastLifeEnd(save) ? successorTakeover(content, save) : [];
+  lines.push(...settleSuspicion(content, save));
+  return lines;
 }

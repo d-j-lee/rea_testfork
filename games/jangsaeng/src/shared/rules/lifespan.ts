@@ -1,9 +1,10 @@
 // Lifespan (천수, GDD §5.3): every change goes through changeLife. Offering,
-// 노인성의 마지막 은혜, 노인성 감응, 노인성 일섬, self-revive and 산삼.
+// 노인성의 마지막 은혜, 노인성 감응, 노인성 일섬, self-revive, 산삼 and the
+// 공덕 sources that are not content data (reviving, 공동 실록).
 import type { ContentIndex } from "../content/index.ts";
 import type { ChapterId } from "../content/schema.ts";
 import { FINAL_YEAR, type PlayerSave } from "../types.ts";
-import { chronicle, itemName, line, signed, virtueEarned, type Line } from "./util.ts";
+import { chronicle, gainVirtue, itemName, line, numberFlag, signed, virtueEarned, type Line } from "./util.ts";
 
 export const OFFER_COST = 100;
 export const OFFER_MAX_PER_CHAPTER = 5;
@@ -77,13 +78,54 @@ export function applyResonance(save: PlayerSave, chapter: ChapterId): Line[] {
   return [line(`노인성 감응 — 천수 +${4 + bonus}년${bonus ? ` (누적 공덕 ${threshold} 이상 +2)` : ""}`, "epic")];
 }
 
-/** 노인성 일섬 (§5.2.6): −1 year, 3 per chapter; not with ≤ 1 year left, never for a mortal successor. */
+/**
+ * Why 노인성 일섬 cannot fire now, or null when it can (§5.2.6): never for a
+ * mortal successor, 3 per chapter, not with ≤ 1 year left. This is the only
+ * gate: the rule, the session's refusal toast and the sim's slot 5 read it.
+ */
+export function longevityBlocker(save: PlayerSave): string | null {
+  if (save.identity.kind === "successor") return "계승자의 몸에는 노인성의 빛이 깃들지 않았다.";
+  if (save.longevityUses >= LONGEVITY_MAX_PER_CHAPTER) {
+    return `이 시대에는 더 이상 노인성 일섬을 쓸 수 없다 (${LONGEVITY_MAX_PER_CHAPTER}/${LONGEVITY_MAX_PER_CHAPTER}).`;
+  }
+  if (save.lifeEnd - save.year <= 1) return "남은 천수가 너무 짧다 — 노인성 일섬을 쓸 수 없다.";
+  return null;
+}
+
+/** 노인성 일섬 (§5.2.6): −1 year when longevityBlocker allows it. */
 export function useLongevity(save: PlayerSave): boolean {
-  if (save.identity.kind === "successor") return false;
-  if (save.longevityUses >= LONGEVITY_MAX_PER_CHAPTER || save.lifeEnd - save.year <= 1) return false;
+  if (longevityBlocker(save) !== null) return false;
   save.longevityUses += 1;
   changeLife(save, -1);
   return true;
+}
+
+// ── 공덕 sources outside content data (§5.3.2 budget) ─────────────────────
+
+/** Reviving a downed ally: +8 공덕, at most 10 times per chapter. */
+export const REVIVE_VIRTUE = 8;
+export const REVIVE_VIRTUE_PER_CHAPTER = 10;
+/** Taking part in a completed 공동 실록: +40 공덕, at most twice per chapter. */
+export const WORLD_EVENT_VIRTUE = 40;
+export const WORLD_EVENT_VIRTUE_PER_CHAPTER = 2;
+
+/** Grants `amount` virtue while this chapter's counter flag `<kind>:<chapter>` is under `cap`. */
+function chapterVirtue(save: PlayerSave, kind: string, cap: number, amount: number): number {
+  const flag = `${kind}:${save.chapter}`;
+  const count = numberFlag(save, flag);
+  if (count >= cap) return 0;
+  save.flags[flag] = count + 1;
+  return gainVirtue(save, amount);
+}
+
+/** Virtue for reviving an ally; 0 once this chapter's cap is reached. */
+export function reviveVirtue(save: PlayerSave): number {
+  return chapterVirtue(save, "reviveVirtue", REVIVE_VIRTUE_PER_CHAPTER, REVIVE_VIRTUE);
+}
+
+/** Virtue for a completed 공동 실록; 0 once this chapter's cap is reached. */
+export function worldEventVirtue(save: PlayerSave): number {
+  return chapterVirtue(save, "worldEventVirtue", WORLD_EVENT_VIRTUE_PER_CHAPTER, WORLD_EVENT_VIRTUE);
 }
 
 /** Self-revive (§5.2.7): the first one each chapter is free, then −1 year. */
