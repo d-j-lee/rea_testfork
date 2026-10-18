@@ -22,12 +22,12 @@ export const ch10: ChapterDef = {
     "이번 해의 끝에서, 당신은 그를 잃는다. 그것만은 바꿀 수 없다.",
   ],
   history: [
-    "1597년 2월 이순신은 파직되어 한양으로 압송되었고 3월 4일 의금부에 갇혔다. 정탁 등의 구명으로 4월 1일 풀려나 권율 휘하에서 백의종군했다.",
-    "7월 16일 칠천량에서 원균이 이끈 조선 수군이 크게 지고 원균이 전사했다. 배설이 이끌고 빠져나온 배 12척이 남았다.",
-    "9월 16일 명량에서 이순신은 남은 13척으로 울돌목의 빠른 조류를 이용해 일본 함대를 막아냈다. 적장 구루시마 미치후사가 전사했다.",
-    "1598년 11월 19일 노량에서 조명 연합 수군이 시마즈 함대를 격파했다. 이순신은 관음포 부근에서 총탄에 맞아 전사했다.",
-    "[불확실] 명량에 참가한 일본 함선 수는 『난중일기』의 133척과 후대 기록의 330척 등으로 차이가 있다.",
-    "[해석] 이순신 하옥에는 일본 측 정보 공작과 조정 안의 갈등이 함께 작용했다는 해석이 일반적이다.",
+    { kind: "fact", text: "1597년 2월 이순신은 파직되어 한양으로 압송되었고 3월 4일 의금부에 갇혔다. 정탁 등의 구명으로 4월 1일 풀려나 권율 휘하에서 백의종군했다." },
+    { kind: "fact", text: "7월 16일 칠천량에서 원균이 이끈 조선 수군이 크게 지고 원균이 전사했다. 배설이 이끌고 빠져나온 배 12척이 남았다." },
+    { kind: "fact", text: "9월 16일 명량에서 이순신은 남은 13척으로 울돌목의 빠른 조류를 이용해 일본 함대를 막아냈다. 적장 구루시마 미치후사가 전사했다." },
+    { kind: "fact", text: "1598년 11월 19일 노량에서 조명 연합 수군이 시마즈 함대를 격파했다. 이순신은 관음포 부근에서 총탄에 맞아 전사했다." },
+    { kind: "uncertain", text: "명량에 참가한 일본 함선 수는 『난중일기』의 133척과 후대 기록의 330척 등으로 차이가 있다." },
+    { kind: "interp", text: "이순신 하옥에는 일본 측 정보 공작과 조정 안의 갈등이 함께 작용했다는 해석이 일반적이다." },
   ],
   hist: { defense: 30, finance: 26, people: 30, diplomacy: 42, reform: 36 },
   factions: [
@@ -202,7 +202,7 @@ export const ch10: ChapterDef = {
       boss: {
         enemy: "boss_japanese_general",
         name: "왜 수군 선봉장",
-        title: "(가상)",
+        historical: false,
         level: 32,
         hpScale: 1.2,
         phases: [
@@ -219,6 +219,7 @@ export const ch10: ChapterDef = {
         { k: "point", point: "merit", add: 120 },
         { k: "point", point: "honor", add: 15 },
         { k: "point", point: "fame", add: 4 },
+        { k: "title", title: "필사즉생" },
         { k: "exp", add: 3200 },
         { k: "nation", key: "defense", add: 5 },
         { k: "nation", key: "people", add: 3 },
@@ -354,7 +355,7 @@ export const ch10: ChapterDef = {
           effects: [
             { k: "stat", stat: "wit", add: 1 },
             { k: "flag", flag: "ch10_tide_table" },
-            { k: "toast", text: "물때표를 적었다. 이백 년 전 관음포의 비 내리는 바다가 떠올랐다.", tone: "info" },
+            { k: "toast", text: "물때표를 적었다. 옛 기록에서 읽은 관음포 이야기가 떠올랐다.", tone: "info" },
           ],
         },
       ],
@@ -436,7 +437,7 @@ export const ch10: ChapterDef = {
           effects: [
             { k: "flag", flag: "ch10_noryang_beside" },
             { k: "suspicion", add: 2 },
-            { k: "toast", text: "1383년 관음포. 정지의 함대가 비 속에서 화포를 쏘던 바다다. 그는 말없이 들었다.", tone: "info" },
+            { k: "toast", text: "1383년 관음포. 정지가 비가 그치기를 빈 뒤 화포로 왜선을 불태웠다고 전하는 바다다. 그는 말없이 들었다.", tone: "info" },
           ],
         },
       ],
@@ -455,10 +456,7 @@ export const ch10: ChapterDef = {
         {
           id: "remember",
           text: "그 말을 가슴에 새긴다.",
-          hint: "칭호 '필사즉생'",
           effects: [
-            { k: "title", title: "필사즉생" },
-            { k: "point", point: "honor", add: 20 },
             { k: "chronicle", text: "1598년 11월 19일, 노량. 이순신이 전사했다. 북소리는 끝까지 멈추지 않았다." },
           ],
         },
@@ -493,14 +491,14 @@ export const ch10: ChapterDef = {
     {
       id: "s2",
       year: 1597,
-      objectives: [{ id: "o_release", text: "이순신의 석방 소식을 듣는다", kind: "prompt", target: "p_release" }],
+      objectives: [{ id: "o_release", solemn: true, text: "이순신의 석방 소식을 듣는다", kind: "prompt", target: "p_release" }],
     },
     {
       id: "s3",
       year: 1597,
       narration: ["7월 16일 새벽. 칠천량의 바다가 불탄다."],
       objectives: [
-        { id: "o_chilcheon", text: "칠천량에서 빠져나온다 (60초)", kind: "battle", target: "b_chilcheon", site: "tongyeong", offset: [3, 1] },
+        { id: "o_chilcheon", text: "칠천량에서 빠져나온다 (60초)", kind: "battle", target: "b_chilcheon" },
       ],
     },
     {
@@ -511,7 +509,7 @@ export const ch10: ChapterDef = {
         "통제사는 회령포에서 남은 배를 거두어 서쪽 바다로 갔다.",
       ],
       objectives: [
-        { id: "o_after", text: "남은 배의 소식을 듣는다", kind: "prompt", target: "p_after_chilcheon" },
+        { id: "o_after", solemn: true, text: "남은 배의 소식을 듣는다", kind: "prompt", target: "p_after_chilcheon" },
         { id: "o_reach_myeongnyang", text: "울돌목으로 간다", kind: "reach", target: "myeongnyang", site: "myeongnyang" },
         { id: "o_sailor", text: "칠천량에서 살아 나온 격군을 만난다", kind: "talk", target: "bae_seol_sailor", site: "tongyeong", offset: [-2, 2], optional: true, onComplete: [{ k: "point", point: "virtue", add: 15 }] },
       ],
@@ -541,7 +539,7 @@ export const ch10: ChapterDef = {
       id: "s7",
       year: 1597,
       objectives: [
-        { id: "o_myeongnyang", text: "물이 몸을 뒤집을 때까지 버틴다", kind: "battle", target: "b_myeongnyang", site: "myeongnyang", offset: [0, 0] },
+        { id: "o_myeongnyang", text: "물이 몸을 뒤집을 때까지 버틴다", kind: "battle", target: "b_myeongnyang" },
       ],
     },
     {
@@ -560,18 +558,18 @@ export const ch10: ChapterDef = {
       id: "s9",
       year: 1598,
       objectives: [
-        { id: "o_noryang", text: "기함 곁을 지킨다", kind: "battle", target: "b_noryang", site: "noryang", offset: [0, 0] },
+        { id: "o_noryang", text: "기함 곁을 지킨다", kind: "battle", target: "b_noryang" },
       ],
     },
     {
       id: "s10",
       year: 1598,
-      objectives: [{ id: "o_falls", text: "관음포의 아침", kind: "prompt", target: "p_admiral_falls" }],
+      objectives: [{ id: "o_falls", solemn: true, text: "관음포의 아침", kind: "prompt", target: "p_admiral_falls" }],
     },
     {
       id: "s11",
       year: 1598,
-      objectives: [{ id: "o_after_war", text: "전쟁이 끝난 땅을 본다", kind: "prompt", target: "p_after_war" }],
+      objectives: [{ id: "o_after_war", solemn: true, text: "전쟁이 끝난 땅을 본다", kind: "prompt", target: "p_after_war" }],
     },
   ],
   worldEvent: {

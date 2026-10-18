@@ -122,16 +122,16 @@ test("flag, branch, title, meritSubject, chronicle and toast effects", () => {
 
 test("item effects add, auto-equip stronger gear, remove and keep a weapon equipped", () => {
   const save = newSave();
-  let out = applyEffects(FIXTURE, save, [{ k: "item", item: "wolgdo", add: 1 }, { k: "item", item: "letter", add: 2 }]);
+  let out = applyEffects(FIXTURE, save, [{ k: "item", item: "wolgdo", add: 1 }, { k: "item", item: "song_fan", add: 2 }]);
   assert.equal(save.inventory["wolgdo"], 1);
-  assert.equal(save.inventory["letter"], 2);
+  assert.equal(save.inventory["song_fan"], 2);
   assert.equal(save.equipment.weapon, "wolgdo");
   assert.ok(texts(out.lines).includes("월도 장착"));
   applyEffects(FIXTURE, save, [{ k: "item", item: "hwando", add: 1 }]);
   assert.equal(save.equipment.weapon, "wolgdo", "weaker gear is not equipped");
-  out = applyEffects(FIXTURE, save, [{ k: "item", item: "wolgdo", add: -1 }, { k: "item", item: "letter", add: -5 }]);
+  out = applyEffects(FIXTURE, save, [{ k: "item", item: "wolgdo", add: -1 }, { k: "item", item: "song_fan", add: -5 }]);
   assert.equal(save.inventory["wolgdo"], undefined);
-  assert.equal(save.inventory["letter"], undefined);
+  assert.equal(save.inventory["song_fan"], undefined);
   assert.equal(save.equipment.weapon, "hwando", "best remaining weapon is equipped");
   applyEffects(FIXTURE, save, [{ k: "item", item: "hwando", add: -1 }, { k: "item", item: "rusty_hwando", add: -1 }]);
   assert.equal(save.equipment.weapon, "rusty_hwando", "default weapon when none is left");

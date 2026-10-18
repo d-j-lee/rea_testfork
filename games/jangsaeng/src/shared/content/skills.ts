@@ -24,7 +24,7 @@ export const SKILLS: Readonly<Record<string, SkillDef>> = Object.fromEntries(
 export const LONGEVITY_SKILL: SkillDef = {
   id: "longevity",
   name: "노인성 일섬",
-  desc: "천수 1년을 태워 화면 안의 모든 적을 벤다. 5초 무적. 챕터당 3회.",
+  desc: "천수 1년을 태워 화면 안의 모든 적을 벤다. 5초 무적. 장마다 3회.",
   kind: "longevity",
   unlock: "ch01",
   energy: 0,

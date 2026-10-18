@@ -3,7 +3,9 @@ import type {
   BranchId,
   ChapterId,
   FlagValue,
+  HistoryNote,
   IdentityKind,
+  InputHint,
   MusicMood,
   NationKey,
   NationMeter,
@@ -41,6 +43,8 @@ export interface ChronicleEntry {
   year: number;
   text: string;
   tone?: "info" | "good" | "bad" | "epic";
+  /** A counterfactual (대체역사) outcome. */
+  alt?: true;
 }
 
 export interface PlayerSave {
@@ -185,7 +189,7 @@ export interface ChapterView {
   subtitle: string;
   years: readonly [number, number];
   briefing: readonly string[];
-  history: readonly string[];
+  history: readonly HistoryNote[];
   music: MusicMood;
   season: Season;
   weather: Weather;
@@ -256,6 +260,8 @@ export interface ObjectiveView {
   text: string;
   done: boolean;
   optional: boolean;
+  /** Controls this objective teaches, named for the player's device by the HUD. */
+  hint?: readonly InputHint[];
   progress?: readonly [number, number];
   /** Marker position in tiles, when the objective has a place. */
   x?: number;
@@ -305,7 +311,8 @@ export interface BattleView {
   /** Remaining seconds for timed battles. */
   timeLeft?: number;
   wave?: readonly [number, number];
-  boss?: { name: string; hp: number; title?: string };
+  /** `historical`: a person named in the record (else an invented boss, marked 가상). */
+  boss?: { name: string; hp: number; title?: string; historical: boolean };
   defend?: { name: string; hp: number };
   morale?: number;
   participants: number;
@@ -388,7 +395,7 @@ export interface EndingView {
   lifeline: { lifeEnd: number; gained: number; spent: number };
   chronicle: ChronicleEntry[];
   record: PlayerSave["record"];
-  historyNote: string[];
+  historyNote: HistoryNote[];
 }
 
 export type { Anim, Dir, FlagValue };

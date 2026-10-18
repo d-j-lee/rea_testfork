@@ -6,7 +6,7 @@ export const ch02: ChapterDef = {
   id: "ch02",
   order: 2,
   title: "왜구의 시대, 두 명장",
-  subtitle: "1366~1387 · 진포의 불, 황산의 화살",
+  subtitle: "진포의 불, 황산의 화살",
   years: [1365, 1387],
   level: [5, 10],
   music: "goryeo_twilight",
@@ -21,12 +21,16 @@ export const ch02: ChapterDef = {
     "두 장수의 이름이 나라를 버티게 했다. 남쪽의 최영, 북쪽의 이성계.",
   ],
   history: [
-    "1366년 신돈의 건의로 전민변정도감이 설치되어, 권문세족이 빼앗은 땅을 돌려주고 억울하게 노비가 된 사람을 양인으로 되돌렸다. 신돈은 1371년 처형되었다.",
-    "1374년 공민왕이 측근에게 시해되고 이인임이 우왕을 세웠다. [불확실] 시해의 세부 경위는 『고려사』 서술에만 의존한다.",
-    "1376년 최영은 홍산에서 직접 앞장서 왜구를 격파했다. 1377년 최무선의 건의로 화약과 화포를 만드는 화통도감이 설치되었다.",
-    "1380년 8월 진포에서 나세·심덕부·최무선의 전함 100척이 화포로 왜선 500척(기록상)을 불태웠다. 실제로는 해전이었으며, 게임은 해안 포대 방어로 연출했다.",
-    "1380년 9월 이성계는 운봉 황산에서 왜구를 크게 무찔렀다. 이성계가 활로 소년 장수 아지발도의 투구를 벗기고 이지란이 쏘아 쓰러뜨렸다고 전한다. [불확실] 나이·이름·투구 일화는 건국 뒤 사료에 근거해 윤색되었을 수 있다.",
-    "1383년 정지는 남해 관음포에서 전함 47척으로 왜선 120척(기록상)과 싸워 화포로 17척을 불태웠다.",
+    { kind: "fact", text: "1366년 신돈의 건의로 전민변정도감이 설치되어, 권문세족이 빼앗은 땅을 돌려주고 억울하게 노비가 된 사람을 양인으로 되돌렸다. 신돈은 1371년 처형되었다." },
+    { kind: "fact", text: "1374년 공민왕이 측근에게 시해되고 이인임이 우왕을 세웠다." },
+    { kind: "uncertain", text: "공민왕 시해의 세부 경위는 『고려사』 서술에만 의존한다." },
+    { kind: "fact", text: "1376년 최영은 홍산에서 직접 앞장서 왜구를 격파했다. 1377년 최무선의 건의로 화약과 화포를 만드는 화통도감이 설치되었다." },
+    { kind: "fact", text: "1380년 8월 진포에서 나세·심덕부·최무선의 전함 100척이 화포로 왜선 500척(기록상)을 불태웠다." },
+    { kind: "fiction", text: "진포는 실제로는 해전이었다. 게임은 해안 포대 방어전으로 연출했다." },
+    { kind: "fact", text: "1380년 9월 이성계는 운봉 황산에서 왜구를 크게 무찔렀다. 이성계가 활로 소년 장수 아지발도의 투구를 벗기고 이지란이 쏘아 쓰러뜨렸다고 전한다." },
+    { kind: "uncertain", text: "아지발도의 나이·이름·투구 일화는 건국 뒤 사료에 근거해 윤색되었을 수 있다." },
+    { kind: "fact", text: "1383년 정지는 남해 관음포에서 전함 47척으로 왜선 120척(기록상)과 싸워 화포로 17척을 불태웠다." },
+    { kind: "uncertain", text: "정지가 비가 그치기를 빈 뒤 싸움에 나섰다는 이야기는 전승이다." },
   ],
   hist: { defense: 38, finance: 32, people: 33, diplomacy: 38, reform: 30 },
   factions: [
@@ -46,7 +50,7 @@ export const ch02: ChapterDef = {
       offset: [0, -5],
       dir: "down",
       historical: true,
-      talk: ["\"땅은 갈던 사람에게, 사람은 제 이름으로.\"", "\"권세 있는 집 담장이 높을수록 백성의 밥그릇은 얕아집니다.\""],
+      talk: ["땅은 갈던 사람에게, 사람은 제 이름으로.", "권세 있는 집 담장이 높을수록 백성의 밥그릇은 얕아집니다."],
       fromStep: "s1",
       untilStep: "s1",
     },
@@ -57,7 +61,7 @@ export const ch02: ChapterDef = {
       site: "gaegyeong",
       offset: [3, -5],
       dir: "left",
-      talk: ["\"제 아비 대에 빼앗긴 땅이에요. 도감에서 문서를 찾아 주셨어요.\"", "\"이제 제 이름으로 농사를 짓습니다. 막례, 막례요.\""],
+      talk: ["제 아비 대에 빼앗긴 땅이에요. 도감에서 문서를 찾아 주셨어요.", "이제 제 이름으로 농사를 짓습니다. 막례, 막례요."],
       fromStep: "s1",
       untilStep: "s1",
     },
@@ -71,7 +75,7 @@ export const ch02: ChapterDef = {
       offset: [-5, -5],
       dir: "right",
       historical: true,
-      talk: ["\"염초를 굽는 법을 알아내는 데 몇 해가 걸렸소. 이제 바다에서 쓸 차례요.\"", "\"화약은 겁쟁이의 무기가 아니오. 적게 죽고 많이 지키는 무기요.\""],
+      talk: ["염초를 굽는 법을 알아내는 데 몇 해가 걸렸소. 이제 바다에서 쓸 차례요.", "화약은 겁쟁이의 무기가 아니오. 적게 죽고 많이 지키는 무기요."],
       fromStep: "s2",
       untilStep: "s2",
     },
@@ -84,7 +88,7 @@ export const ch02: ChapterDef = {
       offset: [4, -2],
       dir: "left",
       historical: true,
-      talk: ["\"왜선이 진포 어귀를 가득 메웠다. 밧줄로 서로 묶어 두었더군.\"", "\"화통이 터지면 그 밧줄이 저들의 족쇄가 될 것이다.\""],
+      talk: ["왜선이 진포 어귀를 가득 메웠다. 밧줄로 서로 묶어 두었더군.", "화통이 터지면 그 밧줄이 저들의 족쇄가 될 것이다."],
       fromStep: "s2",
       untilStep: "s2",
     },
@@ -98,7 +102,7 @@ export const ch02: ChapterDef = {
       dir: "left",
       historical: true,
       fights: true,
-      talk: ["\"포대를 지켜 주시오. 불은 내가 놓겠소.\""],
+      talk: ["포대를 지켜 주시오. 불은 내가 놓겠소."],
       fromStep: "s2",
       untilStep: "s2",
     },
@@ -113,7 +117,7 @@ export const ch02: ChapterDef = {
       dir: "up",
       historical: true,
       fights: true,
-      talk: ["\"물러나려는 자는 물러나라. 나는 적과 죽기로 싸우겠다.\"", "\"고지를 내려다보지 말고, 고지의 숨소리를 들어라.\""],
+      talk: ["물러나려는 자는 물러나라. 나는 적과 죽기로 싸우겠다.", "고지를 내려다보지 말고, 고지의 숨소리를 들어라."],
       fromStep: "s3",
       untilStep: "s3",
     },
@@ -127,7 +131,7 @@ export const ch02: ChapterDef = {
       dir: "up",
       historical: true,
       fights: true,
-      talk: ["\"형님의 화살이 투구를 벗기면, 다음 화살은 내 몫이오.\"", "\"나는 두만강 가에서 왔소. 활을 믿는 사람은 고향을 묻지 않지.\""],
+      talk: ["형님의 화살이 투구를 벗기면, 다음 화살은 내 몫이오.", "나는 두만강 가에서 왔소. 활을 믿는 사람은 고향을 묻지 않지."],
       fromStep: "s3",
       untilStep: "s3",
     },
@@ -140,7 +144,7 @@ export const ch02: ChapterDef = {
       offset: [-6, 1],
       dir: "right",
       fights: true,
-      talk: ["\"열아홉 해 만이다. 난 서른다섯이고 넌… 왜 아직도 그 얼굴이야?\"", "\"아들 녀석이 벌써 활을 잡아. 너한테 배우라고 할까.\""],
+      talk: ["열아홉 해 만이다. 난 서른다섯이고 넌… 왜 아직도 그 얼굴이야?", "아들 녀석이 벌써 활을 잡아. 너한테 배우라고 할까."],
       fromStep: "s3",
       untilStep: "s3",
     },
@@ -151,7 +155,7 @@ export const ch02: ChapterDef = {
       site: "hwangsan",
       offset: [-8, 5],
       dir: "right",
-      talk: ["\"남원 고을이 다 불탔어요. 돌아갈 데가 없어요.\""],
+      talk: ["남원 고을이 다 불탔어요. 돌아갈 데가 없어요."],
       fromStep: "s3",
       untilStep: "s3",
     },
@@ -164,7 +168,7 @@ export const ch02: ChapterDef = {
       site: "gaegyeong",
       offset: [-4, 2],
       dir: "right",
-      talk: ["\"약방 문을 연 지 스무 해가 넘었어요. 당신만 그대로네요.\""],
+      talk: ["약방 문을 연 지 스무 해가 넘었어요. 당신만 그대로네요."],
       fromStep: "s4",
     },
     {
@@ -175,7 +179,7 @@ export const ch02: ChapterDef = {
       site: "gaegyeong",
       offset: [3, 3],
       dir: "left",
-      talk: ["\"허리가 예전 같지 않아. 넌 어째 그 밤 그대로냐, 정말.\"", "\"손자가 생겼다. 덕수라고 지었어.\""],
+      talk: ["허리가 예전 같지 않아. 넌 어째 그 밤 그대로냐, 정말.", "손자가 생겼다. 덕수라고 지었어."],
       fromStep: "s4",
     },
     {
@@ -186,7 +190,7 @@ export const ch02: ChapterDef = {
       site: "gaegyeong",
       offset: [6, 0],
       dir: "left",
-      talk: ["\"요즘 조정 공기가 심상치 않다. 명이 철령 이북 땅을 내놓으라고 한다더군.\"", "\"너를 보면 거울을 보기가 싫어진다. 나만 늙었으니.\""],
+      talk: ["요즘 조정 공기가 심상치 않다. 명이 철령 이북 땅을 내놓으라고 한다더군.", "너를 보면 거울을 보기가 싫어진다. 나만 늙었으니."],
       fromStep: "s4",
     },
   ],
@@ -261,7 +265,8 @@ export const ch02: ChapterDef = {
       boss: {
         enemy: "boss_wokou_captain",
         name: "아지발도",
-        title: "왜구 소년 장수(기록상)",
+        title: "왜구 소년 장수",
+        historical: true,
         level: 9,
         hpScale: 1.3,
         phases: [
@@ -292,9 +297,9 @@ export const ch02: ChapterDef = {
       title: "전민변정도감",
       speaker: { name: "신돈", sprite: "monk" },
       body: [
-        "도감 마당에 땅문서와 노비 문서가 산처럼 쌓였다.",
-        "\"권세가 사병을 풀어 문서를 빼앗으려 합니다. 칼 찬 이가 곁에 서 주면 백성이 안심하지요.\"",
-        "담장 너머에서 권문세족의 집사가 너를 불러 은병을 흔든다.",
+        "(도감 마당에 땅문서와 노비 문서가 산처럼 쌓였다.)",
+        "권세가 사병을 풀어 문서를 빼앗으려 합니다. 칼 찬 이가 곁에 서 주면 백성이 안심하지요.",
+        "(담장 너머에서 권문세족의 집사가 당신을 불러 은병을 흔든다.)",
       ],
       options: [
         {
@@ -333,9 +338,9 @@ export const ch02: ChapterDef = {
       title: "염초 굽는 사람",
       speaker: { name: "최무선", sprite: "official_green" },
       body: [
-        "\"원나라 상인에게서 염초 굽는 법을 겨우 알아냈소. 조정은 아직 반신반의하오.\"",
-        "\"화통도감을 제대로 돌리려면 숯과 유황, 장인 품삯이 모자라오.\"",
-        "\"장군 같은 무인이 힘을 보태 준다면, 바다에서 반드시 갚겠소.\"",
+        "원나라 상인에게서 염초 굽는 법을 겨우 알아냈소. 조정은 아직 반신반의하오.",
+        "화통도감을 제대로 돌리려면 숯과 유황, 장인 품삯이 모자라오.",
+        "장군 같은 무인이 힘을 보태 준다면, 바다에서 반드시 갚겠소.",
       ],
       options: [
         {
@@ -356,7 +361,7 @@ export const ch02: ChapterDef = {
         },
         {
           id: "words",
-          text: "\"재물은 없으나 시험 사격의 과녁은 되어 드리지요.\"",
+          text: "재물은 없으나 시험 사격의 과녁은 되어 드리지요.",
           hint: "최무선 인연 ▲",
           effects: [{ k: "bond", npc: "choe_museon", add: 10 }],
         },
@@ -367,13 +372,13 @@ export const ch02: ChapterDef = {
       title: "황산의 공",
       body: [
         "싸움이 끝난 고지에서 노획한 말 1,600여 필이 끌려 나온다. 공을 적는 군관이 다가왔다.",
-        "\"아지발도의 투구 끈을 먼저 흔든 건 그대였소. 이름을 어떻게 올릴까?\"",
+        "'아지발도의 투구 끈을 먼저 흔든 건 그대였소. 이름을 어떻게 올릴까?'",
         "이성계는 말없이 활을 닦고 있다.",
       ],
       options: [
         {
           id: "credit_yi",
-          text: "\"도순찰사의 화살이 이긴 싸움이오.\" 공을 이성계에게 돌린다",
+          text: "'도순찰사의 화살이 이긴 싸움이오.' 공을 이성계에게 돌린다",
           hint: "이성계파 총애 ▲▲ · 의심도 ▼",
           effects: [
             { k: "favor", faction: "yi", add: 20 },
@@ -400,8 +405,8 @@ export const ch02: ChapterDef = {
       title: "돌아갈 길",
       speaker: { name: "운봉 피란민", sprite: "commoner_f" },
       body: [
-        "\"남원 고을이 다 탔어요. 아이 둘을 데리고 산에 숨어 있었어요.\"",
-        "\"왜구가 물러갔다면… 집터라도 보러 가고 싶어요.\"",
+        "남원 고을이 다 탔어요. 아이 둘을 데리고 산에 숨어 있었어요.",
+        "왜구가 물러갔다면… 집터라도 보러 가고 싶어요.",
       ],
       options: [
         {
@@ -421,19 +426,19 @@ export const ch02: ChapterDef = {
       title: "철령 이북",
       speaker: { name: "강휘", sprite: "general_goryeo" },
       body: [
-        "\"명에서 철령 이북 땅을 내놓으라 한다더군. 쌍성총관부 옛 땅 말이다.\"",
-        "강휘가 희끗해진 수염을 쓸었다. \"조정이 그냥 있지는 않을 거다. 칼 쓸 일이 생기겠지.\"",
-        "\"너를 보면 거울을 보기가 싫어진다. 나만 늙었으니.\"",
+        "명에서 철령 이북 땅을 내놓으라 한다더군. 쌍성총관부 옛 땅 말이다.",
+        "(강휘가 희끗해진 수염을 쓸었다.) 조정이 그냥 있지는 않을 거다. 칼 쓸 일이 생기겠지.",
+        "너를 보면 거울을 보기가 싫어진다. 나만 늙었으니.",
       ],
-      options: [{ id: "ok", text: "\"너도 아직 칼은 무겁지 않잖아.\"", effects: [{ k: "bond", npc: "kang_hwi", add: 5 }] }],
+      options: [{ id: "ok", text: "너도 아직 칼은 무겁지 않잖아.", effects: [{ k: "bond", npc: "kang_hwi", add: 5 }] }],
     },
     {
       id: "ch02_mirror",
       title: "스물여섯 해",
       speaker: { name: "윤소화", sprite: "commoner_f" },
       body: [
-        "\"스물여섯 해예요. 저는 이렇게 늙었는데, 당신은 그 밤 그대로예요.\"",
-        "\"저잣거리에서 수군대요. 개경 수복 때 그 무사가 아직도 열여덟 살 얼굴이라고.\"",
+        "스물여섯 해예요. 저는 이렇게 늙었는데, 당신은 그 밤 그대로예요.",
+        "저잣거리에서 수군대요. 개경 수복 때 그 무사가 아직도 열여덟 살 얼굴이라고.",
         "【안내】 늙지 않는 얼굴은 의심을 부른다. 의심도가 오르면 조사와 숙청의 위험도 커진다.",
       ],
       options: [
@@ -441,6 +446,17 @@ export const ch02: ChapterDef = {
           id: "hide",
           text: "수염을 기르고, 사람 많은 자리를 피하기로 한다",
           hint: "의심도 ▼ · 명망 ▼",
+          requires: { k: "variant", eq: "m" },
+          effects: [
+            { k: "suspicion", add: -5 },
+            { k: "point", point: "fame", add: -1 },
+          ],
+        },
+        {
+          id: "hide_hat",
+          text: "삿갓을 깊이 눌러쓰고, 사람 많은 자리를 피하기로 한다",
+          hint: "의심도 ▼ · 명망 ▼",
+          requires: { k: "variant", eq: "f" },
           effects: [
             { k: "suspicion", add: -5 },
             { k: "point", point: "fame", add: -1 },
@@ -448,7 +464,7 @@ export const ch02: ChapterDef = {
         },
         {
           id: "joke",
-          text: "\"당신 약이 좋아서 그렇지.\" 웃어넘긴다",
+          text: "'당신 약이 좋아서 그렇지.' 웃어넘긴다",
           hint: "의심도 ▲ · 소화와의 인연 ▲",
           effects: [
             { k: "suspicion", add: 4 },
@@ -457,7 +473,7 @@ export const ch02: ChapterDef = {
         },
         {
           id: "confess",
-          text: "\"소화, 나는 늙지 않아. 그 별 때문인 것 같아. 너만 알아줘.\"",
+          text: "소화, 나는 늙지 않아. 그 별 때문인 것 같아. 너만 알아줘.",
           hint: "비밀을 나눈다 · 소화와의 인연 ▲▲ · 의심도 ▼",
           requires: { k: "bond", npc: "sohwa", min: 10 },
           lockedText: "소화와 더 가까워져야 한다",
@@ -487,7 +503,7 @@ export const ch02: ChapterDef = {
         },
         {
           id: "ch02_o_thugs",
-          text: "(선택) 풀려난 노비를 쫓는 사병 무리 3명을 쫓아낸다",
+          text: "풀려난 노비를 쫓는 사병 무리 3명을 쫓아낸다",
           kind: "defeat",
           target: "bandit",
           count: 3,
@@ -529,8 +545,6 @@ export const ch02: ChapterDef = {
           text: "진포 해안의 화통 포대를 끝까지 지킨다",
           kind: "battle",
           target: "ch02_jinpo",
-          site: "jinpo",
-          offset: [4, 0],
         },
       ],
     },
@@ -560,8 +574,6 @@ export const ch02: ChapterDef = {
           text: "황산 고지의 왜구를 친다 — 소년 장수 아지발도",
           kind: "battle",
           target: "ch02_hwangsan",
-          site: "hwangsan",
-          offset: [-1, -1],
         },
         {
           id: "ch02_o_report",
@@ -572,7 +584,7 @@ export const ch02: ChapterDef = {
         },
         {
           id: "ch02_o_refugee",
-          text: "(선택) 산에 숨었던 피란민의 귀향을 돕는다",
+          text: "산에 숨었던 피란민의 귀향을 돕는다",
           kind: "talk",
           target: "ch02_refugee",
           prompt: "ch02_refugee",
@@ -585,7 +597,7 @@ export const ch02: ChapterDef = {
       year: 1387,
       narration: [
         "1383년, 정지가 남해 관음포에서 왜선을 불태웠다. 바다가 조금씩 잠잠해졌다.",
-        "1387년. 너의 호적 나이는 마흔둘. 그러나 거울 속 얼굴은 열여덟이다.",
+        "1387년. 당신의 호적 나이는 마흔둘. 그러나 거울 속 얼굴은 열여덟이다.",
       ],
       objectives: [
         {

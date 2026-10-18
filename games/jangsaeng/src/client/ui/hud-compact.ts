@@ -3,6 +3,7 @@
 // drawer (the full status card, objective tracker or chat) that blocks input.
 import { FINAL_YEAR, type SelfView } from "../../shared/types.ts";
 import { button, h, meter, ratio, setMeter, setText, toggle } from "./dom.ts";
+import { inputHintText, touchInput } from "./hud-objectives.ts";
 import { SUSPICION_BANDS } from "./labels.ts";
 
 export type Drawer = "status" | "objectives" | "chat";
@@ -76,7 +77,10 @@ export class CompactRow {
     toggle(this.#skip, "hidden", !self.demo);
     const pending = self.objectives.filter((o) => !o.done);
     const cur = pending.find((o) => !o.optional) ?? pending[0];
-    setText(this.#text, cur ? cur.text : self.objectives.length ? "이 단계의 목표를 모두 마쳤다" : "지금은 정해진 목표가 없다");
+    // The device-neutral instruction comes first so truncation cuts the control names, not the task.
+    const keys = cur ? inputHintText(cur.hint, touchInput()) : "";
+    const text = cur ? `${cur.optional ? "선택 · " : ""}${cur.text}${keys ? ` · ${keys}` : ""}` : "";
+    setText(this.#text, cur ? text : self.objectives.length ? "이 단계의 목표를 모두 마쳤다" : "지금은 정해진 목표가 없다");
     setText(this.#prog, cur?.progress ? `${cur.progress[0]}/${cur.progress[1]}` : pending.length > 1 ? `+${pending.length - 1}` : "");
     toggle(this.#strip, "done", !cur);
   }

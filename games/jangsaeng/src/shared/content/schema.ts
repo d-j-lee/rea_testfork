@@ -2,7 +2,7 @@
 // in this shape. Rules (src/shared/rules) interpret conditions and effects;
 // the session (src/shared/host) runs chapter steps; the world
 // (src/shared/sim) runs NPCs, spawns and battles in real time.
-import type { CharacterSprite, Dir, PropSprite } from "../sprites.ts";
+import type { BodyVariant, CharacterSprite, Dir, PropSprite } from "../sprites.ts";
 
 // ── Core vocabularies ────────────────────────────────────────────────────
 
@@ -22,8 +22,17 @@ export const STAT_HELP: Readonly<Record<StatKey, string>> = {
   body: "최대 체력 +10/점, 사경 시간",
   spirit: "기술 피해 +2%/점, 기력 회복",
   wit: "정치 판정·협상, 풍향계 정밀도(30+)",
-  tact: "총애 획득, 숙청 위험 −1/점, 의심 감소",
+  tact: "숙청 위험 −1/점, 치부 수익 +2%/점, 조사·설득 판정",
 };
+
+/**
+ * Flags the rules read that content writes: a 유파 exists (`school`, set by a
+ * flag effect; enables 제자 양성) and its accumulated 제자 경험 (`discipleXp`,
+ * a number changed only by the `disciple` effect). Content cannot import
+ * rules, so this shared contract lives here.
+ */
+export const SCHOOL_FLAG = "school";
+export const DISCIPLE_XP_FLAG = "discipleXp";
 
 export const NATION_KEYS = ["defense", "finance", "people", "diplomacy", "reform"] as const;
 export type NationKey = (typeof NATION_KEYS)[number];
@@ -100,6 +109,8 @@ export type Cond =
   | { k: "aligned"; faction: string | null }
   | { k: "identity"; kind: IdentityKind }
   | { k: "origin"; origin: OriginId }
+  /** The hero's body variant chosen at creation (외형 남/여). */
+  | { k: "variant"; eq: BodyVariant }
   | { k: "item"; item: string; count?: number }
   | { k: "battleWon"; battle: string };
 
@@ -135,12 +146,15 @@ export type Effect =
   | { k: "suspicion"; add: number }
   | { k: "life"; add: number }
   | { k: "flag"; flag: string; value?: FlagValue }
+  /** 제자 경험 of the 유파 (DISCIPLE_XP_FLAG); 제자 세대 = 1 + floor(경험 ÷ 2). */
+  | { k: "disciple"; add: number }
   | { k: "branch"; id: BranchId; ok: boolean }
   | { k: "item"; item: string; add: number }
   | { k: "skill"; skill: string }
   | { k: "title"; title: string }
   | { k: "meritSubject"; grade: 1 | 2 | 3 | 4 }
-  | { k: "chronicle"; text: string }
+  /** A line in 나의 실록. `alt` marks a counterfactual (branch-success) outcome: shown with a 대체역사 tag. */
+  | { k: "chronicle"; text: string; alt?: true }
   | { k: "toast"; text: string; tone?: "info" | "good" | "bad" | "warn" | "epic" }
   | { k: "wash"; method: WashMethod | "forced" }
   | { k: "exile"; site: string }
@@ -266,8 +280,16 @@ export interface BossPhase {
 
 export interface BossDef {
   enemy: string;
+  /** Role name only; the fiction/record marker comes from `historical`. */
   name: string;
   title?: string;
+  /**
+   * A person named in the record (아지발도): the battle UI marks the name
+   * '(기록상)'. Otherwise the boss is invented and is marked '(가상)'.
+   * Real people never become bosses otherwise (docs/HISTORY.md §1.2).
+   * Every shipped boss declares it (tests/unit/content.test.ts).
+   */
+  historical?: boolean;
   level: number;
   hpScale: number;
   phases: readonly BossPhase[];
@@ -326,6 +348,11 @@ export interface BattleDef {
   allies?: readonly { sprite: CharacterSprite; name: string; count: number }[];
   /** A 대전(大戰): first victory grants +2 lifespan years and appears in 연대기. */
   great?: boolean;
+  /**
+   * Counterfactual battle that only a 대체역사 path opens: its 연대기 lines
+   * carry the 대체역사 tag (victory chronicle effects set `alt` too).
+   */
+  alt?: true;
   /** Enemy HP/count scale with participants (MMO world-event scaling). */
   scaled?: boolean;
   music?: MusicMood;
@@ -345,16 +372,32 @@ export type ObjectiveKind =
   | "collect"
   | "auto";
 
+/** Controls an objective teaches; the HUD names them for the player's input device. */
+export type InputHint = "move" | "interact" | "attack" | "bow" | "roll" | "skill";
+
 export interface ObjectiveDef {
   id: string;
+  /** Device-neutral instruction; key or button names go in `hint`. */
   text: string;
   kind: ObjectiveKind;
+  /** Controls to show beside the objective (keyboard or touch names). */
+  hint?: readonly InputHint[];
+  /**
+   * Completing it is not an achievement — a history card, a tragedy, the
+   * finale: the session sends no '목표 달성' toast or quest sound.
+   * Every objective that opens a `style: "history"` prompt sets it.
+   */
+  solemn?: true;
   /** npc id (talk), site id (reach), enemy id (defeat), battle id, prompt id, item id. */
   target?: string;
   count?: number;
-  /** Marker location for UI and companions. */
+  /**
+   * Marker location for UI and companions. Battle objectives leave it out:
+   * their BattleDef owns the place (site + offset, the ring's centre).
+   */
   site?: string;
   offset?: Offset;
+  /** Does not block the step; the HUD shows a 선택 badge (no '(선택)' in the text). */
   optional?: boolean;
   requires?: Cond;
   /** talk: prompt opened when talking to the target NPC for this objective. */
@@ -382,10 +425,23 @@ export interface FactionDef {
   desc?: string;
 }
 
+/**
+ * One line of a 실제 역사 노트. The kind is the label the reader sees: a fact,
+ * a scholarly interpretation, an uncertain detail, the game's fiction, or a
+ * principle the game follows. One kind per line; split mixed statements.
+ */
+export const HISTORY_NOTE_KINDS = ["fact", "interp", "uncertain", "fiction", "principle"] as const;
+export type HistoryNoteKind = (typeof HISTORY_NOTE_KINDS)[number];
+export interface HistoryNote {
+  kind: HistoryNoteKind;
+  text: string;
+}
+
 export interface ChapterDef {
   id: ChapterId;
   order: number;
   title: string;
+  /** Theme line; the year range has one owner, `years`. */
   subtitle: string;
   years: readonly [number, number];
   level: readonly [number, number];
@@ -397,8 +453,8 @@ export interface ChapterDef {
   start: { site: string; offset?: Offset };
   /** Narration shown on entering the chapter. */
   briefing: readonly string[];
-  /** 실제 역사 노트 lines (facts; mark interpretations with [해석]). */
-  history: readonly string[];
+  /** 실제 역사 노트. */
+  history: readonly HistoryNote[];
   /** Historical nation baseline at chapter start (carry-over formula). */
   hist: Readonly<Record<NationKey, number>>;
   factions: readonly FactionDef[];
@@ -412,6 +468,7 @@ export interface ChapterDef {
    * Demo mode only: id of the step a demo preset starts at. The steps before
    * it are played out by rules/save.ts the way 건너뛰기 would (first enabled
    * option, every battle won). Normal play always starts at the first step.
+   * The session must enter the save's step on first entry for this to apply.
    */
   demoStart?: string;
   /** Montage chapters play mostly as cards during the passage of years. */

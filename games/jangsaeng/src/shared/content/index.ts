@@ -1,5 +1,5 @@
 // Content registry: the single place that assembles all game data.
-import type { ChapterDef, ChapterId, CompanionLines, CompanionPersona, NationEndingDef, PersonalEndingDef } from "./schema.ts";
+import type { ChapterDef, ChapterId, CompanionLines, CompanionPersona, HistoryNote, NationEndingDef, PersonalEndingDef } from "./schema.ts";
 import { CHAPTER_IDS } from "./schema.ts";
 import { ENEMIES } from "./enemies.ts";
 import { ITEMS, ERA_GEAR } from "./items.ts";
@@ -50,7 +50,7 @@ export interface ContentIndex {
   endings: {
     nation: Readonly<Record<NationEndingDef["id"], NationEndingDef>>;
     personal: Readonly<Record<PersonalEndingDef["id"], PersonalEndingDef>>;
-    historyNote: readonly string[];
+    historyNote: readonly HistoryNote[];
   };
 }
 

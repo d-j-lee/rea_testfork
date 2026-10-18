@@ -10,7 +10,7 @@ const B1_PETITION_SUCCESS: readonly Effect[] = [
   { k: "longFlag", flag: "jangyongyeong", key: "defense", add: 8 },
   { k: "favor", faction: "sedo", add: -15 },
   { k: "point", point: "honor", add: 15 },
-  { k: "chronicle", text: "1802년, 장용영 혁파의 명이 거두어졌다. 선왕의 군영이 남았다." },
+  { k: "chronicle", text: "1802년, 장용영 혁파의 명이 거두어졌다. 선왕의 군영이 남았다.", alt: true },
   { k: "toast", text: "B1 성공 — 장용영이 살아남았다. 19세기 국방의 하락이 줄어든다.", tone: "epic" },
 ];
 const B1_PETITION_FAILURE: readonly Effect[] = [
@@ -38,12 +38,12 @@ export const ch13: ChapterDef = {
     "그러나 꿈을 꾼 왕이 떠나면, 꿈을 지킬 사람은 누구인가.",
   ],
   history: [
-    "정조는 1776년 즉위하며 '과인은 사도세자의 아들이다'라고 선언했고, 같은 해 규장각을 세웠다. 1779년 서얼 출신 학자들을 검서관으로 썼다.",
-    "1777년 7월 28일 밤 자객들이 경희궁 존현각 가까이 들어온 시해 미수 사건(정유역변)이 일어났다. 정조는 무사했다.",
-    "1785년 장용위가 만들어져 1793년 국왕 친위 군영인 장용영이 되었다. 1790년 24기 무예를 정리한 『무예도보통지』가 간행되었다.",
-    "1794~1796년 수원 화성을 쌓았다. 1800년 정조가 승하하고, 1801년 신유박해가 일어났으며, 1802년 장용영이 혁파되었다.",
-    "1811년 홍경래의 난, 1862년 진주에서 시작된 임술 농민 봉기가 일어났다. 삼정이정청이 설치되었으나 몇 달 만에 폐지되었다.",
-    "[해석] 세도 정치 아래 국가 재정과 군사 역량이 크게 약해졌다는 것이 통설적 평가다.",
+    { kind: "fact", text: "정조는 1776년 즉위하며 '과인은 사도세자의 아들이다'라고 선언했고, 같은 해 규장각을 세웠다. 1779년 서얼 출신 학자들을 검서관으로 썼다." },
+    { kind: "fact", text: "1777년 7월 28일 밤 자객들이 경희궁 존현각 가까이 들어온 시해 미수 사건(정유역변)이 일어났다. 정조는 무사했다." },
+    { kind: "fact", text: "1785년 장용위가 만들어져 1793년 국왕 친위 군영인 장용영이 되었다. 1790년 24기 무예를 정리한 『무예도보통지』가 간행되었다." },
+    { kind: "fact", text: "1794~1796년 수원 화성을 쌓았다. 1800년 정조가 승하하고, 1801년 신유박해가 일어났으며, 1802년 장용영이 혁파되었다." },
+    { kind: "fact", text: "1811년 홍경래의 난, 1862년 진주에서 시작된 임술 농민 봉기가 일어났다. 삼정이정청이 설치되었으나 몇 달 만에 폐지되었다." },
+    { kind: "interp", text: "세도 정치 아래 국가 재정과 군사 역량이 크게 약해졌다는 것이 통설적 평가다." },
   ],
   hist: { defense: 38, finance: 38, people: 42, diplomacy: 32, reform: 42 },
   factions: [
@@ -227,7 +227,7 @@ export const ch13: ChapterDef = {
       boss: {
         enemy: "boss_duelist",
         name: "장용영 교련관",
-        title: "(가상)",
+        historical: false,
         level: 36,
         hpScale: 0.9,
         phases: [
@@ -410,7 +410,7 @@ export const ch13: ChapterDef = {
             { k: "suspicion", add: 10 },
           ],
         },
-        { id: "mourn", text: "왕의 무덤 쪽을 향해 절한다.", effects: [{ k: "point", point: "honor", add: 3 }] },
+        { id: "mourn", text: "왕의 무덤 쪽을 향해 절한다.", effects: [] },
       ],
     },
     {
@@ -477,7 +477,7 @@ export const ch13: ChapterDef = {
                 { k: "branch", id: "B1", ok: true },
                 { k: "longFlag", flag: "jangyongyeong", key: "defense", add: 5 },
                 { k: "suspicion", add: 5 },
-                { k: "chronicle", text: "1802년, 장용영의 이름은 사라졌으나 화성의 군사와 무예는 남았다." },
+                { k: "chronicle", text: "1802년, 장용영의 이름은 사라졌으나 화성의 군사와 무예는 남았다.", alt: true },
                 { k: "toast", text: "B1 성공 — 군영은 이름을 바꿔 살아남았다.", tone: "good" },
               ],
               failure: [
@@ -620,7 +620,7 @@ export const ch13: ChapterDef = {
                 { k: "favor", faction: "sedo", add: -30 },
                 { k: "longFlag", flag: "samjeong", key: "finance", add: 3 },
                 { k: "bond", npc: "park_gyusu", add: 20 },
-                { k: "chronicle", text: "1862년, 삼정이정청의 개혁안이 살아남았다." },
+                { k: "chronicle", text: "1862년, 삼정이정청의 개혁안이 살아남았다.", alt: true },
                 { k: "toast", text: "B2 성공 — 삼정 개혁이 유지된다. 재정·민심 ▲", tone: "epic" },
               ],
               else: [
@@ -681,13 +681,13 @@ export const ch13: ChapterDef = {
       year: 1777,
       narration: ["1777년 7월 28일. 자정이 가까운 경희궁."],
       objectives: [
-        { id: "o_jonhyeon", text: "존현각 지붕을 지킨다 (60초)", kind: "battle", target: "b_jonhyeon", site: "hanyang", offset: [1, -4] },
+        { id: "o_jonhyeon", text: "존현각 지붕을 지킨다 (60초)", kind: "battle", target: "b_jonhyeon" },
       ],
     },
     {
       id: "s3",
       year: 1785,
-      objectives: [{ id: "o_jonhyeon_after", text: "그 밤의 뒷이야기", kind: "prompt", target: "p_jonhyeon_after" }],
+      objectives: [{ id: "o_jonhyeon_after", solemn: true, text: "그 밤의 뒷이야기", kind: "prompt", target: "p_jonhyeon_after" }],
     },
     {
       id: "s4",
@@ -702,7 +702,7 @@ export const ch13: ChapterDef = {
       id: "s5",
       year: 1790,
       objectives: [
-        { id: "o_yeonmu", text: "장용영 교련관과 쌍검을 겨룬다", kind: "battle", target: "b_yeonmu", site: "hanyang", offset: [-3, 3] },
+        { id: "o_yeonmu", text: "장용영 교련관과 쌍검을 겨룬다", kind: "battle", target: "b_yeonmu" },
       ],
     },
     {
@@ -719,7 +719,7 @@ export const ch13: ChapterDef = {
       id: "s7",
       year: 1800,
       narration: ["1795년 봄, 왕은 혜경궁의 회갑을 맞아 화성으로 큰 행차를 했다. 1796년 가을, 화성이 완성되었다."],
-      objectives: [{ id: "o_jeongjo_dies", text: "1800년 여름", kind: "prompt", target: "p_jeongjo_dies" }],
+      objectives: [{ id: "o_jeongjo_dies", solemn: true, text: "1800년 여름", kind: "prompt", target: "p_jeongjo_dies" }],
     },
     {
       id: "s8",
@@ -741,7 +741,7 @@ export const ch13: ChapterDef = {
       id: "s10",
       year: 1812,
       objectives: [
-        { id: "o_refugees", text: "피란민 행렬을 약탈 무리로부터 지킨다", kind: "battle", target: "b_refugees", site: "pyeongyang", offset: [-3, -5] },
+        { id: "o_refugees", text: "피란민 행렬을 약탈 무리로부터 지킨다", kind: "battle", target: "b_refugees" },
       ],
     },
     {
@@ -752,7 +752,7 @@ export const ch13: ChapterDef = {
         "1862년 2월, 진주에서 나무꾼들이 일어났다. 봉기는 삼남의 일흔여 고을로 번졌다.",
       ],
       objectives: [
-        { id: "o_hong_end", text: "정주성의 끝을 듣는다", kind: "prompt", target: "p_hong_end" },
+        { id: "o_hong_end", solemn: true, text: "정주성의 끝을 듣는다", kind: "prompt", target: "p_hong_end" },
         { id: "o_evidence", text: "진주의 초군을 만난다", kind: "talk", target: "chogun", site: "jinju", offset: [-2, 2], prompt: "p_evidence" },
       ],
     },
@@ -767,8 +767,8 @@ export const ch13: ChapterDef = {
       id: "s13",
       year: 1862,
       objectives: [
-        { id: "o_end_ok", text: "고쳐 쓴 장부", kind: "prompt", target: "p_end_ok", requires: { k: "branch", id: "B2", ok: true } },
-        { id: "o_end_fail", text: "닫힌 이정청", kind: "prompt", target: "p_end_fail", requires: { k: "not", of: { k: "branch", id: "B2", ok: true } } },
+        { id: "o_end_ok", solemn: true, text: "고쳐 쓴 장부", kind: "prompt", target: "p_end_ok", requires: { k: "branch", id: "B2", ok: true } },
+        { id: "o_end_fail", solemn: true, text: "닫힌 이정청", kind: "prompt", target: "p_end_fail", requires: { k: "not", of: { k: "branch", id: "B2", ok: true } } },
       ],
     },
   ],

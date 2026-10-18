@@ -176,7 +176,7 @@ export class Session {
         this.save.chronicle.push({ year: this.save.year, text: "유배지에서 새 시대를 맞았다.", tone: "bad" });
         this.save.exile = undefined;
       }
-      this.#enterStep(0, true);
+      this.#enterStep(this.save.step, true);
     } else {
       this.#resumeStep();
     }
@@ -369,7 +369,8 @@ export class Session {
     this.save.objectives[id] = Math.min(target, before + (Number.isFinite(amount) ? amount : target));
     if (this.#isDone(objective)) {
       if (objective.onComplete?.length) this.#apply(objective.onComplete);
-      if (!objective.optional) {
+      // A solemn objective (history card, tragedy, finale) is not an achievement.
+      if (!objective.optional && !objective.solemn) {
         this.send({ t: "toast", text: `목표 달성 — ${objective.text}`, tone: "good" });
         this.#fxSelf("sfx", "quest");
       }
@@ -755,8 +756,9 @@ export class Session {
     if (!this.save.promptsDone.includes(def.id)) this.save.promptsDone.push(def.id);
     this.#fxSelf("sfx", "choice");
     const outcome = this.#apply(option.effects, true);
+    // A history card's title names the event (삼전도, 우금치); its result card is only a record.
     if (def.options.length > 1 && outcome.lines.length)
-      this.#enqueue({ type: "result", id: serial("result"), title: def.title, lines: outcome.lines }, true);
+      this.#enqueue({ type: "result", id: serial("result"), title: def.style === "history" ? "기록" : def.title, lines: outcome.lines }, true);
     active.onDone?.();
   }
 
@@ -1142,6 +1144,7 @@ export class Session {
         done: this.#isDone(objective),
         optional: objective.optional ?? false,
       };
+      if (objective.hint) view.hint = objective.hint;
       if ((objective.count ?? 1) > 1)
         view.progress = [this.save.objectives[objective.id] ?? 0, objective.count ?? 1];
       const { place, siteId } = this.#objectivePlace(objective);

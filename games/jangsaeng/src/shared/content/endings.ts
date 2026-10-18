@@ -1,8 +1,8 @@
 // Endings: one nation ending (N1–N3) and one personal ending (P0–P5) are combined
 // after the 1910 settlement. Nation endings stay honest that N1 is a hypothesis that
 // still faces aggression; N3 depicts 경술국치 with restraint. P5 is never glorified.
-// ENDING_HISTORY_NOTE separates fact, [해석] and the game's fiction.
-import type { NationEndingDef, PersonalEndingDef } from "./schema.ts";
+// ENDING_HISTORY_NOTE labels each line by kind (fact, interpretation, fiction…).
+import type { HistoryNote, NationEndingDef, PersonalEndingDef } from "./schema.ts";
 
 export const NATION_ENDINGS: Readonly<Record<NationEndingDef["id"], NationEndingDef>> = {
   N1: {
@@ -95,7 +95,7 @@ export const PERSONAL_ENDINGS: Readonly<Record<PersonalEndingDef["id"], Personal
     id: "P4",
     title: "유지를 잇는 자",
     body: [
-      "노인성이 준 세월은 1910년에 닿기 전에 끝났다. 오백 년 동안 오지 않던 주름이 한꺼번에 왔다.",
+      "노인성이 준 세월은 1910년에 닿기 전에 끝났다. 더디게 오던 주름이 한꺼번에 왔다.",
       "마지막 숨을 쉬기 전, 당신은 장생록과 칼을 제자에게 건넸다. '이 책의 끝은 네가 써라.'",
       "1910년 여름을 맞은 것은 제자다. 그는 스승의 얼굴을 한 번도 늙은 모습으로 본 적이 없었다.",
       "장생록의 마지막 장은 다른 사람의 글씨로 적혀 있다. 그것으로 충분하다고, 당신이라면 말했을 것이다.",
@@ -114,18 +114,25 @@ export const PERSONAL_ENDINGS: Readonly<Record<PersonalEndingDef["id"], Personal
   },
 };
 
-export const ENDING_HISTORY_NOTE: readonly string[] = [
-  "이 게임은 실제 역사에 바탕을 둔 대체역사 픽션입니다. 실존 인물과 사건은 사료를 존중해 묘사했으며, 가상의 주인공과 선택에 따른 전개는 창작입니다.",
-  "[사실] 1910년 8월 22일 병합 조약이 조인되고 8월 29일 공포되어 대한제국은 국권을 잃었다. 조선총독부가 설치되었다.",
-  "[사실] 그에 앞서 1904년 한일의정서와 제1차 한일협약, 1905년 을사늑약, 1907년 고종의 강제 퇴위와 정미7조약·군대 해산, 1909년 기유각서가 이어졌다. 고종은 을사늑약을 비준하지 않았다.",
-  "[사실] 1909년 10월 26일 안중근이 하얼빈역에서 이토 히로부미를 저격했다. 게임은 이 의거를 언급만 하며, 플레이어가 대신 수행하지 않는다.",
-  "[사실] 국권을 잃은 뒤에도 의병과 독립운동은 만주·연해주와 국내에서 이어졌다. 1919년 3·1운동이 일어났고, 1945년 8월 광복을 맞았다.",
-  "[해석] 식민지화는 단일 원인이 아니라 내부 개혁의 실패, 재정·군사력의 부족, 국제 세력 균형의 변화, 일본의 의도적 침략 정책이 겹친 결과로 설명된다. 게임이 여러 분기를 1910년에 함께 정산하는 것은 이 해석을 따른 것이다.",
-  "[해석] 을사늑약과 병합 조약이 강박과 절차상 흠결로 무효라는 것은 한국 학계와 정부의 입장이며, 일본 측 입장은 다르다.",
-  "[해석] 분기마다 '그때 이렇게 했다면'이라는 가정은 역사학의 대표적 평가를 바탕으로 했지만, 실제로 그렇게 되었으리라는 증명은 아니다.",
-  "[창작] 주인공과 그 장생, 가상 인물(실록청 서리, 장용영 장교 윤씨, 홍역관, 대장장이 석가, 공사관 통역 등)과 '(가상)'으로 표시한 적장은 창작이다.",
-  "[창작] 분기에 성공했을 때의 장면 — 일어나지 않은 군란, 점령되지 않은 궁궐, 닫힌 도성 문, 중명전 수호, 무기고 방어, 동대문 진입, 그리고 N1·N2 결말 — 은 모두 대체역사다.",
-  "[원칙] 이순신의 전사, 삼전도 항복, 정조의 생존 같은 역사 앵커는 어떤 경로에서도 바꾸지 않았다. 학살·시해·박해는 전투가 아닌 절제된 서사로만 다루었고 보상과 잇지 않았다.",
-  "[원칙] 독도·간도처럼 오늘날까지 이어지는 사안은 사실만 적었고, 해석이 갈리는 부분은 [해석]으로 표시했다. 병력·희생자 수는 기록상 수치이거나 추정치이며 과장되었을 수 있다.",
-  "이 게임은 실제 역사 속에서 나라를 지키다 쓰러진 사람들과, 이름 없이 고통받은 모든 사람을 기억한다.",
+/**
+ * 엔딩의 실제 역사 노트. The fixed disclaimer is not repeated here: its one
+ * owner is DISCLAIMER (client/ui/title.ts), shown on the title, loading and
+ * ending screens.
+ */
+export const ENDING_HISTORY_NOTE: readonly HistoryNote[] = [
+  { kind: "fact", text: "1910년 8월 22일 병합 조약이 조인되고 8월 29일 공포되어 대한제국은 국권을 잃었다. 조선총독부가 설치되었다." },
+  { kind: "fact", text: "그에 앞서 1904년 한일의정서와 제1차 한일협약, 1905년 을사늑약, 1907년 고종의 강제 퇴위와 정미7조약·군대 해산, 1909년 기유각서가 이어졌다. 고종은 을사늑약을 비준하지 않았다." },
+  { kind: "fact", text: "1909년 10월 26일 안중근이 하얼빈역에서 이토 히로부미를 저격했다." },
+  { kind: "principle", text: "게임은 안중근 의거를 언급만 하며, 플레이어가 대신 수행하지 않는다." },
+  { kind: "fact", text: "국권을 잃은 뒤에도 의병과 독립운동은 만주·연해주와 국내에서 이어졌다. 1919년 3·1운동이 일어났고, 1945년 8월 광복을 맞았다." },
+  { kind: "interp", text: "식민지화는 단일 원인이 아니라 내부 개혁의 실패, 재정·군사력의 부족, 국제 세력 균형의 변화, 일본의 의도적 침략 정책이 겹친 결과로 설명된다. 게임이 여러 분기를 1910년에 함께 정산하는 것은 이 해석을 따른 것이다." },
+  { kind: "interp", text: "을사늑약과 병합 조약이 강박과 절차상 흠결로 무효라는 것은 한국 학계와 정부의 입장이며, 일본 측 입장은 다르다." },
+  { kind: "interp", text: "분기마다 '그때 이렇게 했다면'이라는 가정은 역사학의 대표적 평가를 바탕으로 했지만, 실제로 그렇게 되었으리라는 증명은 아니다." },
+  { kind: "fiction", text: "주인공과 그 장생, 가상 인물(실록청 서리, 장용영 장교 윤씨, 홍역관, 대장장이 석가, 공사관 통역 등)과 전투 화면에 '(가상)'으로 표시한 적장은 창작이다." },
+  { kind: "fiction", text: "분기에 성공했을 때의 장면 — 일어나지 않은 군란, 점령되지 않은 궁궐, 닫힌 도성 문, 중명전 수호, 무기고 방어, 동대문 진입, 그리고 N1·N2 결말 — 은 모두 대체역사다. 나의 실록에서는 '대체역사' 표시를 단다." },
+  { kind: "principle", text: "이순신의 전사, 삼전도 항복, 정조의 생존 같은 역사 앵커는 어떤 경로에서도 바꾸지 않았다." },
+  { kind: "principle", text: "학살·시해·박해는 전투가 아닌 절제된 서사로만 다루었다. 비극 자체에는 보상이 없고, 그 곁에서 사람을 돕는 선택만 공덕으로 남는다." },
+  { kind: "principle", text: "독도·간도처럼 오늘날까지 이어지는 사안은 사실만 적었고, 해석이 갈리는 부분은 해석으로 표시했다." },
+  { kind: "uncertain", text: "병력·희생자 수는 기록상 수치이거나 추정치이며 과장되었을 수 있다." },
+  { kind: "principle", text: "이 게임은 실제 역사 속에서 나라를 지키다 쓰러진 사람들과, 이름 없이 고통받은 모든 사람을 기억한다." },
 ];

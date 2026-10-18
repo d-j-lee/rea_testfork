@@ -18,16 +18,18 @@ export const ch09: ChapterDef = {
   briefing: [
     "1592년 음력 4월. 부산 앞바다가 배로 덮였다.",
     "이백 년 평화가 하루 만에 끝났다. 부산진성이 먼저 무너졌다.",
-    "당신은 이 땅에서 이백삼십 년을 살았다. 그래도 이런 전쟁은 처음이다.",
+    "당신은 이 땅에서 이백사십 년 넘게 살았다. 그래도 이런 전쟁은 처음이다.",
     "지킬 수 없는 성이라면, 사람이라도 지켜야 한다.",
   ],
   history: [
-    "1592년 4월 13일 일본군 1번대가 부산에 상륙해 14일 부산진성을, 15일 동래성을 함락했다. 정발과 송상현이 전사했다.",
-    "선조는 4월 30일 한양을 떠나 평양을 거쳐 의주까지 피란하며 명에 원병을 청했다. 광해군은 분조를 이끌었다.",
-    "관군이 무너진 자리에서 곽재우·고경명·조헌 등 의병과 휴정·유정·영규·처영 등 승병이 일어났다.",
-    "7월 8일 이순신이 한산도 앞바다에서 학익진으로 일본 함대를 크게 이겼다. 같은 무렵 웅치·이치에서 호남이 지켜졌다.",
-    "1593년 2월 12일 권율이 행주산성에서 화차와 비격진천뢰를 써서 일본군을 물리쳤다. 병력 2,300여 명은 기록상 수치다.",
-    "[해석] 조령을 버린 신립의 판단, 김성일 보고의 의미 등은 평가가 갈린다. 일본군 병력 규모도 추정치마다 다르다.",
+    { kind: "fact", text: "1592년 4월 13일 일본군 1번대가 부산에 상륙해 14일 부산진성을, 15일 동래성을 함락했다. 정발과 송상현이 전사했다." },
+    { kind: "uncertain", text: "송상현이 부채에 적어 아버지께 남겼다는 글귀는 전하는 이야기다." },
+    { kind: "fact", text: "선조는 4월 30일 한양을 떠나 평양을 거쳐 의주까지 피란하며 명에 원병을 청했다. 광해군은 분조를 이끌었다." },
+    { kind: "fact", text: "관군이 무너진 자리에서 곽재우·고경명·조헌 등 의병과 휴정·유정·영규·처영 등 승병이 일어났다." },
+    { kind: "fact", text: "7월 8일 이순신이 한산도 앞바다에서 학익진으로 일본 함대를 크게 이겼다. 같은 무렵 웅치·이치에서 호남이 지켜졌다." },
+    { kind: "fact", text: "1593년 2월 12일 권율이 행주산성에서 화차와 비격진천뢰를 써서 일본군을 물리쳤다. 병력 2,300여 명은 기록상 수치다." },
+    { kind: "interp", text: "조령을 버린 신립의 판단, 김성일 보고의 의미 등은 평가가 갈린다." },
+    { kind: "uncertain", text: "일본군 병력 규모는 추정치마다 다르다." },
   ],
   hist: { defense: 32, finance: 38, people: 38, diplomacy: 42, reform: 34 },
   factions: [
@@ -222,7 +224,7 @@ export const ch09: ChapterDef = {
         { k: "point", point: "virtue", add: 60 },
         { k: "point", point: "merit", add: 30 },
         { k: "exp", add: 1200 },
-        { k: "item", item: "letter", add: 1 },
+        { k: "item", item: "song_fan", add: 1 },
         { k: "nation", key: "people", add: 2 },
         { k: "worldEvent", add: 10 },
         { k: "toast", text: "피란 행렬이 양산 길로 빠져나갔다. 송상현의 부채 글이 품에 있다.", tone: "good" },
@@ -330,7 +332,7 @@ export const ch09: ChapterDef = {
       boss: {
         enemy: "boss_japanese_general",
         name: "왜군 공성 대장",
-        title: "(가상)",
+        historical: false,
         level: 30,
         hpScale: 1.3,
         phases: [
@@ -507,7 +509,7 @@ export const ch09: ChapterDef = {
           text: "부채를 맡긴다.",
           hint: "명예 ▲ · 공덕 ▲",
           effects: [
-            { k: "item", item: "letter", add: -1 },
+            { k: "item", item: "song_fan", add: -1 },
             { k: "point", point: "honor", add: 6 },
             { k: "point", point: "virtue", add: 20 },
             { k: "chronicle", text: "송상현의 부채 글을 남행 전령에게 맡겼다." },
@@ -737,13 +739,13 @@ export const ch09: ChapterDef = {
       year: 1592,
       narration: ["4월 15일 아침. 남문 밖에서 북소리가 울린다."],
       objectives: [
-        { id: "o_dongnae", text: "백성이 피란할 시간을 번다 (80초)", kind: "battle", target: "b_dongnae", site: "dongnae", offset: [0, -1] },
+        { id: "o_dongnae", text: "백성이 피란할 시간을 번다 (80초)", kind: "battle", target: "b_dongnae" },
       ],
     },
     {
       id: "s3",
       year: 1592,
-      objectives: [{ id: "o_fall", text: "동래성의 마지막을 기억한다", kind: "prompt", target: "p_dongnae_fall" }],
+      objectives: [{ id: "o_fall", solemn: true, text: "동래성의 마지막을 기억한다", kind: "prompt", target: "p_dongnae_fall" }],
     },
     {
       id: "s4",
@@ -764,7 +766,7 @@ export const ch09: ChapterDef = {
       narration: ["4월 29일 밤. 도성은 텅 비어 간다. 사람들이 짐을 지고 성문으로 몰린다."],
       objectives: [
         { id: "o_crossroads", text: "류성룡과 갈 길을 정한다", kind: "talk", target: "ryu_seongryong", site: "hanyang", offset: [2, -2], prompt: "p_crossroads" },
-        { id: "o_fan", text: "송상현의 부채를 남행 전령에게 맡긴다", kind: "talk", target: "fan_messenger", site: "hanyang", offset: [-3, 2], prompt: "p_fan", optional: true, requires: { k: "item", item: "letter" } },
+        { id: "o_fan", text: "송상현의 부채를 남행 전령에게 맡긴다", kind: "talk", target: "fan_messenger", site: "hanyang", offset: [-3, 2], prompt: "p_fan", optional: true, requires: { k: "item", item: "song_fan" } },
       ],
     },
     {
@@ -778,7 +780,7 @@ export const ch09: ChapterDef = {
         { id: "o_uiju", text: "어가를 의주 행재소까지 호위한다", kind: "talk", target: "seonjo_king", site: "uiju", offset: [0, -1], prompt: "p_uiju", requires: { k: "flag", flag: "ch09_path", eq: "mongjin" } },
         { id: "o_gwak", text: "의령에서 곽재우를 만난다", kind: "talk", target: "gwak_jaeu", site: "jinju", offset: [-3, 2], prompt: "p_gwak", requires: { k: "flag", flag: "ch09_path", eq: "uibyeong" } },
         { id: "o_cheoyeong", text: "전주에서 승장 처영을 만난다", kind: "talk", target: "cheoyeong", site: "jeonju", offset: [2, 2], prompt: "p_cheoyeong", requires: { k: "flag", flag: "ch09_path", eq: "monk" } },
-        { id: "o_fan_late", text: "송상현의 부채를 남행 전령에게 맡긴다", kind: "talk", target: "fan_messenger", site: "hanyang", offset: [-3, 2], prompt: "p_fan", optional: true, requires: { k: "item", item: "letter" } },
+        { id: "o_fan_late", text: "송상현의 부채를 남행 전령에게 맡긴다", kind: "talk", target: "fan_messenger", site: "hanyang", offset: [-3, 2], prompt: "p_fan", optional: true, requires: { k: "item", item: "song_fan" } },
       ],
     },
     {
@@ -786,7 +788,7 @@ export const ch09: ChapterDef = {
       year: 1592,
       narration: ["1592년 여름, 남강. 적의 보급대가 전라도로 가는 나루를 건너려 한다."],
       objectives: [
-        { id: "o_ambush", text: "의병과 함께 나루에서 매복한다", kind: "battle", target: "b_ambush", site: "jinju", offset: [-4, 3] },
+        { id: "o_ambush", text: "의병과 함께 나루에서 매복한다", kind: "battle", target: "b_ambush" },
       ],
     },
     {
@@ -805,14 +807,14 @@ export const ch09: ChapterDef = {
       year: 1592,
       narration: ["음력 7월 8일. 판옥선 몇 척이 견내량으로 들어가 적을 건드리고 돌아선다."],
       objectives: [
-        { id: "o_hansan", text: "한산도 앞바다에서 갑판을 지킨다", kind: "battle", target: "b_hansan", site: "tongyeong", offset: [0, 0] },
+        { id: "o_hansan", text: "한산도 앞바다에서 갑판을 지킨다", kind: "battle", target: "b_hansan" },
       ],
     },
     {
       id: "s10",
       year: 1593,
       objectives: [
-        { id: "o_turns", text: "전쟁의 흐름을 듣는다", kind: "prompt", target: "p_war_turns" },
+        { id: "o_turns", solemn: true, text: "전쟁의 흐름을 듣는다", kind: "prompt", target: "p_war_turns" },
         { id: "o_reach_haengju", text: "행주산성으로 간다", kind: "reach", target: "haengju", site: "haengju" },
       ],
     },
@@ -830,14 +832,14 @@ export const ch09: ChapterDef = {
       year: 1593,
       narration: ["음력 2월 12일 새벽. 성 아래 들판이 깃발로 덮였다."],
       objectives: [
-        { id: "o_haengju", text: "행주산성을 지킨다 (6진)", kind: "battle", target: "b_haengju", site: "haengju", offset: [0, 1] },
+        { id: "o_haengju", text: "행주산성을 지킨다 (6진)", kind: "battle", target: "b_haengju" },
       ],
     },
     {
       id: "s13",
       year: 1593,
       narration: ["4월, 일본군은 한양에서 물러나 남쪽 해안으로 내려갔다. 전쟁은 끝나지 않았다."],
-      objectives: [{ id: "o_jinju2", text: "진주성의 소식을 듣는다", kind: "prompt", target: "p_jinju2" }],
+      objectives: [{ id: "o_jinju2", solemn: true, text: "진주성의 소식을 듣는다", kind: "prompt", target: "p_jinju2" }],
     },
     {
       id: "s14",

@@ -17,7 +17,7 @@ function hwanguk(id: string, winner: string, loser: string, winnerName: string, 
     const requires = tp
       ? { k: "flag" as const, flag: "ch12_tangpyeong" }
       : { k: "not" as const, of: { k: "flag" as const, flag: "ch12_tangpyeong" } };
-    const tag = tp ? " · 탕평 −10" : "";
+    const tag = tp ? " · 탕평으로 판정이 누그러진다" : "";
     return [
       {
         id: `${winner}${tp ? "_tp" : ""}`,
@@ -28,6 +28,7 @@ function hwanguk(id: string, winner: string, loser: string, winnerName: string, 
         effects: [
           { k: "favor", faction: winner, add: 15 },
           { k: "favor", faction: loser, add: -10 },
+          { k: "align", faction: winner },
           { k: "purge", spec: spec(tp) },
         ],
       },
@@ -40,13 +41,14 @@ function hwanguk(id: string, winner: string, loser: string, winnerName: string, 
         effects: [
           { k: "favor", faction: loser, add: 15 },
           { k: "point", point: "honor", add: 8 },
+          { k: "align", faction: loser },
           { k: "purge", spec: spec(tp) },
         ],
       },
       {
         id: `neutral${tp ? "_tp" : ""}`,
         text: "어느 줄에도 서지 않는다.",
-        hint: `중립 · 얻는 것 절반${tag}`,
+        hint: `중립 · 얻는 것 없음${tag}`,
         requires,
         risk: spec(tp, true),
         effects: [
@@ -77,11 +79,12 @@ export const ch12: ChapterDef = {
     "당신은 줄을 서야 할 때와 줄 밖에 서야 할 때를 안다. 삼백 년을 살았으니까.",
   ],
   history: [
-    "1659년과 1674년, 자의대비의 상복 기간을 두고 서인과 남인이 맞섰다(기해·갑인예송).",
-    "숙종 대에 경신환국(1680), 기사환국(1689), 갑술환국(1694)으로 집권 붕당이 거듭 뒤바뀌며 보복이 심해졌다.",
-    "1693~1696년 안용복 사건을 계기로 울릉도 귀속 교섭이 벌어졌고, 막부는 1696년 일본인의 울릉도 도해를 금지했다.",
-    "1712년 청과 조선은 백두산에 정계비를 세웠다. 1728년 이인좌의 난이 진압되었고, 영조는 탕평책을 펴고 1750년 균역법을 시행했다.",
-    "1762년 영조는 세자를 뒤주에 가두었고 세자는 8일 만에 숨졌다(임오화변). [해석] 원인은 세자의 병을 강조하는 시각과 당쟁의 희생으로 보는 시각이 엇갈린다.",
+    { kind: "fact", text: "1659년과 1674년, 자의대비의 상복 기간을 두고 서인과 남인이 맞섰다(기해·갑인예송)." },
+    { kind: "fact", text: "숙종 대에 경신환국(1680), 기사환국(1689), 갑술환국(1694)으로 집권 붕당이 거듭 뒤바뀌며 보복이 심해졌다." },
+    { kind: "fact", text: "1693~1696년 안용복 사건을 계기로 울릉도 귀속 교섭이 벌어졌고, 막부는 1696년 일본인의 울릉도 도해를 금지했다." },
+    { kind: "fact", text: "1712년 청과 조선은 백두산에 정계비를 세웠다. 1728년 이인좌의 난이 진압되었고, 영조는 탕평책을 펴고 1750년 균역법을 시행했다." },
+    { kind: "fact", text: "1762년 영조는 세자를 뒤주에 가두었고 세자는 8일 만에 숨졌다(임오화변)." },
+    { kind: "interp", text: "임오화변의 원인은 세자의 병을 강조하는 시각과 당쟁의 희생으로 보는 시각이 엇갈린다." },
   ],
   hist: { defense: 32, finance: 32, people: 35, diplomacy: 30, reform: 33 },
   factions: [
@@ -153,7 +156,7 @@ export const ch12: ChapterDef = {
       boss: {
         enemy: "boss_rebel_captain",
         name: "반란군 부장",
-        title: "(가상)",
+        historical: false,
         level: 35,
         hpScale: 1,
         phases: [
@@ -218,7 +221,7 @@ export const ch12: ChapterDef = {
         {
           id: "support",
           text: "탕평의 말을 지지하고 다닌다.",
-          hint: "이후 환국 숙청 위험 −10 · 탕평파 총애 ▲",
+          hint: "이후 환국의 숙청 판정이 누그러진다 · 탕평파 총애 ▲",
           effects: [
             { k: "flag", flag: "ch12_tangpyeong" },
             { k: "favor", faction: "tangpyeong", add: 15 },
@@ -408,7 +411,7 @@ export const ch12: ChapterDef = {
       id: "s8b",
       year: 1728,
       objectives: [
-        { id: "o_muxin", text: "청주 길목에서 반란군을 막는다", kind: "battle", target: "b_muxin", site: "chungju", offset: [-3, 3] },
+        { id: "o_muxin", text: "청주 길목에서 반란군을 막는다", kind: "battle", target: "b_muxin" },
       ],
     },
     {
@@ -419,7 +422,7 @@ export const ch12: ChapterDef = {
       ],
     },
     { id: "s10", year: 1750, objectives: [{ id: "o_gyunyeok", text: "균역법", kind: "prompt", target: "p_gyunyeok" }] },
-    { id: "s11", year: 1762, objectives: [{ id: "o_imo", text: "임오년 여름", kind: "prompt", target: "p_imo" }] },
+    { id: "s11", year: 1762, objectives: [{ id: "o_imo", solemn: true, text: "임오년 여름", kind: "prompt", target: "p_imo" }] },
     { id: "s12", year: 1775, objectives: [{ id: "o_1775", text: "세손의 곁으로", kind: "prompt", target: "p_1775" }] },
   ],
   worldEvent: {

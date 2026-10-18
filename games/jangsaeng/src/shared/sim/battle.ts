@@ -432,7 +432,7 @@ export function battleView(sim: Sim): BattleView | null {
   if (b.bossId >= 0) {
     const boss = sim.actors.get(b.bossId);
     const hp = boss?.alive ? Math.max(0, Math.ceil((boss.hp / boss.maxHp) * 100)) : 0;
-    view.boss = { name: def.boss?.name ?? boss?.name ?? "", hp };
+    view.boss = { name: def.boss?.name ?? boss?.name ?? "", hp, historical: def.boss?.historical ?? false };
     if (def.boss?.title) view.boss.title = def.boss.title;
   }
   if (b.defendId >= 0 && def.defend) {

@@ -22,12 +22,13 @@ export const ch11: ChapterDef = {
     "그리고 어느 겨울, 산성의 화톳불 곁에서 당신은 한 맹세를 하게 된다.",
   ],
   history: [
-    "1608년 광해군이 즉위하자 이원익의 건의로 경기도에 대동법이 시행되었다. 공물을 쌀로 내게 한 이 법은 1708년에야 전국에 시행되었다.",
-    "1623년 3월 서인이 폐모살제와 외교 노선을 명분으로 반정을 일으켜 광해군을 폐하고 인조를 세웠다. 1624년 이괄이 반란을 일으켜 한양에 들어왔으나 안현에서 졌다.",
-    "1627년 정묘호란 뒤 후금과 형제의 맹약을 맺었다. 1636년 황제를 칭한 홍타이지가 12월 직접 침공했다.",
-    "인조는 남한산성에서 47일을 버텼다. 김상헌의 척화론과 최명길의 주화론이 맞섰고, 1637년 1월 30일 인조는 삼전도에서 항복했다.",
-    "소현세자·봉림대군과 척화파 신하들이 심양으로 끌려갔고, 많은 백성이 포로가 되었다. [불확실] 포로 수는 수만에서 수십만까지 추정이 엇갈린다.",
-    "[해석] 광해군의 외교를 실리적 중립으로 볼지, 반정의 명분을 어떻게 볼지는 지금도 평가가 갈린다.",
+    { kind: "fact", text: "1608년 광해군이 즉위하자 이원익의 건의로 경기도에 대동법이 시행되었다. 공물을 쌀로 내게 한 이 법은 1708년에야 전국에 시행되었다." },
+    { kind: "fact", text: "1623년 3월 서인이 폐모살제와 외교 노선을 명분으로 반정을 일으켜 광해군을 폐하고 인조를 세웠다. 1624년 이괄이 반란을 일으켜 한양에 들어왔으나 안현에서 졌다." },
+    { kind: "fact", text: "1627년 정묘호란 뒤 후금과 형제의 맹약을 맺었다. 1636년 황제를 칭한 홍타이지가 12월 직접 침공했다." },
+    { kind: "fact", text: "인조는 남한산성에서 47일을 버텼다. 김상헌의 척화론과 최명길의 주화론이 맞섰고, 1637년 1월 30일 인조는 삼전도에서 항복했다." },
+    { kind: "fact", text: "소현세자·봉림대군과 척화파 신하들이 심양으로 끌려갔고, 많은 백성이 포로가 되었다." },
+    { kind: "uncertain", text: "포로 수는 수만에서 수십만까지 추정이 엇갈린다." },
+    { kind: "interp", text: "광해군의 외교를 실리적 중립으로 볼지, 반정의 명분을 어떻게 볼지는 지금도 평가가 갈린다." },
   ],
   hist: { defense: 30, finance: 28, people: 33, diplomacy: 36, reform: 36 },
   factions: [
@@ -87,7 +88,7 @@ export const ch11: ChapterDef = {
     },
     {
       id: "grain_officer",
-      name: "군량 담당 군관 덕보",
+      name: "군량 담당 군관 박돌",
       title: "남한산성 수어청",
       sprite: "soldier_joseon",
       site: "namhansanseong",
@@ -172,7 +173,7 @@ export const ch11: ChapterDef = {
       boss: {
         enemy: "boss_rebel_captain",
         name: "이괄군 선봉장",
-        title: "(가상)",
+        historical: false,
         level: 33,
         hpScale: 1.1,
         phases: [
@@ -219,7 +220,7 @@ export const ch11: ChapterDef = {
       boss: {
         enemy: "boss_qing_general",
         name: "청 기병대장",
-        title: "(가상)",
+        historical: false,
         level: 34,
         hpScale: 1.1,
         phases: [
@@ -377,7 +378,7 @@ export const ch11: ChapterDef = {
     {
       id: "p_grain",
       title: "쉰 날 치 쌀",
-      speaker: { name: "군량 담당 군관 덕보", sprite: "soldier_joseon" },
+      speaker: { name: "군량 담당 군관 박돌", sprite: "soldier_joseon" },
       body: [
         "성 안에 군사가 만삼천이오. 쌀은 쉰 날 치가 못 되오.",
         "장작이 모자라 성첩에서 얼어 죽는 사람이 나오고 있소.",
@@ -487,7 +488,7 @@ export const ch11: ChapterDef = {
         "1637년 1월 30일. 인조는 남한산성을 나와 한강가 삼전도에서 청 태종에게 항복의 예를 올렸다.",
         "조선은 청과 군신 관계를 맺고 명과의 관계를 끊었다. 소현세자와 봉림대군, 척화를 주장한 신하들이 심양으로 끌려갔다.",
         "수많은 백성이 포로가 되어 북으로 걸어갔다.",
-        "당신은 성문 곁에 서 있었다. 칼은 칼집에 있었다. 이백칠십여 년 동안 이렇게 무거운 칼은 처음이었다.",
+        "당신은 성문 곁에 서 있었다. 칼은 칼집에 있었다. 이백구십 년 동안 이렇게 무거운 칼은 처음이었다.",
       ],
       options: [
         {
@@ -629,14 +630,14 @@ export const ch11: ChapterDef = {
       id: "s4",
       year: 1624,
       objectives: [
-        { id: "o_angyeon", text: "길마재에서 반란군을 막는다", kind: "battle", target: "b_angyeon", site: "hanyang", offset: [-4, -3] },
+        { id: "o_angyeon", text: "길마재에서 반란군을 막는다", kind: "battle", target: "b_angyeon" },
       ],
     },
     {
       id: "s5",
       year: 1636,
       objectives: [
-        { id: "o_two_wars", text: "북쪽의 소식을 듣는다", kind: "prompt", target: "p_two_wars" },
+        { id: "o_two_wars", solemn: true, text: "북쪽의 소식을 듣는다", kind: "prompt", target: "p_two_wars" },
         { id: "o_reach_namhan", text: "남한산성으로 간다", kind: "reach", target: "namhansanseong", site: "namhansanseong" },
       ],
     },
@@ -657,7 +658,7 @@ export const ch11: ChapterDef = {
       year: 1636,
       narration: ["밤이 깊었다. 북문 쪽 눈보라 너머로 말발굽 소리가 들린다."],
       objectives: [
-        { id: "o_namhan", text: "화톳불을 지키며 성첩을 버틴다", kind: "battle", target: "b_namhan", site: "namhansanseong", offset: [0, 2] },
+        { id: "o_namhan", text: "화톳불을 지키며 성첩을 버틴다", kind: "battle", target: "b_namhan" },
       ],
     },
     {
@@ -680,7 +681,7 @@ export const ch11: ChapterDef = {
     {
       id: "s9",
       year: 1637,
-      objectives: [{ id: "o_samjeondo", text: "삼전도", kind: "prompt", target: "p_samjeondo" }],
+      objectives: [{ id: "o_samjeondo", solemn: true, text: "삼전도", kind: "prompt", target: "p_samjeondo" }],
     },
     {
       id: "s10",
@@ -693,12 +694,12 @@ export const ch11: ChapterDef = {
     {
       id: "s11",
       year: 1645,
-      objectives: [{ id: "o_sohyeon", text: "세자의 귀국", kind: "prompt", target: "p_sohyeon" }],
+      objectives: [{ id: "o_sohyeon", solemn: true, text: "세자의 귀국", kind: "prompt", target: "p_sohyeon" }],
     },
     {
       id: "s12",
       year: 1658,
-      objectives: [{ id: "o_naseon", text: "북쪽 강의 소식", kind: "prompt", target: "p_naseon" }],
+      objectives: [{ id: "o_naseon", solemn: true, text: "북쪽 강의 소식", kind: "prompt", target: "p_naseon" }],
     },
   ],
   worldEvent: {
