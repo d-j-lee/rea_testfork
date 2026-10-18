@@ -21,7 +21,7 @@ function pickFoe(sim: Sim, a: Actor): Actor | null {
   for (const e of sim.index.query(a.x, a.y, 10, hostile)) {
     if (e.en?.state === "flee") continue;
     if (b?.def.kind === "duel" && e.en?.battle) continue;
-    if (b && Math.hypot(e.x - b.cx, e.y - b.cy) > b.radius + 3) continue;
+    if (b && Math.hypot(e.x - b.arena.x, e.y - b.arena.y) > b.arena.radius + 3) continue;
     const d = Math.hypot(e.x - a.x, e.y - a.y);
     if (d < bestD) {
       bestD = d;
@@ -61,9 +61,9 @@ export function tickFighter(sim: Sim, a: Actor, dt: number): void {
     }
     const foe = validFoe(sim, f.target);
     if (!foe) {
-      const b = sim.battle;
-      const gx = b ? b.cx + (f.anchorX - b.cx) * 0.5 : f.anchorX;
-      const gy = b ? b.cy + (f.anchorY - b.cy) * 0.5 : f.anchorY;
+      const ring = sim.battle?.arena;
+      const gx = ring ? ring.x + (f.anchorX - ring.x) * 0.5 : f.anchorX;
+      const gy = ring ? ring.y + (f.anchorY - ring.y) * 0.5 : f.anchorY;
       stepToward(sim, a, gx, gy, f.speed * 0.6, dt, 0.5);
     } else {
       const d = Math.hypot(foe.x - a.x, foe.y - a.y);

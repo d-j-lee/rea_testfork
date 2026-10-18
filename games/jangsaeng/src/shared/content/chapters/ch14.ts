@@ -256,7 +256,6 @@ export const ch14: ChapterDef = {
       radius: 8,
       kind: "boss",
       great: true,
-      scaled: true,
       music: "war",
       weather: "fog",
       intro: [

@@ -83,6 +83,8 @@ const pendingKey = (kind: PendingKind, ref: string): string => `${PENDING}${kind
 
 /** Demo skip moves the presenter only when the next objective is farther than this (tiles). */
 const DEMO_NEAR = 8;
+/** A battle objective starts when its player comes this close to the arena's rim (tiles). */
+const BATTLE_TRIGGER = 6;
 
 const IDLE_INPUT: PlayerInput = {
   mx: 0,
@@ -515,7 +517,13 @@ export class Session {
   }
 
   onDowned(): void {
-    this.send({ t: "toast", text: "사경(死境)에 빠졌다 — 동료를 기다리거나 스스로 일어서라.", tone: "bad" });
+    // Who could come to help: in a battle its other fighters, elsewhere anyone in the channel.
+    const channel = this.channel;
+    const fighters = channel?.world.battleParticipants() ?? [];
+    const helpers = fighters.includes(this.id) ? fighters : [...(channel?.sessions.keys() ?? []), ...(channel?.bots.keys() ?? [])];
+    const help = helpers.some((id) => id !== this.id && channel?.world.playerStatus(id)?.downed === null);
+    const text = help ? "사경(死境)에 빠졌다 — 동료를 기다리거나 스스로 일어서라." : "사경(死境)에 빠졌다 — 스스로 일어서라.";
+    this.send({ t: "toast", text, tone: "bad" });
     this.#markSelf();
   }
 
@@ -899,8 +907,9 @@ export class Session {
    * first option (the years card with the suggested plan), wins a battle this
    * player is in, or completes the next objective — and then carries the
    * presenter (and the companions) to the objective after it. A battle
-   * objective far away first moves the presenter to its ring, so the fight
-   * starts in view; the next press wins it.
+   * objective is never won before it is fought in view: a press far away
+   * moves the presenter to its ring, a press at the ring starts it, and the
+   * next press wins it.
    */
   #demoSkip(): void {
     const active = this.#active;
@@ -922,8 +931,10 @@ export class Session {
     const objective = this.#nextObjective();
     if (!objective) return;
     if (objective.kind === "battle" && objective.target) {
+      // Far off: go to the ring. At the ring: start the fight in view; the
+      // next press wins it. Another battle holding the world: win outright.
       const def = this.chapter.battles.find((candidate) => candidate.id === objective.target);
-      if (!def || this.#moveToObjective(objective)) return;
+      if (!def || this.#moveToObjective(objective) || channel.startBattle(def.id, this, true)) return;
       channel.skipBattle(this, def);
     } else if (objective.kind === "talk" && objective.target) this.onTalk(objective.target);
     else this.#completeObjective(objective.id);
@@ -958,9 +969,8 @@ export class Session {
     if (!channel || !world || !status || status.downed !== null) return false;
     let spot: { x: number; y: number } | null = null;
     if (objective.kind === "battle") {
-      const def = this.chapter.battles.find((candidate) => candidate.id === objective.target);
-      const centre = def ? channel.battleCentre(def) : null;
-      if (def && centre) spot = { x: centre.x, y: centre.y + def.radius + 2 };
+      const ring = objective.target ? world.arenaOf(objective.target) : null;
+      if (ring) spot = { x: ring.x, y: ring.y + ring.radius + 2 };
     } else {
       const place = this.#objectivePlace(objective).place;
       if (place) spot = { x: place.x, y: place.y + 1.5 };
@@ -1100,10 +1110,9 @@ export class Session {
         const near = site ? Math.hypot(site.x - status.x, site.y - status.y) <= 4 : false;
         if (here === objective.target || near) this.#completeObjective(objective.id);
       } else if (objective.kind === "battle" && !world.battleView() && status.downed === null) {
-        const def = this.chapter.battles.find((candidate) => candidate.id === objective.target);
-        const centre = def ? channel.battleCentre(def) : null;
-        if (def && centre && Math.hypot(centre.x - status.x, centre.y - status.y) <= def.radius + 6)
-          channel.startBattle(def.id, this, false);
+        const ring = world.arenaOf(objective.target);
+        if (ring && Math.hypot(ring.x - status.x, ring.y - status.y) <= ring.radius + BATTLE_TRIGGER)
+          channel.startBattle(objective.target, this, false);
       }
     }
   }
@@ -1120,10 +1129,11 @@ export class Session {
         place = world.sitePosition(objective.target);
         siteId = objective.target;
       } else if (objective.kind === "battle") {
+        // The arena is the place: its own offset is already applied.
         const def = this.chapter.battles.find((candidate) => candidate.id === objective.target);
         if (def) {
-          place = channel?.battleCentre(def) ?? null;
-          siteId = def.site;
+          const ring = world.arenaOf(def.id);
+          return { place: ring && { x: ring.x, y: ring.y }, siteId: def.site };
         }
       }
     }

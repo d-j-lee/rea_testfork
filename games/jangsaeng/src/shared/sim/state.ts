@@ -372,7 +372,6 @@ export interface Sim {
   readonly sites: Map<string, Site>;
   readonly players: Map<number, Actor>;
   battle: BattleRuntime | null;
-  stepIndex: number;
 }
 
 // ── Geometry ─────────────────────────────────────────────────────────────

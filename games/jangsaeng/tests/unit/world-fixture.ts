@@ -86,11 +86,6 @@ export const CHAPTER: ChapterDef = {
       victory: [], defeat: [],
     },
     { id: "boss", title: "황산", site: "hwangsan", offset: [4, 0], radius: 9, kind: "boss", boss: BOSS, waves: [], victory: [], defeat: [] },
-    {
-      id: "scaled", title: "대규모", site: "hwangsan", offset: [4, 0], radius: 9, kind: "boss", scaled: true, boss: BOSS,
-      waves: [{ at: 0, enemies: [{ enemy: "bandit", count: 4, level: 1 }], from: "around" }],
-      victory: [], defeat: [],
-    },
   ],
   prompts: [],
   steps: [

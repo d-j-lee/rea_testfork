@@ -499,7 +499,6 @@ export const ch16: ChapterDef = {
       radius: 9,
       kind: "boss",
       great: true,
-      scaled: true,
       music: "resistance",
       weather: "snow",
       intro: [
@@ -537,7 +536,6 @@ export const ch16: ChapterDef = {
       radius: 9,
       kind: "boss",
       great: true,
-      scaled: true,
       music: "resistance",
       weather: "snow",
       intro: [

@@ -1,13 +1,15 @@
 // Battles: participants, waves (side/sea/deck spawns), boss, defend target,
 // allies, headcount scaling, morale/rout and the victory/defeat rules, fought
-// on the arena that sim/arena.ts resolves.
+// on the arena that sim/arena.ts resolves (arenaOf is the one owner of where).
 import type { BattleDef, WaveDef } from "../content/schema.ts";
-import { TILE_INFO, Tile, type TileId } from "../map/tiles.ts";
+import { TILE_INFO, type TileId } from "../map/tiles.ts";
 import { isPropSprite } from "../sprites.ts";
 import type { BattleView } from "../types.ts";
-import { NEIGHBOURS, arenaSpot, battleArena, bossSpot, inRing, onArena, onArenaTile, rimSpot, type Arena } from "./arena.ts";
+import { arenaSpot, battleArena, boardingSpot, bossSpot, deckSpot, inRing, onArena, onArenaTile, onDeck, rimSpot, type Arena } from "./arena.ts";
 import { makeBossState } from "./boss.ts";
 import { atkScale, bodyFree, makeActor, releaseToken, spawnEnemy, spawnFighter } from "./entities.ts";
+import type { CollisionGrid } from "./physics.ts";
+import { placePlayer } from "./player.ts";
 import { COLOR, emit, floatText, isDowned, later, sound, type Actor, type Sim } from "./state.ts";
 
 export interface WaveRuntime {
@@ -20,13 +22,11 @@ export interface WaveRuntime {
 export interface BattleRuntime {
   def: BattleDef;
   arena: Arena;
-  /** arena.x / arena.y / arena.radius, for readers of the ring alone. */
-  cx: number;
-  cy: number;
-  radius: number;
   startedAt: number;
   starter: number;
   participants: number[];
+  /** Players who left the battle (a demo skip won it for them alone); they do not rejoin it. */
+  left: Set<number>;
   waves: WaveRuntime[];
   /** Every battle enemy id: wave members, boss and summons. */
   enemies: number[];
@@ -40,7 +40,6 @@ export interface BattleRuntime {
   countScale: number;
   routed: boolean;
   seaAngle: number | null | undefined;
-  deck: { x: number; y: number }[] | null;
 }
 
 const SIDE_ANGLE = { north: -Math.PI / 2, south: Math.PI / 2, east: 0, west: Math.PI } as const;
@@ -48,7 +47,7 @@ const SIDE_ANGLE = { north: -Math.PI / 2, south: Math.PI / 2, east: 0, west: Mat
 const ARRIVING = 6;
 
 /** Humans count 1, companion bots 0.5. */
-export function headcount(sim: Sim, ids: readonly number[]): number {
+function headcount(sim: Sim, ids: readonly number[]): number {
   let n = 0;
   for (const id of ids) {
     const a = sim.actors.get(id);
@@ -62,55 +61,89 @@ const scaleOf = (n: number, per: number): number => Math.min(3, 1 + per * (n - 1
 /** Participants plus players arriving at the ring: who a wave will meet. */
 function fightersAt(sim: Sim, b: BattleRuntime): number[] {
   const ids = [...b.participants];
+  const { x, y, radius } = b.arena;
   for (const p of sim.players.values())
-    if (!ids.includes(p.id) && Math.hypot(p.x - b.cx, p.y - b.cy) <= b.radius + ARRIVING) ids.push(p.id);
+    if (!ids.includes(p.id) && !b.left.has(p.id) && Math.hypot(p.x - x, p.y - y) <= radius + ARRIVING) ids.push(p.id);
   return ids;
 }
 
-/** Re-reads the headcount scaling; duels are always one against one. */
+/**
+ * A defend post's HP: the written HP for each attacker multiple it faces
+ * (countScale). The attackers' extra HP (hpScale) only makes them live
+ * longer, which the larger party offsets.
+ */
+const postHp = (b: BattleRuntime): number => Math.round((b.def.defend?.hp ?? 0) * b.countScale);
+
+/** Re-reads the headcount scaling, and the post's HP with it; duels are always one against one. */
 function rescale(sim: Sim, b: BattleRuntime): void {
   if (b.def.kind === "duel") return;
   const n = headcount(sim, fightersAt(sim, b));
   b.countScale = scaleOf(n, 0.5);
   b.hpScale = Math.max(b.hpScale, scaleOf(n, 0.65));
+  const post = sim.actors.get(b.defendId);
+  if (post?.alive) {
+    const ratio = post.hp / post.maxHp;
+    post.maxHp = postHp(b);
+    post.hp = Math.max(1, ratio * post.maxHp);
+  }
+}
+
+/** Resolved arenas per collision grid (one year's map) and battle def: all an arena depends on. */
+const arenas = new WeakMap<CollisionGrid, Map<BattleDef, Arena | null>>();
+
+/**
+ * Where a chapter battle is fought: the running battle's arena, else the one
+ * sim/arena.ts resolves for it on the current year's map (cached). Every
+ * reader of a battle's place goes through it: the start, the trigger, the
+ * objective marker, the story teleport.
+ */
+export function arenaOf(sim: Sim, battleId: string): Arena | null {
+  if (sim.battle?.def.id === battleId) return sim.battle.arena;
+  const def = sim.chapter.battles.find((b) => b.id === battleId);
+  const site = def ? sim.sites.get(def.site) : undefined;
+  if (!def || !site) return null;
+  let byDef = arenas.get(sim.grid);
+  if (!byDef) arenas.set(sim.grid, (byDef = new Map()));
+  if (!byDef.has(def)) byDef.set(def, battleArena(sim.grid, site, def));
+  return byDef.get(def) ?? null;
 }
 
 /**
  * Puts a participant on the arena's ground: the starter wherever the trigger
- * caught them, anyone else only when they stand in a walled pocket of the ring.
+ * caught them (onto a deck in a deck battle), anyone else only when they
+ * stand in a walled pocket of the ring. Every action in flight is cancelled.
  */
 function enter(sim: Sim, b: BattleRuntime, a: Actor): void {
-  if (onArena(b.arena, a.x, a.y)) return;
-  if (a.id !== b.starter && Math.hypot(a.x - b.cx, a.y - b.cy) > b.radius + 0.5) return;
-  const p = arenaSpot(b.arena, a.x, a.y);
-  a.x = p.x;
-  a.y = p.y;
-  a.kx = 0;
-  a.ky = 0;
-  sim.index.update(a);
+  const { arena } = b;
+  if (a.id === b.starter && arena.naval && !onDeck(arena, a.x, a.y)) {
+    const p = deckSpot(arena, a.x, a.y);
+    placePlayer(sim, a, p.x, p.y);
+    return;
+  }
+  if (onArena(arena, a.x, a.y)) return;
+  if (a.id !== b.starter && Math.hypot(a.x - arena.x, a.y - arena.y) > arena.radius + 0.5) return;
+  const p = arenaSpot(arena, a.x, a.y);
+  placePlayer(sim, a, p.x, p.y);
 }
 
 export function startBattle(sim: Sim, battleId: string, starterId: number): BattleRuntime | null {
   if (sim.battle) return null;
   const def = sim.chapter.battles.find((b) => b.id === battleId);
-  const site = def ? sim.sites.get(def.site) : undefined;
-  const arena = def && site ? battleArena(sim.grid, site, def) : null;
+  const arena = arenaOf(sim, battleId);
   if (!def || !arena) return null;
   const duel = def.kind === "duel";
   const participants: number[] = [];
   if (sim.players.has(starterId)) participants.push(starterId);
   if (!duel)
     for (const p of sim.players.values())
-      if (p.id !== starterId && Math.hypot(p.x - arena.x, p.y - arena.y) <= def.radius + 2) participants.push(p.id);
+      if (p.id !== starterId && Math.hypot(p.x - arena.x, p.y - arena.y) <= arena.radius + 2) participants.push(p.id);
   const b: BattleRuntime = {
     def,
     arena,
-    cx: arena.x,
-    cy: arena.y,
-    radius: arena.radius,
     startedAt: sim.time,
     starter: starterId,
     participants,
+    left: new Set(),
     waves: duel ? [] : def.waves.map((w) => ({ def: w, spawned: false, ids: [], moraleHit: false })),
     enemies: [],
     fled: new Set(),
@@ -123,7 +156,6 @@ export function startBattle(sim: Sim, battleId: string, starterId: number): Batt
     countScale: 1,
     routed: false,
     seaAngle: undefined,
-    deck: null,
   };
   sim.battle = b;
   for (const id of participants) {
@@ -134,11 +166,9 @@ export function startBattle(sim: Sim, battleId: string, starterId: number): Batt
   const level = battleLevel(sim, def);
   const foeAngle = sideAngle(sim, b, def.waves[0]?.from) ?? -Math.PI / 2;
   if (def.kind === "defend" && def.defend) {
-    const p = arenaSpot(arena, b.cx, b.cy);
+    const p = arenaSpot(arena, arena.x, arena.y);
     const sprite = def.defend.sprite;
-    // The post holds out as long against the scaled waves (more and tougher
-    // attackers) as against the written ones.
-    const hp = Math.round(def.defend.hp * b.countScale * b.hpScale);
+    const hp = postHp(b);
     const a = makeActor(sim, { kind: isPropSprite(sprite) ? "prop" : "ally", side: "friend", x: p.x, y: p.y, sprite, name: def.defend.name, hp });
     a.defend = true;
     b.defendId = a.id;
@@ -148,7 +178,7 @@ export function startBattle(sim: Sim, battleId: string, starterId: number): Batt
       for (let i = 0; i < group.count; i++) {
         const ang = foeAngle + Math.PI + sim.rng.range(-0.8, 0.8);
         const r = 1.5 + sim.rng.range(0, 1.5);
-        const p = arenaSpot(arena, b.cx + Math.cos(ang) * r, b.cy + Math.sin(ang) * r);
+        const p = arenaSpot(arena, arena.x + Math.cos(ang) * r, arena.y + Math.sin(ang) * r);
         const ally = spawnFighter(sim, {
           kind: "ally", sprite: group.sprite, name: group.name, x: p.x, y: p.y,
           hp: Math.round(90 * (1 + 0.1 * (level - 1))), atk: 8 * atkScale(level), level, immortal: false,
@@ -166,8 +196,8 @@ export function startBattle(sim: Sim, battleId: string, starterId: number): Batt
     const p = bossSpot(arena, foeAngle, standing(sim, b));
     spawnBoss(sim, b, p.x, p.y, starterId);
   }
-  emit(sim, { k: "shout", x: b.cx, y: b.cy, power: b.radius });
-  floatText(sim, b.cx, b.cy, def.title, COLOR.phase, true);
+  emit(sim, { k: "shout", x: arena.x, y: arena.y, power: arena.radius });
+  floatText(sim, arena.x, arena.y, def.title, COLOR.phase, true);
   return b;
 }
 
@@ -201,12 +231,13 @@ function seaAngle(sim: Sim, b: BattleRuntime): number | null {
   let best = 0;
   let bestAngle: number | null = null;
   const g = sim.grid;
+  const { x: cx, y: cy, radius } = b.arena;
   for (let i = 0; i < 24; i++) {
     const ang = (i / 24) * Math.PI * 2;
     let water = 0;
-    for (let r = Math.floor(b.radius * 0.5); r <= b.radius + 6; r++) {
-      const x = Math.floor(b.cx + Math.cos(ang) * r);
-      const y = Math.floor(b.cy + Math.sin(ang) * r);
+    for (let r = Math.floor(radius * 0.5); r <= radius + 6; r++) {
+      const x = Math.floor(cx + Math.cos(ang) * r);
+      const y = Math.floor(cy + Math.sin(ang) * r);
       if (x < 0 || y < 0 || x >= g.width || y >= g.height) continue;
       if (TILE_INFO[g.tiles[y * g.width + x] as TileId]?.water) water++;
     }
@@ -219,37 +250,15 @@ function seaAngle(sim: Sim, b: BattleRuntime): number | null {
   return bestAngle;
 }
 
-/** Deck tiles of the arena on the hull edge (next to water). */
-function deckEdges(sim: Sim, b: BattleRuntime): { x: number; y: number }[] {
-  if (b.deck) return b.deck;
-  const g = sim.grid;
-  const out: { x: number; y: number }[] = [];
-  for (const i of b.arena.tiles) {
-    if (g.tiles[i] !== Tile.Deck) continue;
-    const x = i % g.width;
-    const y = (i - x) / g.width;
-    const edge = NEIGHBOURS.some(([dx, dy]) => {
-      const t = g.tiles[(y + dy) * g.width + x + dx] as TileId;
-      return t !== Tile.Deck && TILE_INFO[t]?.water;
-    });
-    if (edge) out.push({ x: x + 0.5, y: y + 0.5 });
-  }
-  b.deck = out;
-  return out;
-}
-
+/**
+ * Where the k-th of n wave enemies appears: in a deck battle on a deck (a
+ * hull edge first) all around the ship; otherwise, or once every deck tile
+ * is taken, on the rim toward the wave's side.
+ */
 function wavePoint(sim: Sim, b: BattleRuntime, from: WaveDef["from"], k: number, n: number, used: Set<number>): { x: number; y: number } {
-  if (b.def.kind === "deck") {
-    const deck = deckEdges(sim, b).filter((p) => !used.has(Math.floor(p.y) * b.arena.width + Math.floor(p.x)));
-    if (deck.length > 0) {
-      const p = deck[(k * 7 + sim.rng.int(0, deck.length - 1)) % deck.length] as { x: number; y: number };
-      used.add(Math.floor(p.y) * b.arena.width + Math.floor(p.x));
-      return p;
-    }
-  }
-  const side = sideAngle(sim, b, from);
-  const angle = side ?? (k / Math.max(1, n)) * Math.PI * 2 + sim.rng.range(-0.2, 0.2);
-  return rimSpot(b.arena, angle, standing(sim, b), used);
+  const around = () => (k / Math.max(1, n)) * Math.PI * 2 + sim.rng.range(-0.2, 0.2);
+  const aboard = b.arena.naval ? boardingSpot(b.arena, around(), standing(sim, b), used) : null;
+  return aboard ?? rimSpot(b.arena, sideAngle(sim, b, from) ?? around(), standing(sim, b), used);
 }
 
 /** Where the participants stand: spawns keep their distance so they are seen coming. */
@@ -286,11 +295,11 @@ function spawnWave(sim: Sim, b: BattleRuntime, index: number): void {
   }
   if (index === b.waves.length - 1 && b.def.boss && b.bossId < 0) {
     const p = wavePoint(sim, b, w.def.from, 0, 1, used);
-    const target = b.defendId >= 0 ? b.defendId : b.starter;
+    const target = b.defendId >= 0 ? b.defendId : (b.participants[0] ?? b.starter);
     spawnBoss(sim, b, p.x, p.y, target);
   }
-  if (w.def.line) floatText(sim, b.cx, b.cy, w.def.line, COLOR.phase, true);
-  sound(sim, "skill", b.cx, b.cy);
+  if (w.def.line) floatText(sim, b.arena.x, b.arena.y, w.def.line, COLOR.phase, true);
+  sound(sim, "skill", b.arena.x, b.arena.y);
 }
 
 function killed(sim: Sim, b: BattleRuntime, id: number): boolean {
@@ -312,8 +321,8 @@ function flee(sim: Sim, b: BattleRuntime, a: Actor): void {
   if (!e || !a.alive) return;
   e.state = "flee";
   e.fleeUntil = sim.time + 3;
-  e.goalX = b.cx;
-  e.goalY = b.cy;
+  e.goalX = b.arena.x;
+  e.goalY = b.arena.y;
   e.act = null;
   e.target = -1;
   releaseToken(sim, a);
@@ -327,7 +336,7 @@ export function tickBattle(sim: Sim): void {
   const elapsed = t - b.startedAt;
   if (b.def.kind !== "duel")
     for (const p of sim.players.values())
-      if (!b.participants.includes(p.id) && onArena(b.arena, p.x, p.y)) b.participants.push(p.id);
+      if (!b.participants.includes(p.id) && !b.left.has(p.id) && onArena(b.arena, p.x, p.y)) b.participants.push(p.id);
   if (!b.routed && !b.bossDead)
     for (let i = 0; i < b.waves.length; i++) {
       const w = b.waves[i] as WaveRuntime;
@@ -360,7 +369,7 @@ export function tickBattle(sim: Sim): void {
       const a = sim.actors.get(id);
       if (a) flee(sim, b, a);
     }
-    floatText(sim, b.cx, b.cy, "적이 무너진다!", COLOR.phase, true);
+    floatText(sim, b.arena.x, b.arena.y, "적이 무너진다!", COLOR.phase, true);
   }
   const result = evaluate(sim, b, elapsed);
   if (result) endBattle(sim, result);
@@ -369,7 +378,8 @@ export function tickBattle(sim: Sim): void {
 /**
  * A downed human stays revivable until their down timer runs out; the
  * battle is lost when every participant is down at once, or when every
- * human participant is down past that timer (only a self-revive is left).
+ * human participant is down past that timer. A self-revive in between puts
+ * them on the arena's rim, still fighting (rimRevival).
  */
 function lost(sim: Sim, b: BattleRuntime): boolean {
   const fighters = b.participants.map((id) => sim.actors.get(id)).filter((a): a is Actor => a?.pl != null);
@@ -388,6 +398,31 @@ function evaluate(sim: Sim, b: BattleRuntime, elapsed: number): "victory" | "def
   const wavesDone = b.routed || b.waves.every((w) => w.spawned);
   if (wavesDone && (b.waves.length > 0 || b.bossId >= 0) && liveEnemies(sim, b) === 0) return "victory";
   return null;
+}
+
+/**
+ * Where a participant of the active battle stands when they revive
+ * themself: on the arena's rim on their side, clear of the enemies — they
+ * stay in the fight. Null when `a` is not fighting a battle.
+ */
+export function rimRevival(sim: Sim, a: Actor): { x: number; y: number } | null {
+  const b = sim.battle;
+  if (!b?.participants.includes(a.id)) return null;
+  const { arena } = b;
+  const enemies = b.enemies.map((id) => sim.actors.get(id)).filter((e): e is Actor => e?.alive === true && e.en?.state !== "flee");
+  return rimSpot(arena, Math.atan2(a.y - arena.y, a.x - arena.x), enemies, new Set());
+}
+
+/**
+ * Takes a player out of the active battle: they are no participant any more
+ * and do not rejoin by standing on its ground. A demo skip that wins the
+ * battle for one player while others fight on uses it.
+ */
+export function leaveBattle(sim: Sim, id: number): void {
+  const b = sim.battle;
+  if (!b) return;
+  b.participants = b.participants.filter((p) => p !== id);
+  b.left.add(id);
 }
 
 /** Ends the active battle; `result` null aborts without a hook call. */
@@ -414,7 +449,7 @@ export function endBattle(sim: Sim, result: "victory" | "defeat" | null): void {
     if (npc?.fi) npc.fi.active = false;
   }
   if (!result) return;
-  floatText(sim, b.cx, b.cy, result === "victory" ? "승리" : "패배", result === "victory" ? COLOR.crit : COLOR.hurt, true);
+  floatText(sim, b.arena.x, b.arena.y, result === "victory" ? "승리" : "패배", result === "victory" ? COLOR.crit : COLOR.hurt, true);
   const participants = [...b.participants];
   const id = b.def.id;
   later(sim, () => sim.hooks.onBattleEnd(id, result, participants));
@@ -424,8 +459,11 @@ export function battleView(sim: Sim): BattleView | null {
   const b = sim.battle;
   if (!b) return null;
   const def = b.def;
-  const view: BattleView = { id: def.id, title: def.title, kind: def.kind, x: b.cx, y: b.cy, radius: b.radius, participants: b.participants.length, morale: b.morale };
+  const { x, y, radius } = b.arena;
+  const view: BattleView = { id: def.id, title: def.title, kind: def.kind, x, y, radius, participants: b.participants.length, morale: b.morale };
   if (def.subtitle) view.subtitle = def.subtitle;
+  if (def.weather) view.weather = def.weather;
+  if (def.hour !== undefined) view.hour = def.hour;
   if (def.timeLimit !== undefined && (def.kind === "survive" || def.kind === "escape" || def.kind === "defend"))
     view.timeLeft = Math.max(0, Math.ceil(def.timeLimit - (sim.time - b.startedAt)));
   if (b.waves.length > 0) view.wave = [b.waves.filter((w) => w.spawned).length, b.waves.length];
@@ -454,9 +492,9 @@ export function clampArena(sim: Sim, a: Actor, ox: number, oy: number): void {
   if (a.pl) {
     if (!b.participants.includes(a.id) || !onArena(arena, ox, oy) || onArena(arena, a.x, a.y)) return;
     // Slide along the ring, then along the ground's edge as along a wall.
-    const d = Math.hypot(a.x - b.cx, a.y - b.cy);
-    const k = d > b.radius ? b.radius / d : 1;
-    const slides = [[b.cx + (a.x - b.cx) * k, b.cy + (a.y - b.cy) * k], [a.x, oy], [ox, a.y]] as const;
+    const d = Math.hypot(a.x - arena.x, a.y - arena.y);
+    const k = d > arena.radius ? arena.radius / d : 1;
+    const slides = [[arena.x + (a.x - arena.x) * k, arena.y + (a.y - arena.y) * k], [a.x, oy], [ox, a.y]] as const;
     for (const [x, y] of slides)
       if (onArena(arena, x, y) && bodyFree(sim, x, y)) {
         a.x = x;
@@ -477,13 +515,13 @@ export function clampArena(sim: Sim, a: Actor, ox: number, oy: number): void {
     }
     return;
   }
-  const r = b.radius + 1;
-  const dx = a.x - b.cx;
-  const dy = a.y - b.cy;
+  const r = arena.radius + 1;
+  const dx = a.x - arena.x;
+  const dy = a.y - arena.y;
   const d = Math.hypot(dx, dy);
   if (d <= r) return;
-  const nx = b.cx + (dx / d) * r;
-  const ny = b.cy + (dy / d) * r;
+  const nx = arena.x + (dx / d) * r;
+  const ny = arena.y + (dy / d) * r;
   if (bodyFree(sim, nx, ny)) {
     a.x = nx;
     a.y = ny;

@@ -230,7 +230,6 @@ export const ch01: ChapterDef = {
       offset: [0, -9],
       radius: 8,
       kind: "boss",
-      scaled: true,
       music: "war",
       weather: "snow",
       intro: ["성문 위에 붉은 두건이 빽빽하다.", "별빛을 받은 이들이여, 함께 성문을 열자!"],

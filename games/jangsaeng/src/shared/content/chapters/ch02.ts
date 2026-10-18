@@ -244,7 +244,6 @@ export const ch02: ChapterDef = {
       radius: 7,
       kind: "boss",
       great: true,
-      scaled: true,
       music: "war",
       intro: ["배를 잃은 왜구가 황산 고지에 진을 쳤다.", "그 선두에 흰 말을 탄 소년 장수가 있다."],
       waves: [

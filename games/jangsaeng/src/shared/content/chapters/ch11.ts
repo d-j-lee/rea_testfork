@@ -200,7 +200,6 @@ export const ch11: ChapterDef = {
       kind: "defend",
       timeLimit: 150,
       great: true,
-      scaled: true,
       music: "siege",
       weather: "snow",
       defend: { name: "성첩의 화톳불", sprite: "campfire", hp: 700 },

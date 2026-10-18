@@ -10,16 +10,21 @@ import { test } from "node:test";
 import { CHAPTERS, CONTENT } from "../../src/shared/content/index.ts";
 import { CHAPTER_IDS, type ChapterDef, type Effect, type Offset, type StepDef } from "../../src/shared/content/schema.ts";
 import { collisionFor, generateMap } from "../../src/shared/map/generate.ts";
-import { Tile } from "../../src/shared/map/tiles.ts";
-import { arenaFits, battleArena, onArena, type Arena } from "../../src/shared/sim/arena.ts";
+import { DECK_MIN, DECK_SHARE, arenaFits, battleArena, onArena, onDeck, type Arena } from "../../src/shared/sim/arena.ts";
 import { components, nearestFree, type CollisionGrid } from "../../src/shared/sim/physics.ts";
 import { MIN_REGION } from "../../src/shared/sim/entities.ts";
 import { World, type PlayerSpec, type WorldHooks } from "../../src/shared/sim/world.ts";
 
 const map = generateMap("jangsaeng");
 const siteById = new Map(map.sites.map((site) => [site.id, site]));
-/** A deck battle needs at least a couple of hulls of deck on its arena. */
-const DECK_MIN = 12;
+/**
+ * Deck battles whose fleet is too small for DECK_SHARE, with the reason. 울돌목's
+ * moored fleet (map/generate.ts) is 16 deck tiles, and a ring of radius 8 that
+ * keeps its ground connected holds at least 71 tiles there, so at best 23% of
+ * the arena is deck. The fight still opens on the deck (starter and boarders);
+ * a larger fleet at myeongnyang would let it meet the share.
+ */
+const LAND_HEAVY_DECKS: Record<string, string> = { b_myeongnyang: "울돌목's fleet is 16 deck tiles" };
 
 function* walk(list: readonly Effect[] | undefined): Generator<Effect> {
   for (const effect of list ?? []) {
@@ -119,13 +124,17 @@ for (const id of CHAPTER_IDS) {
       const site = siteById.get(battle.site);
       const arena = site ? battleArena(at.grid, site, battle) : null;
       if (!arena) problems.push(`battle ${battle.id}: no walkable ground near ${battle.site}`);
-      else if (!arenaFits(arena)) problems.push(`battle ${battle.id}: broken ground, main ${arena.tiles.size} of ${arena.walkable} walkable tiles`);
-      else if (!at.reachable.has(at.label(arena))) problems.push(`battle ${battle.id}: arena unreachable at ${battle.site} ${JSON.stringify(battle.offset ?? [0, 0])}`);
       else if (battle.kind === "deck") {
-        // Deck battles are fought on a fleet's decks, not on the beach.
-        const decks = [...arena.tiles].filter((i) => map.tiles[i] === Tile.Deck).length;
-        if (decks < DECK_MIN) problems.push(`battle ${battle.id}: ${decks} deck tiles on the arena at ${battle.site}`);
-      }
+        // Deck battles are fought on a fleet's decks, not on the beach: centred
+        // on a deck, with at least DECK_SHARE of the ground deck.
+        const share = arena.deck.size / arena.tiles.size;
+        const shown = `${arena.deck.size} deck of ${arena.tiles.size} tiles`;
+        if (!arena.naval || !onDeck(arena, arena.x, arena.y)) problems.push(`battle ${battle.id}: not centred on a deck (${shown})`);
+        if (arena.deck.size < DECK_MIN) problems.push(`battle ${battle.id}: ${shown}`);
+        if (LAND_HEAVY_DECKS[battle.id] && share >= DECK_SHARE) problems.push(`battle ${battle.id}: meets the deck share now (${shown}); drop it from LAND_HEAVY_DECKS`);
+        if (!LAND_HEAVY_DECKS[battle.id] && !arenaFits(arena)) problems.push(`battle ${battle.id}: deck share ${share.toFixed(2)} (${shown})`);
+      } else if (!arenaFits(arena)) problems.push(`battle ${battle.id}: broken ground, main ${arena.tiles.size} of ${arena.walkable} walkable tiles`);
+      if (arena && !at.reachable.has(at.label(arena))) problems.push(`battle ${battle.id}: arena unreachable at ${battle.site} ${JSON.stringify(battle.offset ?? [0, 0])}`);
     }
     assert.deepEqual(problems, []);
   });
@@ -188,11 +197,17 @@ for (const id of CHAPTER_IDS) {
         world.tick(0.05);
         const me = world.playerStatus(HERO);
         if (!me || !onArena(arena, me.x, me.y)) problems.push(`${battle.id} from ${where}: hero off the arena at ${me?.x},${me?.y}`);
-        // The opening spawns (boss, first waves) stand on the arena too.
-        for (const entity of world.entityIds()) {
-          const foe = before.has(entity) ? null : world.inspect(entity);
-          if (foe?.side === "foe" && !onArena(arena, foe.x, foe.y))
+        else if (arena.naval && !onDeck(arena, me.x, me.y)) problems.push(`${battle.id} from ${where}: hero off the deck at ${me.x},${me.y}`);
+        // The opening spawns (boss, first waves) stand on the arena too, and a
+        // deck battle's boarders on its decks while deck tiles remain.
+        const foes = world.entityIds().filter((entity) => !before.has(entity)).map((entity) => world.inspect(entity))
+          .filter((foe) => foe?.side === "foe");
+        for (const foe of foes) {
+          if (!foe) continue;
+          if (!onArena(arena, foe.x, foe.y))
             problems.push(`${battle.id} from ${where}: ${foe.boss ? "boss" : foe.name} spawned off the arena at ${foe.x},${foe.y}`);
+          else if (arena.naval && foes.length <= arena.deck.size && !foe.boss && !onDeck(arena, foe.x, foe.y))
+            problems.push(`${battle.id} from ${where}: ${foe.name} boarded off the deck at ${foe.x},${foe.y}`);
         }
         world.abortBattle();
         world.removePlayer(HERO);
