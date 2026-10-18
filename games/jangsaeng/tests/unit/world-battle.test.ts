@@ -178,27 +178,36 @@ test("the boss fights back with telegraphed mechanics", () => {
   assert.ok(hurt && hurt.hp < hurt.maxHp);
 });
 
-test("scaled battles count humans 1 and bots 0.5", () => {
-  const { world } = makeWorld("scaled");
-  const c = arena();
-  const ids: number[] = [];
-  for (const [i, kind] of (["player", "player", "bot", "bot"] as const).entries()) {
-    const s = spec(c.x - 3 + i * 0.8, c.y + 2, { kind, derived: { ...DERIVED, maxHp: 100_000 } });
-    world.addPlayer(s);
-    ids.push(s.id);
+test("every battle scales with its headcount: humans 1, bots 0.5", () => {
+  for (const id of ["waves", "boss"]) {
+    const { world } = makeWorld(`headcount-${id}`);
+    const c = arena();
+    const ids: number[] = [];
+    for (const [i, kind] of (["player", "player", "bot", "bot"] as const).entries()) {
+      const s = spec(c.x - 3 + i * 0.8, c.y + 2, { kind, derived: { ...DERIVED, maxHp: 100_000 } });
+      world.addPlayer(s);
+      ids.push(s.id);
+    }
+    const first = ids[0];
+    assert.ok(first !== undefined);
+    assert.ok(world.startBattle(id, first));
+    run(world, 0.05);
+    assert.equal(world.battleView()?.participants, 4);
+    // n = 2 + 0.5·2 = 3 → hp ×(1 + 0.65·2) for every enemy, wave counts ×(1 + 0.5·2).
+    const ents = world.entityIds().map((entity) => world.inspect(entity));
+    if (id === "boss") {
+      const boss = ents.find((e) => e?.boss);
+      const body = ENEMIES.boss_wokou_captain;
+      assert.ok(boss && body);
+      assert.equal(boss.maxHp, Math.round(body.hp * (1 + 0.1 * 7) * 2.3));
+    } else {
+      const bandits = ents.filter((e) => e?.sprite === "bandit");
+      const body = ENEMIES.bandit;
+      assert.ok(body);
+      assert.equal(bandits.length, 6, "3 bandits ×2");
+      for (const bandit of bandits) assert.equal(bandit?.maxHp, Math.round(body.hp * 2.3), "regular enemies are scaled too");
+    }
   }
-  const first = ids[0];
-  assert.ok(first !== undefined);
-  assert.ok(world.startBattle("scaled", first));
-  run(world, 0.05);
-  const ents = world.entityIds().map((id) => world.inspect(id));
-  const boss = ents.find((e) => e?.boss);
-  const body = ENEMIES.boss_wokou_captain;
-  assert.ok(boss && body);
-  // n = 2 + 0.5·2 = 3 → hp ×(1 + 0.65·2), wave counts ×(1 + 0.5·2).
-  assert.equal(boss.maxHp, Math.round(body.hp * (1 + 0.1 * 7) * 2.3));
-  assert.equal(ents.filter((e) => e?.sprite === "bandit").length, 8);
-  assert.equal(world.battleView()?.participants, 4);
 });
 
 test("waves from the sea land on the shore at the rim, away from the hero", () => {
@@ -216,15 +225,16 @@ test("waves from the sea land on the shore at the rim, away from the hero", () =
   const me = world.playerStatus(hero.id);
   assert.ok(ring && me);
   const m = map();
+  const water = (x: number, y: number) => TILE_INFO[m.tiles[Math.floor(y) * m.width + Math.floor(x)] as TileId].water;
   const bandits = world.entityIds().map((id) => world.inspect(id)).filter((e) => e?.sprite === "bandit");
   assert.equal(bandits.length, 6);
   for (const e of bandits) {
     assert.ok(e);
     assert.ok(Math.hypot(e.x - ring.x, e.y - ring.y) <= ring.radius, "inside the ring");
     assert.ok(Math.hypot(e.x - me.x, e.y - me.y) >= 4, `bandit at ${e.x},${e.y} lands on top of the hero at ${me.x},${me.y}`);
-    assert.ok(!TILE_INFO[m.tiles[Math.floor(e.y) * m.width + Math.floor(e.x)] as TileId].water);
-    const shore = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1], [2, 0], [-2, 0], [0, 2], [0, -2]]
-      .some(([dx, dy]) => TILE_INFO[m.tiles[(Math.floor(e.y) + (dy ?? 0)) * m.width + Math.floor(e.x) + (dx ?? 0)] as TileId].water);
+    assert.ok(!water(e.x, e.y));
+    let shore = false;
+    for (let dy = -3; dy <= 3 && !shore; dy++) for (let dx = -3; dx <= 3 && !shore; dx++) shore = water(e.x + dx, e.y + dy);
     assert.ok(shore, `bandit at ${e.x},${e.y} landed by the water`);
   }
 });

@@ -3,7 +3,7 @@
 // where participants enter and enemies spawn.
 import type { BattleDef } from "../content/schema.ts";
 import { MIN_REGION } from "./entities.ts";
-import { isBlocked, regionSize, type CollisionGrid } from "./physics.ts";
+import { isBlocked, lineOfSight, regionSize, type CollisionGrid } from "./physics.ts";
 
 /**
  * The ground a battle is fought on: a ring around (x, y) and the walkable
@@ -21,6 +21,8 @@ export interface Arena {
   readonly tiles: ReadonlySet<number>;
   /** Walkable tiles inside the ring: the main component plus any pockets. */
   readonly walkable: number;
+  /** Main-component tiles with a straight, unblocked line to the centre. */
+  readonly inSight: ReadonlySet<number>;
 }
 
 /** The main component holds at least this share of the ring's walkable tiles… */
@@ -30,10 +32,13 @@ export const ARENA_ROOM = 0.3;
 
 export const NEIGHBOURS = [[1, 0], [-1, 0], [0, 1], [0, -1]] as const;
 
+/** Main-component tiles a ring needs to be battle ground (see ARENA_*). */
+const fitting = (ring: Pick<Arena, "radius" | "walkable">) =>
+  Math.max(ARENA_COVERAGE * ring.walkable, ARENA_ROOM * Math.PI * ring.radius * ring.radius);
+
 /** True when the arena's main component is the ring's ground (see ARENA_*). */
 export function arenaFits(arena: Arena): boolean {
-  const room = Math.PI * arena.radius * arena.radius;
-  return arena.tiles.size >= ARENA_COVERAGE * arena.walkable && arena.tiles.size >= ARENA_ROOM * room;
+  return arena.tiles.size >= fitting(arena);
 }
 
 /** True when tile (x, y) lies in a walkable 2×2 block: room to pass, not a one-tile gap in a wall. */
@@ -51,7 +56,7 @@ function clear(grid: CollisionGrid, x: number, y: number): boolean {
  * pocket joined only through a one-tile gap is not part of it — fighters
  * steer rather than path-find, and would jam in the gap.
  */
-function ringAt(grid: CollisionGrid, cx: number, cy: number, radius: number): Arena {
+function ringAt(grid: CollisionGrid, cx: number, cy: number, radius: number): Omit<Arena, "inSight"> {
   const { width } = grid;
   const r = Math.ceil(radius);
   const x0 = Math.floor(cx);
@@ -97,13 +102,23 @@ export function resolveArena(grid: CollisionGrid, x: number, y: number, radius: 
       candidates.push({ tx, ty, d });
     }
   candidates.sort((m, n) => m.d - n.d || m.ty - n.ty || m.tx - n.tx);
-  let best: Arena | null = null;
+  let best: Omit<Arena, "inSight"> | null = null;
   for (const c of candidates) {
-    const arena = ringAt(grid, c.tx + 0.5, c.ty + 0.5, radius);
-    if (arenaFits(arena)) return arena;
-    if (!best || arena.tiles.size > best.tiles.size) best = arena;
+    const ring = ringAt(grid, c.tx + 0.5, c.ty + 0.5, radius);
+    if (ring.tiles.size >= fitting(ring)) return withSight(grid, ring);
+    if (!best || ring.tiles.size > best.tiles.size) best = ring;
   }
-  return best;
+  return best && withSight(grid, best);
+}
+
+function withSight(grid: CollisionGrid, ring: Omit<Arena, "inSight">): Arena {
+  const inSight = new Set<number>();
+  for (const i of ring.tiles) {
+    const x = (i % ring.width) + 0.5;
+    const y = Math.floor(i / ring.width) + 0.5;
+    if (lineOfSight(grid, x, y, ring.x, ring.y)) inSight.add(i);
+  }
+  return { ...ring, inSight };
 }
 
 /** The arena of a battle at its site (site centre + offset). */
@@ -148,6 +163,9 @@ type Point = { x: number; y: number };
 /** Score penalty for a spawn tile within reach of someone already fighting. */
 const crowding = (p: Point, avoid: readonly Point[]) => avoid.reduce((s, q) => s + (Math.hypot(p.x - q.x, p.y - q.y) < 4 ? 6 : 0), 0);
 
+/** Score penalty for a spawn tile behind a wall from the centre: fighters steer, they do not path-find. */
+const hidden = (arena: Arena, p: Point) => (arena.inSight.has(Math.floor(p.y) * arena.width + Math.floor(p.x)) ? 0 : 5);
+
 /** The arena tile with the lowest score (null when the arena has no tiles left). */
 function bestTile(arena: Arena, score: (p: Point) => number, used?: ReadonlySet<number>): number {
   let best = -1;
@@ -168,7 +186,7 @@ export function bossSpot(arena: Arena, angle: number, avoid: readonly Point[]): 
   const r = arena.radius * 0.4;
   const gx = arena.x + Math.cos(angle) * r;
   const gy = arena.y + Math.sin(angle) * r;
-  const best = bestTile(arena, (p) => Math.hypot(p.x - gx, p.y - gy) + crowding(p, avoid));
+  const best = bestTile(arena, (p) => Math.hypot(p.x - gx, p.y - gy) + crowding(p, avoid) + hidden(arena, p));
   return best < 0 ? { x: arena.x, y: arena.y } : centreOf(arena, best);
 }
 
@@ -183,7 +201,7 @@ const angleGap = (a: number, b: number) => Math.abs(Math.atan2(Math.sin(a - b), 
 export function rimSpot(arena: Arena, angle: number, avoid: readonly Point[], used: Set<number>): Point {
   const best = bestTile(arena, (p) => {
     const d = Math.hypot(p.x - arena.x, p.y - arena.y);
-    return angleGap(Math.atan2(p.y - arena.y, p.x - arena.x), angle) * 2 + (1 - d / arena.radius) * 3 + crowding(p, avoid);
+    return angleGap(Math.atan2(p.y - arena.y, p.x - arena.x), angle) * 2 + (1 - d / arena.radius) * 3 + crowding(p, avoid) + hidden(arena, p);
   }, used);
   if (best < 0) return { x: arena.x, y: arena.y };
   used.add(best);

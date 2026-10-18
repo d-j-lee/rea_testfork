@@ -44,6 +44,8 @@ export interface BattleRuntime {
 }
 
 const SIDE_ANGLE = { north: -Math.PI / 2, south: Math.PI / 2, east: 0, west: Math.PI } as const;
+/** Players this far beyond the ring still count toward a wave's scaling: they are arriving. */
+const ARRIVING = 6;
 
 /** Humans count 1, companion bots 0.5. */
 export function headcount(sim: Sim, ids: readonly number[]): number {
@@ -57,10 +59,18 @@ export function headcount(sim: Sim, ids: readonly number[]): number {
 
 const scaleOf = (n: number, per: number): number => Math.min(3, 1 + per * (n - 1));
 
-/** Re-reads the headcount scaling of `scaled` battles. */
+/** Participants plus players arriving at the ring: who a wave will meet. */
+function fightersAt(sim: Sim, b: BattleRuntime): number[] {
+  const ids = [...b.participants];
+  for (const p of sim.players.values())
+    if (!ids.includes(p.id) && Math.hypot(p.x - b.cx, p.y - b.cy) <= b.radius + ARRIVING) ids.push(p.id);
+  return ids;
+}
+
+/** Re-reads the headcount scaling; duels are always one against one. */
 function rescale(sim: Sim, b: BattleRuntime): void {
-  if (!b.def.scaled) return;
-  const n = headcount(sim, b.participants);
+  if (b.def.kind === "duel") return;
+  const n = headcount(sim, fightersAt(sim, b));
   b.countScale = scaleOf(n, 0.5);
   b.hpScale = Math.max(b.hpScale, scaleOf(n, 0.65));
 }
@@ -126,7 +136,10 @@ export function startBattle(sim: Sim, battleId: string, starterId: number): Batt
   if (def.kind === "defend" && def.defend) {
     const p = arenaSpot(arena, b.cx, b.cy);
     const sprite = def.defend.sprite;
-    const a = makeActor(sim, { kind: isPropSprite(sprite) ? "prop" : "ally", side: "friend", x: p.x, y: p.y, sprite, name: def.defend.name, hp: def.defend.hp });
+    // The post holds out as long against the scaled waves (more and tougher
+    // attackers) as against the written ones.
+    const hp = Math.round(def.defend.hp * b.countScale * b.hpScale);
+    const a = makeActor(sim, { kind: isPropSprite(sprite) ? "prop" : "ally", side: "friend", x: p.x, y: p.y, sprite, name: def.defend.name, hp });
     a.defend = true;
     b.defendId = a.id;
   }
@@ -260,7 +273,7 @@ function spawnWave(sim: Sim, b: BattleRuntime, index: number): void {
     if (!def) continue;
     for (let i = 0; i < g.count; i++) {
       const p = wavePoint(sim, b, w.def.from, k++, total, used);
-      const a = spawnEnemy(sim, def, p.x, p.y, { level: g.level, battle: true, wave: index, hpMul: def.elite && b.def.scaled ? b.hpScale : 1 });
+      const a = spawnEnemy(sim, def, p.x, p.y, { level: g.level, battle: true, wave: index, hpMul: b.hpScale });
       if (a.en) {
         a.en.state = "alert";
         a.en.alertUntil = sim.time + 0.3;

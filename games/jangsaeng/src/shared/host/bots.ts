@@ -9,6 +9,22 @@ import type { PlayerInput, PlayerSpec, World } from "../sim/world.ts";
 import type { Channel } from "./channel.ts";
 
 const THINK_EVERY = 0.2;
+/** In a battle a companion fights back against enemies this close to itself… */
+const SELF_DEFENCE = 2.2;
+/** …and takes on enemies this close to its leader (or to a fallen ally it covers). */
+const GUARD_RADIUS = 3.5;
+/** Companions covering a revive keep this far from the fallen… */
+const COVER = 2.5;
+/** …while this many, the nearest, go in to revive (two in case one is stuck). */
+const REVIVERS = 2;
+/** In a defend battle companions also take on enemies this close to the post. */
+const POST_GUARD = 5.5;
+/** A companion goes after an enemy this close that is aiming at it or its leader. */
+const RETURN_FIRE = 10;
+/** Companions strike at this share of their gear's power: the hero carries the fight. */
+const SUPPORT_POWER = 0.5;
+/** Seconds between a companion's skills. */
+const SKILL_EVERY: readonly [number, number] = [9, 16];
 
 export class Bot {
   readonly id: number;
@@ -57,6 +73,7 @@ export class Bot {
       demoChapter: this.#channel.chapter.id,
     });
     save.level = this.level;
+    const stats = derived(this.#content, save);
     return {
       id: this.id,
       kind: "bot",
@@ -65,7 +82,7 @@ export class Bot {
       sprite: this.persona.sprite,
       variant: this.persona.variant,
       level: this.level,
-      derived: derived(this.#content, save),
+      derived: { ...stats, weaponAtk: stats.weaponAtk * SUPPORT_POWER },
       skills: [...save.skillSlots].slice(0, 3),
       x,
       y,
@@ -132,26 +149,44 @@ export class Bot {
       if (this.#downedFor > 7) world.selfRevive(this.id);
       return idle;
     }
-    // 1. Revive the fallen nearby (humans first via focus).
+    // 1. The fallen nearby (humans first via focus): the two companions
+    // nearest to them revive, the others cover them instead of crowding in
+    // where one sweep would fell them all.
     const downed = query.downedAllies(me.x, me.y, 14).filter((ally) => ally.id !== this.id);
     const focus = downed.find((ally) => ally.id === this.#focus) ?? downed[0];
     if (focus) {
       const distance = Math.hypot(focus.x - me.x, focus.y - me.y);
-      if (distance > 0.9) return this.#moveTo(me, focus.x, focus.y, idle);
-      return idle;
+      if (this.#nearer(query, focus, distance) < REVIVERS) return distance > 0.9 ? this.#moveTo(me, focus.x, focus.y, idle) : idle;
+      const enemy = query.nearestEnemy(me.x, me.y, SELF_DEFENCE) ?? query.nearestEnemy(focus.x, focus.y, GUARD_RADIUS);
+      if (enemy) return this.#fight(me, enemy);
+      return distance > COVER ? this.#moveTo(me, focus.x, focus.y, idle) : idle;
     }
     this.#focus = null;
-    // 2. Fight: battle arena or enemies near the leader.
+    // 2. Fight. In a battle a companion is the hero's supporting cast: it
+    // takes on enemies at its leader's side, at the post a defend battle
+    // holds, on itself, or shooting at it or its leader, and otherwise holds
+    // formation, so the hero meets each wave. Elsewhere it clears enemies
+    // near its leader.
     const leader = this.#leader(query);
     const battle = query.battleCentre();
-    const inBattle = battle && Math.hypot(battle.x - me.x, battle.y - me.y) < battle.radius + 22;
-    const searchRadius = inBattle ? 12 : 7;
-    const enemy = query.nearestEnemy(me.x, me.y, searchRadius);
-    if (enemy && (inBattle || !leader || Math.hypot(enemy.x - leader.x, enemy.y - leader.y) < 10))
-      return this.#fight(me, enemy);
-    if (inBattle && battle) {
-      const distance = Math.hypot(battle.x - me.x, battle.y - me.y);
-      if (distance > battle.radius * 0.6) return this.#moveTo(me, battle.x, battle.y, idle);
+    const inBattle = battle !== null && Math.hypot(battle.x - me.x, battle.y - me.y) < battle.radius + 22;
+    if (inBattle && leader) {
+      const post = world.battleView()?.defend ? battle : null;
+      const shooter = query.nearestEnemy(me.x, me.y, RETURN_FIRE);
+      const aimedAt = shooter ? world.inspect(shooter.id)?.target : undefined;
+      const enemy =
+        query.nearestEnemy(me.x, me.y, SELF_DEFENCE) ??
+        query.nearestEnemy(leader.x, leader.y, GUARD_RADIUS) ??
+        (post ? query.nearestEnemy(post.x, post.y, POST_GUARD) : null) ??
+        (aimedAt === this.id || aimedAt === leader.id ? shooter : null);
+      if (enemy) return this.#fight(me, enemy);
+    } else if (inBattle) {
+      const enemy = query.nearestEnemy(me.x, me.y, 12);
+      if (enemy) return this.#fight(me, enemy);
+      if (Math.hypot(battle.x - me.x, battle.y - me.y) > battle.radius * 0.6) return this.#moveTo(me, battle.x, battle.y, idle);
+    } else {
+      const enemy = query.nearestEnemy(me.x, me.y, 7);
+      if (enemy && (!leader || Math.hypot(enemy.x - leader.x, enemy.y - leader.y) < 10)) return this.#fight(me, enemy);
     }
     // 3. Follow the leader in formation; catch up when far behind.
     if (leader) {
@@ -168,8 +203,22 @@ export class Bot {
     return idle;
   }
 
-  #leader(query: ReturnType<World["query"]>): { x: number; y: number } | null {
-    let best: { x: number; y: number } | null = null;
+  /** How many standing companions are nearer to `ally` than this one (ties go to the lower id). */
+  #nearer(query: ReturnType<World["query"]>, ally: { x: number; y: number }, distance: number): number {
+    let n = 0;
+    for (const bot of this.#channel.bots.values()) {
+      if (bot.id === this.id) continue;
+      const other = query.player(bot.id);
+      if (!other || other.downed) continue;
+      const d = Math.hypot(ally.x - other.x, ally.y - other.y);
+      if (d < distance || (d === distance && bot.id < this.id)) n++;
+    }
+    return n;
+  }
+
+  /** The nearest human: the one this companion follows and fights beside. */
+  #leader(query: ReturnType<World["query"]>): { id: number; x: number; y: number } | null {
+    let best: { id: number; x: number; y: number } | null = null;
     let bestDistance = Infinity;
     const me = query.player(this.id);
     for (const session of this.#channel.sessions.values()) {
@@ -178,7 +227,7 @@ export class Bot {
       const distance = Math.hypot(player.x - me.x, player.y - me.y);
       if (distance < bestDistance) {
         bestDistance = distance;
-        best = player;
+        best = { id: session.id, x: player.x, y: player.y };
       }
     }
     return best;
@@ -201,7 +250,7 @@ export class Bot {
     };
     this.#skillTimer -= THINK_EVERY;
     if (this.#skillTimer <= 0) {
-      this.#skillTimer = this.#rng.range(5, 11);
+      this.#skillTimer = this.#rng.range(SKILL_EVERY[0], SKILL_EVERY[1]);
       input.skill = this.#rng.int(1, 2);
     }
     if (this.#archer) {
