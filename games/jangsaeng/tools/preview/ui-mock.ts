@@ -36,6 +36,9 @@ export const CHAPTER: ChapterView = {
   history: [
     { kind: "fact", text: "1388년 음력 5월, 이성계와 조민수가 위화도에서 군을 돌려 개경으로 향했다." },
     { kind: "interp", text: "회군은 요동 정벌의 현실성을 둘러싼 판단과 권력 투쟁이 겹친 사건으로 본다." },
+    { kind: "uncertain", text: "회군을 처음 제안한 사람이 누구였는지는 사료마다 서술이 다르다." },
+    { kind: "fiction", text: "주인공이 회군 회의에 참석하는 장면은 창작이다." },
+    { kind: "principle", text: "실존 인물의 결정은 사료대로 두고, 주인공은 그 곁에서만 선택한다." },
   ],
   music: "founding",
   season: "summer",
@@ -93,7 +96,7 @@ export function mockSelf(over: Partial<SelfView> = {}): SelfView {
     objectives: [
       { id: "o1", text: "회군 회의에 참석한다", done: true, optional: false },
       { id: "o2", text: "강가의 왜구 척후를 물리친다", done: false, optional: false, progress: [3, 5], x: 14, y: 96, siteName: "위화도" },
-      { id: "o3", text: "이지란과 이야기한다", done: false, optional: false, x: 12, y: 99 },
+      { id: "o3", text: "이지란과 이야기한다", done: false, optional: false, hint: ["interact"], x: 12, y: 99 },
       { id: "o4", text: "피란민을 강 건너로 보낸다", done: false, optional: true, progress: [1, 4] },
     ],
     skills: [
@@ -119,6 +122,7 @@ export function mockSelf(over: Partial<SelfView> = {}): SelfView {
       { year: 1380, text: "황산대첩에서 선봉에 섰다. 천수 +2년.", tone: "epic" },
       { year: 1387, text: "얼굴이 늙지 않는다는 소문이 돌아 ‘조카 윤무진’으로 이름을 바꿨다.", tone: "bad" },
       { year: 1388, text: "위화도에 닿았다. 비가 그치지 않는다." },
+      { year: 1388, text: "최영의 처형을 막아 냈다. 그는 유배지에서 살아남았다.", tone: "good", alt: true },
     ],
     bonds: [
       { id: "jiran", name: "이지란", value: 62 },

@@ -8,8 +8,9 @@ import { performance } from "node:perf_hooks";
 import { WebSocketServer, type RawData } from "ws";
 import { createGameHost } from "../shared/host/host.ts";
 import type { HostConnection } from "../shared/host/api.ts";
+import { parseClientMsg } from "../shared/host/parse.ts";
 import { createStaticHandler } from "./static.ts";
-import { ABUSE_FACTOR, RateGate, supersedable } from "./rate.ts";
+import { ABUSE_FACTOR, RateGate } from "./rate.ts";
 import { JsonProfileStore } from "./store.ts";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -41,7 +42,7 @@ const server = createServer((request, response) => {
 });
 
 const MAX_MESSAGE_BYTES = 8 * 1024;
-/** Per-socket budget; excess input heartbeats are dropped, ABUSE_FACTOR × this closes (rate.ts). */
+/** Per-socket budget; over it only repeated input heartbeats are dropped, ABUSE_FACTOR × this closes (rate.ts). */
 const MESSAGES_PER_SECOND = 40;
 const wss = new WebSocketServer({
   server,
@@ -69,14 +70,16 @@ wss.on("connection", (socket, request) => {
       socket.close(1008, "binary unsupported");
       return;
     }
-    let message: unknown;
+    let raw: unknown;
     try {
-      message = JSON.parse(data.toString());
+      raw = JSON.parse(data.toString());
     } catch {
       socket.close(1007, "invalid json");
       return;
     }
-    const verdict = gate.admit(performance.now(), supersedable(message));
+    // host/parse.ts owns the wire shape: the gate reads the parsed message.
+    const message = parseClientMsg(raw);
+    const verdict = gate.admit(performance.now(), message);
     if (verdict === "close") {
       log(`rate limit: closing ${remote} (over ${MESSAGES_PER_SECOND * ABUSE_FACTOR} messages in one second)`);
       socket.close(1008, "rate limit");
@@ -84,7 +87,8 @@ wss.on("connection", (socket, request) => {
       return;
     }
     if (verdict === "drop") return;
-    connection.receive(message);
+    // A malformed message goes on as received, so the host answers it (bad_message).
+    connection.receive(message ?? raw);
   });
   socket.on("close", () => close("socket closed"));
   socket.on("error", (error) => {

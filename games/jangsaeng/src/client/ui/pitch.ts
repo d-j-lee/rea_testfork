@@ -4,15 +4,15 @@
 // endings, 대전) are read from it, not retyped here.
 import { NATION_ENDINGS, PERSONAL_ENDINGS } from "../../shared/content/endings.ts";
 import { BRANCH_IDS, NATION_KEYS } from "../../shared/content/schema.ts";
-import { ALL_BRANCHES, allChapters, BRANCH_YEARS, greatBattleTitles, PITCH_BATTLES } from "./chapters.ts";
+import { ALL_BRANCHES, allChapters, BRANCH_YEARS, chapterArc, greatBattleTitles, PITCH_BATTLES } from "./chapters.ts";
 import { button, h } from "./dom.ts";
 import { paperPanel } from "./panel.ts";
 
 const CHAPTER_LIST = allChapters();
 const NATIVE_COUNT = ["", "한", "두", "세", "네", "다섯", "여섯", "일곱", "여덟", "아홉"];
 const count = (n: number): string => NATIVE_COUNT[n] ?? String(n);
+const ARC = chapterArc(CHAPTER_LIST);
 const montages = CHAPTER_LIST.filter((c) => c.montage).length;
-const span = `${CHAPTER_LIST[0]?.years[0]}년부터 ${CHAPTER_LIST[CHAPTER_LIST.length - 1]?.years[1]}년까지`;
 
 const PILLARS: readonly { glyph: string; title: string; text: string }[] = [
   {
@@ -38,7 +38,7 @@ const PILLARS: readonly { glyph: string; title: string; text: string }[] = [
 ];
 
 const IN_PROTOTYPE: readonly string[] = [
-  `${span} ${CHAPTER_LIST.length}개 장으로 이어지는 한 생애${montages ? ` (${count(montages)} 장은 짧은 몽타주)` : ""}`,
+  `${ARC.from}년부터 ${ARC.to}년까지 ${ARC.count}개 장으로 이어지는 한 생애${montages ? ` (${count(montages)} 장은 짧은 몽타주)` : ""}`,
   "실시간 탑다운 전투 · 보스와 대전 · 사경(死境)과 소생",
   "선택지와 풍향계, 숙청 판정, 품계와 관직",
   "세월 흐르기(10년 단위 활동) · 신분 세탁 · 노인성 봉헌",

@@ -4,7 +4,7 @@
 // showing are taken back, new ones wait (newest MAX_SHOWN), and all of them
 // play once the document closes. Only "bad" toasts (errors the player must
 // see now) still show, docked at the bottom — the ones already showing move
-// there too.
+// there too, without a second announcement or entry animation.
 import { h } from "./dom.ts";
 
 export type Tone = "info" | "good" | "bad" | "warn" | "epic";
@@ -42,8 +42,13 @@ export class Toasts {
       const held: { text: string; tone: Tone }[] = [];
       for (const live of [...this.#live]) {
         if (live.el.parentElement !== this.#top) continue;
-        if (live.tone === "bad") this.#dock.appendChild(live.el);
-        else {
+        if (live.tone === "bad") {
+          // Already announced and shown: the move must not announce it again
+          // (the dock is a live region too) or replay its entry (.moved).
+          live.el.setAttribute("aria-hidden", "true");
+          live.el.classList.add("moved");
+          this.#dock.appendChild(live.el);
+        } else {
           if (!live.out) held.push({ text: live.text, tone: live.tone });
           this.#drop(live);
         }

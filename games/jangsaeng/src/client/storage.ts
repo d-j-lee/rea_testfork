@@ -23,11 +23,6 @@ function backend(): Storage | null {
   return storage;
 }
 
-/** True when values survive a reload (localStorage is usable). */
-export function storagePersistent(): boolean {
-  return backend() !== null;
-}
-
 export function readKey(key: string): string | null {
   const full = PREFIX + key;
   const local = memory.get(full);
@@ -67,28 +62,28 @@ export function removeKey(key: string): void {
 }
 
 /**
- * Reads and removes a value stored under `rawKey`, a key from before this
- * namespace existed, so a caller can carry it over once. A failed removal
- * still returns the value; the caller writes it under its own key, which
- * wins from then on.
+ * Carries a value stored under `rawKey`, a key from before this namespace
+ * existed, over once. `carry` gets the value and returns true when nothing
+ * more is needed from it (stored under its new key, or unusable); only then
+ * is the raw key removed. A value `carry` could not store stays under
+ * `rawKey`, so the next load tries again. A failed removal leaves it
+ * behind too; the caller's own key wins from then on.
  */
-export function takeLegacyKey(rawKey: string): string | null {
+export function carryLegacyKey(rawKey: string, carry: (value: string) => boolean): void {
   const store = backend();
-  if (!store) return null;
+  if (!store) return;
   let value: string | null;
   try {
     value = store.getItem(rawKey);
   } catch {
-    return null;
+    return;
   }
-  if (value !== null) {
-    try {
-      store.removeItem(rawKey);
-    } catch {
-      // Left behind; the namespaced copy takes precedence.
-    }
+  if (value === null || !carry(value)) return;
+  try {
+    store.removeItem(rawKey);
+  } catch {
+    // Left behind; the namespaced copy takes precedence.
   }
-  return value;
 }
 
 /** Guard for JSON objects (not arrays or null). */

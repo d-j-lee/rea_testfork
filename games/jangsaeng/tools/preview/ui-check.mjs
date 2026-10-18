@@ -1,7 +1,8 @@
 // Interaction checks for the UI preview (tools/preview/ui.ts): keyboard choice
 // selection, years submission, compact drawers and menu toggles, plus the
-// title logo without web fonts, input edges, settings storage, the ending
-// screen, toast holding and edge-arrow labels. Pages run offline (web fonts
+// title logo without web fonts, title and help copy built from content, input
+// edges, settings storage (and a failed write), the ending screen, toast
+// holding and edge-arrow labels. Pages run offline (web fonts
 // blocked), like the single-file demo build. Prints PASS/FAIL.
 //   node tools/preview/ui-check.mjs
 import { build } from "esbuild";
@@ -134,6 +135,27 @@ try {
     check("title: web fonts are blocked in this run", m.loaded === 0, JSON.stringify(m));
     check("title: 長生 keeps two glyph boxes without web fonts", m.hanja >= 1.9, JSON.stringify(m));
     check("title: 五百年 seal keeps three glyph boxes without web fonts", m.seal >= 3, JSON.stringify(m));
+    // The menu names the chapters the demo grid lists (both read the content).
+    const desc = await t.page.evaluate(() =>
+      Object.fromEntries([...document.querySelectorAll(".menu-item")].map((b) => [b.dataset.action, b.querySelector(".menu-desc")?.textContent ?? ""])),
+    );
+    await t.page.click('[data-action="demo"]');
+    const grid = await t.page.evaluate(() => ({
+      cards: document.querySelectorAll(".demo-card").length,
+      firstYear: (document.querySelector(".demo-years")?.textContent ?? "").split("–")[0],
+    }));
+    check("title: 시연 모드 names as many chapters as the demo grid lists", grid.cards > 0 && desc.demo === `${grid.cards}개 장 중 하나로 바로`, JSON.stringify({ desc, grid }));
+    check("title: 새로 시작 starts in the first chapter's year", desc.new === `${grid.firstYear}년, 노인성의 밤에서`, JSON.stringify({ desc, grid }));
+    await t.close();
+  }
+  {
+    const t = await open("help");
+    const line = await t.page.evaluate(() => {
+      const term = [...document.querySelectorAll(".tab-help dt")].find((dt) => dt.textContent === "국운 · 분기");
+      return term?.nextElementSibling?.textContent ?? "";
+    });
+    // The particle follows the literal 지표, so the meter list may change order or length.
+    check("help: the 국운 line reads as Korean whatever the meters", /^국운 지표\([^)]+\)와 B1–B12c 분기가 1910년의 결말을 정한다\.$/.test(line), line);
     await t.close();
   }
   {
@@ -187,6 +209,36 @@ try {
     await t.close();
   }
   {
+    // A write that fails (quota) keeps the legacy settings for the next load.
+    const legacy = { music: 0.25, sfx: 2, muted: true, touch: "off", motion: "reduced" };
+    const seedFull = (value) => {
+      if (sessionStorage.getItem("seeded")) return;
+      sessionStorage.setItem("seeded", "1");
+      localStorage.setItem("jangsaeng.settings.v1", value);
+      // This load only: the settings key does not fit.
+      const setItem = Storage.prototype.setItem;
+      Storage.prototype.setItem = function (key, item) {
+        if (key === "jangsaeng:v1:settings") throw new DOMException("full", "QuotaExceededError");
+        return setItem.call(this, key, item);
+      };
+    };
+    const t = await open("hud", undefined, false, { script: seedFull, arg: JSON.stringify(legacy) });
+    const read = () =>
+      t.page.evaluate(() => ({
+        owned: JSON.parse(localStorage.getItem("jangsaeng:v1:settings") ?? "null"),
+        legacy: localStorage.getItem("jangsaeng.settings.v1"),
+        motion: document.documentElement.dataset.motion,
+      }));
+    const first = await read();
+    check("settings: a failed write keeps the legacy settings (and applies them this session)", first.owned === null && first.legacy !== null && first.motion === "reduced", JSON.stringify(first));
+    await t.page.reload();
+    await t.page.waitForFunction(() => window.__ready === true);
+    const second = await read();
+    const want = { music: 0.25, sfx: 0.8, muted: true, touch: "off", motion: "reduced" };
+    check("settings: the next load carries them over and only then removes the legacy key", JSON.stringify(second.owned) === JSON.stringify(want) && second.legacy === null, JSON.stringify(second));
+    await t.close();
+  }
+  {
     const t = await open("hud");
     const arrow = await t.page.evaluate(() => window.__arrowLabel("center"));
     check("arrow: edge label starts on screen even after centred text", arrow.label[0] >= 4, JSON.stringify(arrow));
@@ -221,6 +273,17 @@ try {
     await t.page.evaluate(() => window.__ui.handle({ t: "prompt", prompt: window.__mock.YEARS_PROMPT }));
     const opened = await visible();
     check("toasts: an error showing when the planner opens moves to the dock", before.top.includes("전이 모자랍니다") && opened.top.length === 0 && opened.dock.join() === "전이 모자랍니다", JSON.stringify({ before, opened }));
+    await t.page.evaluate(() => window.__ui.handle({ t: "toast", text: "길이 막혔습니다", tone: "bad" }));
+    const docked = await t.page.evaluate(() =>
+      [...document.querySelectorAll(".toast-dock .toast")].map((el) => ({
+        text: el.textContent,
+        hidden: el.getAttribute("aria-hidden"),
+        animation: getComputedStyle(el).animationName,
+      })),
+    );
+    const [moved, fresh] = docked;
+    check("toasts: the moved error is not announced or animated again", moved?.hidden === "true" && moved.animation === "none", JSON.stringify(docked));
+    check("toasts: a new error in the dock is announced and animated once", fresh?.text === "길이 막혔습니다" && fresh.hidden === null && fresh.animation === "toast-in", JSON.stringify(docked));
     await t.page.click('[data-action="years-confirm"]');
     await t.page.evaluate(() => {
       window.__ui.handle({ t: "prompt", prompt: window.__mock.RESULT_PROMPT });

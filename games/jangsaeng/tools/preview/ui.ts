@@ -211,7 +211,9 @@ async function run(): Promise<void> {
     case "map":
     case "help":
     case "menu": {
-      startGame();
+      // The chronicle shows the chapter's history notes: enter the chapter, skip its card.
+      startGame(state === "chronicle");
+      if (state === "chronicle") click(".chapter-card");
       const codes: Record<string, [string, string]> = {
         character: ["KeyC", "c"], inventory: ["KeyI", "i"], nation: ["KeyN", "n"], chronicle: ["KeyT", "t"],
         map: ["KeyM", "m"], help: ["F1", "F1"], menu: ["Escape", "Escape"],

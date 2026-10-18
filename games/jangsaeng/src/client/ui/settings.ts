@@ -1,7 +1,7 @@
 // Player settings: persisted per browser (through the client storage owner),
 // applied to audio, motion and touch.
 import type { AudioEngine } from "../audio/types.ts";
-import { isRecord, readJson, takeLegacyKey, writeKey } from "../storage.ts";
+import { carryLegacyKey, isRecord, readJson, writeKey } from "../storage.ts";
 
 export interface Settings {
   music: number;
@@ -29,24 +29,28 @@ function parse(v: Record<string, unknown>): Settings {
 }
 
 /**
- * Stored settings. Settings saved under the legacy key are carried over once
- * (validated, then written under KEY) and the legacy key is removed.
+ * Stored settings. Settings saved under the legacy key are carried over once:
+ * validated and written under KEY. The legacy key is removed only when KEY
+ * reached storage (a failed write keeps it for the next load).
  */
 function load(): Settings {
-  const legacy = takeLegacyKey(LEGACY_KEY);
   const stored = readJson(KEY, isRecord);
-  if (stored) return parse(stored);
-  if (legacy === null) return { ...DEFAULTS };
-  let value: unknown = null;
-  try {
-    value = JSON.parse(legacy);
-  } catch {
-    // Unreadable legacy settings: the defaults.
-  }
-  if (!isRecord(value)) return { ...DEFAULTS };
-  const settings = parse(value);
-  writeKey(KEY, JSON.stringify(settings));
-  return settings;
+  let settings = stored ? parse(stored) : null;
+  carryLegacyKey(LEGACY_KEY, (legacy) => {
+    if (!settings) {
+      let value: unknown = null;
+      try {
+        value = JSON.parse(legacy);
+      } catch {
+        // Unreadable legacy settings: nothing to carry.
+      }
+      if (!isRecord(value)) return true;
+      settings = parse(value);
+    }
+    // KEY wins over the legacy copy once it is in storage, not just in memory.
+    return writeKey(KEY, JSON.stringify(settings));
+  });
+  return settings ?? { ...DEFAULTS };
 }
 
 export class SettingsStore {
