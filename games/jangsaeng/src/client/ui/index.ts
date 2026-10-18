@@ -128,7 +128,14 @@ export function createUi(deps: UiDeps): Ui {
   const toasts = new Toasts();
 
   const prompt = new PromptDialog(audio, (p, option) => deps.send({ t: "choose", prompt: p, option }), reduced);
-  const years = new YearsPlanner(audio, (plan) => deps.send({ t: "years", ...plan }), reduced);
+  // The passage roll starts with the confirm, so the planner stays open (held
+  // toasts, paused input) from the plan until the roll ends; nothing else
+  // re-syncs when the roll finishes, so its end does.
+  const years: YearsPlanner = new YearsPlanner(audio, (plan) => {
+    deps.send({ t: "years", ...plan });
+    void years.playPassage().then(sync);
+    sync();
+  }, reduced);
   const menu = new MenuBook({
     audio,
     settings,
@@ -319,11 +326,9 @@ export function createUi(deps: UiDeps): Ui {
         case "self":
           hud.update(msg.self, offline);
           root.classList.toggle("battle-on", !!msg.self.battle);
-          void years.playPassage();
           menu.refresh();
           break;
         case "prompt":
-          void years.playPassage();
           if (msg.prompt) showPrompt(msg.prompt);
           else {
             queuedPrompt = null;

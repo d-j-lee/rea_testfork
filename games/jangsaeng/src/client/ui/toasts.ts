@@ -3,7 +3,8 @@
 // the top stack would sit on its header, so toasts are held: the ones already
 // showing are taken back, new ones wait (newest MAX_SHOWN), and all of them
 // play once the document closes. Only "bad" toasts (errors the player must
-// see now) still show, docked at the bottom.
+// see now) still show, docked at the bottom — the ones already showing move
+// there too.
 import { h } from "./dom.ts";
 
 export type Tone = "info" | "good" | "bad" | "warn" | "epic";
@@ -39,11 +40,15 @@ export class Toasts {
     if (on === (this.#held !== null)) return;
     if (on) {
       const held: { text: string; tone: Tone }[] = [];
-      for (const live of [...this.#live])
-        if (!live.out && live.tone !== "bad" && live.el.parentElement === this.#top) {
-          held.push({ text: live.text, tone: live.tone });
+      for (const live of [...this.#live]) {
+        if (live.el.parentElement !== this.#top) continue;
+        if (live.tone === "bad") this.#dock.appendChild(live.el);
+        else {
+          if (!live.out) held.push({ text: live.text, tone: live.tone });
           this.#drop(live);
         }
+      }
+      this.#trim(this.#dock);
       this.#held = held;
       return;
     }
@@ -68,6 +73,11 @@ export class Toasts {
       live.timer = window.setTimeout(() => this.#drop(live), 400);
     }, life);
     this.#live.push(live);
+    this.#trim(stack);
+  }
+
+  /** Keeps the newest MAX_SHOWN toasts in `stack`. */
+  #trim(stack: HTMLElement): void {
     const shown = this.#live.filter((l) => l.el.parentElement === stack);
     for (let i = 0; i < shown.length - MAX_SHOWN; i++) this.#drop(shown[i] as Live);
   }

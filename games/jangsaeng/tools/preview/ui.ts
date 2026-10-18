@@ -17,7 +17,7 @@ declare global {
     /** Hooks for tools/preview/ui-check.mjs. */
     __ui?: Ui;
     __input?: Input;
-    __mock?: { ENDING: typeof ENDING; YEARS_PROMPT: typeof YEARS_PROMPT };
+    __mock?: { ENDING: typeof ENDING; YEARS_PROMPT: typeof YEARS_PROMPT; RESULT_PROMPT: typeof RESULT_PROMPT };
     __arrowLabel?: (inherited: CanvasTextAlign) => { label: [number, number]; arrow: [number, number]; width: number };
   }
 }
@@ -60,7 +60,7 @@ const input = new Input(canvas);
 const ui: Ui = createUi({ root, send, audio: mockAudio(), input, map });
 window.__ui = ui;
 window.__input = input;
-window.__mock = { ENDING, YEARS_PROMPT };
+window.__mock = { ENDING, YEARS_PROMPT, RESULT_PROMPT };
 
 /**
  * Draws an off-screen objective's edge arrow (target far to the left) on a

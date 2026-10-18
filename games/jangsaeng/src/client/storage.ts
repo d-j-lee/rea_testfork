@@ -66,6 +66,31 @@ export function removeKey(key: string): void {
   }
 }
 
+/**
+ * Reads and removes a value stored under `rawKey`, a key from before this
+ * namespace existed, so a caller can carry it over once. A failed removal
+ * still returns the value; the caller writes it under its own key, which
+ * wins from then on.
+ */
+export function takeLegacyKey(rawKey: string): string | null {
+  const store = backend();
+  if (!store) return null;
+  let value: string | null;
+  try {
+    value = store.getItem(rawKey);
+  } catch {
+    return null;
+  }
+  if (value !== null) {
+    try {
+      store.removeItem(rawKey);
+    } catch {
+      // Left behind; the namespaced copy takes precedence.
+    }
+  }
+  return value;
+}
+
 /** Guard for JSON objects (not arrays or null). */
 export const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
