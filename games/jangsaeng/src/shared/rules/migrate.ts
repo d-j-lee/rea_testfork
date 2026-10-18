@@ -85,6 +85,7 @@ function parseChronicle(value: unknown): ChronicleEntry | undefined {
   if (!body || typeof value.year !== "number" || !Number.isFinite(value.year)) return undefined;
   const entry: ChronicleEntry = { year: Math.round(value.year), text: body };
   if (typeof value.tone === "string" && (TONES as readonly string[]).includes(value.tone)) entry.tone = value.tone as ChronicleEntry["tone"];
+  if (value.alt === true) entry.alt = true;
   return entry;
 }
 

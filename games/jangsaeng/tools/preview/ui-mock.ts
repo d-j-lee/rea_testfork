@@ -34,8 +34,8 @@ export const CHAPTER: ChapterView = {
     "어느 편에 서느냐가 새 시대의 자리를 정할 것이다.",
   ],
   history: [
-    "1388년 음력 5월, 이성계와 조민수가 위화도에서 군을 돌려 개경으로 향했다.",
-    "[해석] 회군은 요동 정벌의 현실성을 둘러싼 판단과 권력 투쟁이 겹친 사건으로 본다.",
+    { kind: "fact", text: "1388년 음력 5월, 이성계와 조민수가 위화도에서 군을 돌려 개경으로 향했다." },
+    { kind: "interp", text: "회군은 요동 정벌의 현실성을 둘러싼 판단과 권력 투쟁이 겹친 사건으로 본다." },
   ],
   music: "founding",
   season: "summer",
@@ -133,7 +133,7 @@ export function mockSelf(over: Partial<SelfView> = {}): SelfView {
       y: 96,
       radius: 9,
       wave: [3, 5],
-      boss: { name: "흑룡", title: "왜구 두목", hp: 64 },
+      boss: { name: "흑룡", title: "왜구 두목", hp: 64, historical: false },
       defend: { name: "군량 수레", hp: 72 },
       morale: 58,
       participants: 6,
@@ -289,7 +289,7 @@ export const ENDING: EndingView = {
   chronicle: mockSelf().chronicle,
   record: { kills: 1843, bossKills: 11, selfRevives: 3, revivesGiven: 27, washes: 4, purgesSurvived: 9, turncoat: 0, lifeGained: 61, lifeSpent: 9 },
   historyNote: [
-    "실제 역사에서 1910년 8월 29일 한일병합조약이 공포되었다.",
-    "[해석] 게임 속 분기점들은 당시 개혁 논의에서 실제로 제기된 대안들을 바탕으로 했다.",
+    { kind: "fact", text: "실제 역사에서 1910년 8월 29일 한일병합조약이 공포되었다." },
+    { kind: "interp", text: "게임 속 분기점들은 당시 개혁 논의에서 실제로 제기된 대안들을 바탕으로 했다." },
   ],
 };

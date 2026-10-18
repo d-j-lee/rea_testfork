@@ -14,6 +14,7 @@ import {
   nationValue,
   purgeRiskShown,
   rankName,
+  realAge,
   suspicionBand,
 } from "../rules/index.ts";
 import type { PlayerStatus, World } from "../sim/world.ts";
@@ -172,7 +173,7 @@ export function selfView(content: ContentIndex, save: PlayerSave, context: SelfC
     freePoints: save.freePoints,
     points: { ...save.points },
     year: context.stepYear,
-    age: context.stepYear - 1345,
+    age: realAge(context.stepYear),
     apparentAge: Math.round(apparentAge(context.stepYear) * 10) / 10,
     lifeEnd: save.lifeEnd,
     lifeShortfall: Math.max(0, FINAL_YEAR - save.lifeEnd),

@@ -24,7 +24,7 @@ const list: ItemDef[] = [
   // 귀중품·열쇠
   { id: "coin_pouch", name: "엽전 꾸러미", kind: "treasure", price: 30, desc: "팔면 30전." },
   { id: "mapae", name: "마패", kind: "key", desc: "역참에서 말을 빌려 빠르게 이동할 수 있다." },
-  { id: "letter", name: "밀서", kind: "key", desc: "전해야 할 서신." },
+  { id: "song_fan", name: "송상현의 부채", kind: "key", desc: "동래부사가 아버지께 남긴 글이 적힌 부채." },
 ];
 
 export const ITEMS: Readonly<Record<string, ItemDef>> = Object.fromEntries(

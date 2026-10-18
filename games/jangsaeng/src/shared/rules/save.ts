@@ -1,7 +1,7 @@
 // New characters and demo-mode chapter presets.
 import type { ContentIndex } from "../content/index.ts";
 import type { ChapterDef, ChapterId, Effect, FlagValue, NationKey, OriginDef, OriginId, StatKey, WashMethod } from "../content/schema.ts";
-import { CHAPTER_IDS, NATION_KEYS, POINT_KEYS, STAT_KEYS } from "../content/schema.ts";
+import { CHAPTER_IDS, DISCIPLE_XP_FLAG, NATION_KEYS, POINT_KEYS, SCHOOL_FLAG, STAT_KEYS } from "../content/schema.ts";
 import type { BodyVariant } from "../sprites.ts";
 import { AWAKENING_AGE, AWAKENING_YEAR, BASE_LIFESPAN, SAVE_VERSION, type DemoPath, type PlayerSave } from "../types.ts";
 import { apparentAge, suggestName } from "./identity.ts";
@@ -186,8 +186,8 @@ function applyDemoPreset(content: ContentIndex, save: PlayerSave, chapter: Chapt
   // 역사 순응 defaults: the ch04 tutorial wash and school are behind a later preset.
   if (order > 4) {
     save.flags["tutorialWashUsed"] = true;
-    save.flags["school"] = true;
-    save.flags["discipleXp"] = Math.floor((order - 4) / 3);
+    save.flags[SCHOOL_FLAG] = true;
+    save.flags[DISCIPLE_XP_FLAG] = Math.floor((order - 4) / 3);
   }
   // §3.5: lifespan = chapter start + 60 (never below the natural 1861 track).
   save.lifeEnd = Math.max(START_LIFE_END + 4 * (order - 1), chapter.years[0] + DEMO_LIFE_AHEAD);

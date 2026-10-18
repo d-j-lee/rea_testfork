@@ -31,7 +31,7 @@ export {
 
 export type { EffectOutcome } from "./effects.ts";
 export { applyEffects, battleResult, evalCond, HOLD_VICTORY_VIRTUE, purgeRisk, purgeRiskShown } from "./effects.ts";
-export { bondName, hashRoll, virtueEarned } from "./util.ts";
+export { bondName, discipleGeneration, hashRoll, virtueEarned } from "./util.ts";
 
 export { purgeProtection, purgeSide, purgeTerms } from "./politics.ts";
 

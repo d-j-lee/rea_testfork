@@ -326,7 +326,8 @@ test("demo presets also work with the shipped content", () => {
   for (const id of CHAPTER_IDS) {
     const save = createSave(CONTENT, { token: "t", name: "강휘", variant: "m", origin: "northeast", seed: 5, demoChapter: id });
     assert.equal(save.chapter, id);
-    assert.ok(save.lifeEnd >= save.year + 60);
+    // §6: 60 years past the chapter's start, also when demoStart opens it later.
+    assert.ok(save.lifeEnd >= CONTENT.chapters[id].years[0] + 60);
     assert.notEqual(migrateSave(CONTENT, JSON.parse(JSON.stringify(save))), null);
   }
 });

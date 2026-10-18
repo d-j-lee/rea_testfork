@@ -49,7 +49,7 @@ function clause(checkId: string, label: string, flag: string, reward: Effect): E
     success: [
       { k: "flag", flag, value: true },
       reward,
-      { k: "toast", text: `${label} — 우리 안이 받아들여졌다.`, tone: "good" },
+      { k: "toast", text: `${label} — 우리 측 조항이 받아들여졌다.`, tone: "good" },
     ],
     failure: [
       { k: "flag", flag, value: false },
@@ -108,12 +108,13 @@ export const ch14: ChapterDef = {
     "이 장부터, 외세의 침투도가 보이기 시작한다.",
   ],
   history: [
-    "1863년 고종이 즉위하자 흥선대원군이 실권을 잡고 서원 철폐·호포제·경복궁 중건을 추진했다. 당백전 발행으로 물가가 크게 올랐다.",
-    "1866년 병인박해 뒤 프랑스 함대가 강화도를 침공했다(병인양요). 양헌수가 정족산성에서 이겼으나 프랑스군은 외규장각 의궤 등을 약탈해 갔다.",
-    "1871년 미국 함대가 강화 해협에 들어왔다(신미양요). 광성보에서 어재연 부대가 결사전을 벌였고, 대원군은 전국에 척화비를 세웠다.",
-    "1873년 고종이 친정을 시작했고, 1875년 운요호 사건이 일어났다. [해석] 측량을 명목으로 한 계획적 도발이었다는 평가가 일반적이다.",
-    "1876년 강화도조약으로 부산 등 세 항구가 열렸고, 해안 측량권과 영사 재판권이 인정되었다. 부록·무역 규칙으로 무관세 무역 등이 허용되었다.",
-    "1880년 『조선책략』이 들어왔고 1881년 별기군이 창설되었다. 영남 유생들은 만인소를 올려 개화 정책에 반대했다.",
+    { kind: "fact", text: "1863년 고종이 즉위하자 흥선대원군이 실권을 잡고 서원 철폐·호포제·경복궁 중건을 추진했다. 당백전 발행으로 물가가 크게 올랐다." },
+    { kind: "fact", text: "1866년 병인박해 뒤 프랑스 함대가 강화도를 침공했다(병인양요). 양헌수가 정족산성에서 이겼으나 프랑스군은 외규장각 의궤 등을 약탈해 갔다." },
+    { kind: "fact", text: "1871년 미국 함대가 강화 해협에 들어왔다(신미양요). 광성보에서 어재연 부대가 결사전을 벌였고, 대원군은 전국에 척화비를 세웠다." },
+    { kind: "fact", text: "1873년 고종이 친정을 시작했고, 1875년 운요호 사건이 일어났다." },
+    { kind: "interp", text: "운요호 사건은 측량을 명목으로 한 계획적 도발이었다는 평가가 일반적이다." },
+    { kind: "fact", text: "1876년 강화도조약으로 부산 등 세 항구가 열렸고, 해안 측량권과 영사 재판권이 인정되었다. 부록·무역 규칙으로 무관세 무역 등이 허용되었다." },
+    { kind: "fact", text: "1880년 『조선책략』이 들어왔고 1881년 별기군이 창설되었다. 영남 유생들은 만인소를 올려 개화 정책에 반대했다." },
   ],
   hist: { defense: 25, finance: 22, people: 30, diplomacy: 22, reform: 28 },
   factions: [
@@ -271,7 +272,7 @@ export const ch14: ChapterDef = {
       boss: {
         enemy: "boss_western_officer",
         name: "프랑스군 분견대 지휘관",
-        title: "(가상)",
+        historical: false,
         level: 37,
         hpScale: 1.1,
         phases: [
@@ -523,7 +524,7 @@ export const ch14: ChapterDef = {
                 { k: "nation", key: "diplomacy", add: 5 },
                 { k: "favor", faction: "daewongun", add: -20 },
                 { k: "favor", faction: "gaehwa", add: 20 },
-                { k: "chronicle", text: "1871년, 문을 닫아걸던 조정에 교섭의 길을 냈다." },
+                { k: "chronicle", text: "1871년, 문을 닫아걸던 조정에 교섭의 길을 냈다.", alt: true },
                 { k: "toast", text: "B3 성공 — 주체적 개항 교섭이 시작된다. 강화도 협상에 보정.", tone: "epic" },
               ],
               else: [
@@ -728,7 +729,7 @@ export const ch14: ChapterDef = {
                 { k: "branch", id: "B4", ok: true },
                 { k: "nation", key: "finance", add: 3 },
                 { k: "longFlag", flag: "b4_clauses", key: "finance", add: 3 },
-                { k: "chronicle", text: "1876년, 강화도조약의 조항 둘 이상을 바로잡았다." },
+                { k: "chronicle", text: "1876년, 강화도조약의 조항 둘 이상을 바로잡았다.", alt: true },
                 { k: "toast", text: "B4 성공 — 경제 침투의 통로가 좁아졌다. 재정 ▲", tone: "epic" },
               ],
               else: [
@@ -781,7 +782,7 @@ export const ch14: ChapterDef = {
       id: "s2",
       year: 1866,
       objectives: [
-        { id: "o_persecution", text: "1866년의 소식", kind: "prompt", target: "p_persecution" },
+        { id: "o_persecution", solemn: true, text: "1866년의 소식", kind: "prompt", target: "p_persecution" },
         { id: "o_park_py", text: "평양에서 평안감사 박규수를 만난다", kind: "talk", target: "park_gyusu_py", site: "pyeongyang", offset: [1, -1], prompt: "p_park_1866" },
       ],
     },
@@ -801,7 +802,7 @@ export const ch14: ChapterDef = {
       id: "s4",
       year: 1866,
       objectives: [
-        { id: "o_jeongjok", text: "정족산성에서 프랑스군을 물리친다", kind: "battle", target: "b_jeongjok", site: "ganghwa", offset: [-3, 4] },
+        { id: "o_jeongjok", text: "정족산성에서 프랑스군을 물리친다", kind: "battle", target: "b_jeongjok" },
       ],
     },
     {
@@ -819,14 +820,14 @@ export const ch14: ChapterDef = {
       id: "s6",
       year: 1871,
       objectives: [
-        { id: "o_gwangseong", text: "광성보에서 부상병을 구한다 (75초)", kind: "battle", target: "b_gwangseong", site: "ganghwa", offset: [3, -3] },
+        { id: "o_gwangseong", text: "광성보에서 부상병을 구한다 (75초)", kind: "battle", target: "b_gwangseong" },
       ],
     },
     {
       id: "s7",
       year: 1871,
       objectives: [
-        { id: "o_gwangseong_after", text: "광성보의 끝을 기억한다", kind: "prompt", target: "p_gwangseong_after" },
+        { id: "o_gwangseong_after", solemn: true, text: "광성보의 끝을 기억한다", kind: "prompt", target: "p_gwangseong_after" },
         { id: "o_b3", text: "도성에서 박규수를 만난다", kind: "talk", target: "park_gyusu", site: "hanyang", offset: [2, -2], prompt: "p_b3" },
       ],
     },
@@ -842,7 +843,7 @@ export const ch14: ChapterDef = {
       id: "s9",
       year: 1875,
       objectives: [
-        { id: "o_unyo", text: "운요호의 소식", kind: "prompt", target: "p_unyo" },
+        { id: "o_unyo", solemn: true, text: "운요호의 소식", kind: "prompt", target: "p_unyo" },
         { id: "o_hong", text: "강화에서 역관 홍가를 만난다", kind: "talk", target: "hong_yeokgwan", site: "ganghwa", offset: [1, 2], prompt: "p_hong" },
       ],
     },
@@ -860,7 +861,7 @@ export const ch14: ChapterDef = {
     {
       id: "s11",
       year: 1876,
-      objectives: [{ id: "o_b4_result", text: "조약문을 확인한다", kind: "prompt", target: "p_b4_result" }],
+      objectives: [{ id: "o_b4_result", solemn: true, text: "조약문을 확인한다", kind: "prompt", target: "p_b4_result" }],
     },
     {
       id: "s12",

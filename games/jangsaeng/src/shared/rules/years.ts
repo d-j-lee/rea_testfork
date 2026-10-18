@@ -21,14 +21,12 @@ import { carryNation, closeChapterBranches, INFILTRATION_FROM_ORDER } from "./na
 import { promote, refreshEraGear } from "./progression.ts";
 import { pastLifeEnd, successorTakeover } from "./succession.ts";
 import {
-  discipleGeneration,
   FAMILY_BONDS,
-  flagTruthy,
   hashRoll,
+  hasSchool,
   isFamilyBond,
   line,
   nationName,
-  numberFlag,
   round1,
   statName,
   type Line,
@@ -105,7 +103,7 @@ export interface ActivityDef {
   blocker?: (save: PlayerSave) => string | undefined;
   /** Pure effects for one token. */
   effects: (save: PlayerSave, ruling: string | undefined) => Effect[];
-  /** Changes with no Effect kind (free points, bond decay, disciple xp); returns notes. */
+  /** Changes with no Effect kind (free points, bond decay); returns notes. */
   extra?: (save: PlayerSave) => string[];
 }
 
@@ -172,12 +170,8 @@ export const ACTIVITIES: readonly ActivityDef[] = [
   },
   {
     id: "disciple", name: "제자 양성", desc: "유파의 제자를 길러 낸다.", effect: () => "제자 경험 +1",
-    blocker: (save) => (flagTruthy(save.flags["school"]) ? undefined : "유파를 세운 뒤에 가능하다"),
-    effects: () => [],
-    extra: (save) => {
-      save.flags["discipleXp"] = numberFlag(save, "discipleXp") + 1;
-      return [`제자 경험 +1 (제자 ${discipleGeneration(save)}세대)`];
-    },
+    blocker: (save) => (hasSchool(save) ? undefined : "유파를 세운 뒤에 가능하다"),
+    effects: () => [{ k: "disciple", add: 1 }],
   },
 ];
 

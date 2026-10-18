@@ -2,10 +2,10 @@
 // display names and result-line formatting. Pure; no clocks, no Math.random.
 import type { ContentIndex } from "../content/index.ts";
 import type { NationMeter, PointKey, StatKey } from "../content/schema.ts";
-import { NATION_NAMES, POINT_NAMES, STAT_NAMES } from "../content/schema.ts";
+import { DISCIPLE_XP_FLAG, NATION_NAMES, POINT_NAMES, SCHOOL_FLAG, STAT_NAMES } from "../content/schema.ts";
 import { SITES } from "../map/geo.ts";
 import { hashString } from "../rng.ts";
-import type { PlayerSave, ResultView } from "../types.ts";
+import type { ChronicleEntry, PlayerSave, ResultView } from "../types.ts";
 
 export type Line = ResultView["lines"][number];
 export type Tone = Line["tone"];
@@ -55,8 +55,12 @@ export function cloneSave(save: PlayerSave): PlayerSave {
   return JSON.parse(JSON.stringify(save)) as PlayerSave;
 }
 
-export function chronicle(save: PlayerSave, text: string, tone?: "info" | "good" | "bad" | "epic"): void {
-  save.chronicle.push(tone ? { year: save.year, text, tone } : { year: save.year, text });
+/** Appends to 나의 실록; `alt` marks a counterfactual (대체역사) outcome. */
+export function chronicle(save: PlayerSave, text: string, tone?: "info" | "good" | "bad" | "epic", alt?: true): void {
+  const entry: ChronicleEntry = { year: save.year, text };
+  if (tone) entry.tone = tone;
+  if (alt) entry.alt = true;
+  save.chronicle.push(entry);
 }
 
 // ── Names ────────────────────────────────────────────────────────────────
@@ -161,7 +165,12 @@ export function isRenowned(save: PlayerSave): boolean {
   return flagTruthy(save.flags["renowned"]);
 }
 
-/** 제자 세대 = 1 + floor(discipleXp / 2) once a school exists (flag `school`), else 0. */
+/** 제자 세대 = 1 + floor(제자 경험 / 2) once a 유파 exists (SCHOOL_FLAG), else 0. */
 export function discipleGeneration(save: PlayerSave): number {
-  return flagTruthy(save.flags["school"]) ? 1 + Math.floor(numberFlag(save, "discipleXp") / 2) : 0;
+  return hasSchool(save) ? 1 + Math.floor(numberFlag(save, DISCIPLE_XP_FLAG) / 2) : 0;
+}
+
+/** A 유파 has been founded (content sets SCHOOL_FLAG: ch04 덕수, ch07 학당). */
+export function hasSchool(save: PlayerSave): boolean {
+  return flagTruthy(save.flags[SCHOOL_FLAG]);
 }

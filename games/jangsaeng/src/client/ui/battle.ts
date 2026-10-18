@@ -3,6 +3,12 @@
 import type { BattleView, SelfView } from "../../shared/types.ts";
 import { button, formatSeconds, h, meter, ratio, setMeter, setText, toggle } from "./dom.ts";
 
+/** Boss bar label: role, name and the record marker (an invented boss is 가상). */
+function bossLabel(boss: NonNullable<BattleView["boss"]>): string {
+  const name = boss.title ? `${boss.title} ${boss.name}` : boss.name;
+  return `${name} (${boss.historical ? "기록상" : "가상"})`;
+}
+
 export class BattleBanner {
   readonly el: HTMLElement;
   readonly #title = h("strong", { class: "bt-title" });
@@ -53,7 +59,7 @@ export class BattleBanner {
     this.#endsAt = battle.timeLeft !== undefined ? now + battle.timeLeft * 1000 : 0;
     toggle(this.#bossRow, "hidden", !battle.boss);
     if (battle.boss) {
-      setText(this.#bossName, battle.boss.title ? `${battle.boss.title} ${battle.boss.name}` : battle.boss.name);
+      setText(this.#bossName, bossLabel(battle.boss));
       setMeter(this.#boss, ratio(battle.boss.hp, 100));
       setText(this.#boss.text, `${Math.ceil(battle.boss.hp)}%`);
     }

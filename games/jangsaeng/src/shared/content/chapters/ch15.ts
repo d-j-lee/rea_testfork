@@ -48,12 +48,12 @@ export const ch15: ChapterDef = {
     "그러나 하나를 막아도, 이 땅을 노리는 뜻은 사라지지 않는다.",
   ],
   history: [
-    "1882년 조미수호통상조약에는 '거중조정' 조항이 들어갔다. 같은 해 임오군란이 일어나 청군이 주둔하고, 제물포조약으로 일본 공사관 경비병의 주둔이 허용되었다.",
-    "1884년 급진 개화파가 갑신정변을 일으켰으나 청군 개입으로 사흘 만에 실패했다. 1885년 청·일은 톈진조약으로 파병 시 서로 미리 알리기로 했다.",
-    "1885~1887년 영국이 거문도를 점령했다. 부들러와 유길준이 열강이 보장하는 조선 중립화를 제안했으나 실현되지 않았다.",
-    "1894년 동학농민군이 전주성을 점령하자 정부가 청에 원병을 청했고, 일본군도 톈진조약을 근거로 들어왔다. 농민군은 전주화약을 맺고 해산했으나 일본군은 경복궁을 점령하고 청일전쟁을 일으켰다.",
-    "1894년 겨울 농민군은 우금치에서 근대 화력에 크게 졌다. 1895년 10월 8일 일본 공사 미우라 고로의 주도로 왕비가 시해되었다(을미사변). 이에 분노한 유생들이 을미의병을 일으켰다.",
-    "[해석] 차병 요청만 없었다면 일본의 개입을 모두 막을 수 있었다고 보기는 어렵다. 일본은 공사관 보호를 명분으로 독자 출병할 수도 있었다.",
+    { kind: "fact", text: "1882년 조미수호통상조약에는 '거중조정' 조항이 들어갔다. 같은 해 임오군란이 일어나 청군이 주둔하고, 제물포조약으로 일본 공사관 경비병의 주둔이 허용되었다." },
+    { kind: "fact", text: "1884년 급진 개화파가 갑신정변을 일으켰으나 청군 개입으로 사흘 만에 실패했다. 1885년 청·일은 톈진조약으로 파병 시 서로 미리 알리기로 했다." },
+    { kind: "fact", text: "1885~1887년 영국이 거문도를 점령했다. 부들러와 유길준이 열강이 보장하는 조선 중립화를 제안했으나 실현되지 않았다." },
+    { kind: "fact", text: "1894년 동학농민군이 전주성을 점령하자 정부가 청에 원병을 청했고, 일본군도 톈진조약을 근거로 들어왔다. 농민군은 전주화약을 맺고 해산했으나 일본군은 경복궁을 점령하고 청일전쟁을 일으켰다." },
+    { kind: "fact", text: "1894년 겨울 농민군은 우금치에서 근대 화력에 크게 졌다. 1895년 10월 8일 일본 공사 미우라 고로의 주도로 왕비가 시해되었다(을미사변). 이에 분노한 유생들이 을미의병을 일으켰다." },
+    { kind: "interp", text: "차병 요청만 없었다면 일본의 개입을 모두 막을 수 있었다고 보기는 어렵다. 일본은 공사관 보호를 명분으로 독자 출병할 수도 있었다." },
   ],
   hist: { defense: 22, finance: 20, people: 30, diplomacy: 25, reform: 35 },
   factions: [
@@ -206,7 +206,7 @@ export const ch15: ChapterDef = {
     },
     {
       id: "uibyeong_scholar",
-      name: "제천 유생 의병장 (가상)",
+      name: "제천 유생 의병장",
       title: "을미의병",
       sprite: "righteous_army",
       site: "wonju",
@@ -406,7 +406,7 @@ export const ch15: ChapterDef = {
             { k: "nation", key: "defense", add: 2 },
             { k: "nation", key: "reform", add: 2 },
             { k: "nation", key: "diplomacy", add: 2 },
-            { k: "chronicle", text: "1882년 6월, 밀린 녹봉이 지급되었다. 군란은 일어나지 않았다." },
+            { k: "chronicle", text: "1882년 6월, 밀린 녹봉이 지급되었다. 군란은 일어나지 않았다.", alt: true },
             { k: "toast", text: "B5 성공 — 외국 군대가 들어올 구실이 사라졌다.", tone: "epic" },
           ],
         },
@@ -517,7 +517,7 @@ export const ch15: ChapterDef = {
                 { k: "nation", key: "diplomacy", add: 2 },
                 { k: "favor", faction: "geupjin", add: 5 },
                 { k: "favor", faction: "onkon", add: 10 },
-                { k: "chronicle", text: "1884년 겨울, 우정총국의 연회는 연회로 끝났다. 개화파가 한자리에 앉았다." },
+                { k: "chronicle", text: "1884년 겨울, 우정총국의 연회는 연회로 끝났다. 개화파가 한자리에 앉았다.", alt: true },
                 { k: "toast", text: "B6 성공 — 온건 개혁 연합이 섰다.", tone: "epic" },
               ],
               else: [
@@ -733,7 +733,7 @@ export const ch15: ChapterDef = {
                 { k: "nation", key: "diplomacy", add: 2 },
                 { k: "longFlag", flag: "neutral_policy", key: "diplomacy", add: 3 },
                 { k: "nation", key: "infiltration", add: -5 },
-                { k: "chronicle", text: "1887년, 조선 중립화가 국책이 되었다. 각국 공사관에 공문이 돌았다." },
+                { k: "chronicle", text: "1887년, 조선 중립화가 국책이 되었다. 각국 공사관에 공문이 돌았다.", alt: true },
                 { k: "toast", text: "B7 성공 — 국제 승인의 기반이 생겼다. 국방이 받쳐 줘야 효과가 난다.", tone: "epic" },
               ],
               else: [
@@ -830,7 +830,7 @@ export const ch15: ChapterDef = {
                 { k: "branch", id: "B8", ok: true },
                 { k: "nation", key: "people", add: 8 },
                 { k: "favor", faction: "donghak", add: 20 },
-                { k: "chronicle", text: "1894년 5월, 청병을 부르지 않았다. 사절로 전주에 내려갔다." },
+                { k: "chronicle", text: "1894년 5월, 청병을 부르지 않았다. 사절로 전주에 내려갔다.", alt: true },
                 { k: "toast", text: "B8 성공 — 일본군이 들어올 명분이 약해졌다.", tone: "epic" },
               ],
               else: [
@@ -976,17 +976,18 @@ export const ch15: ChapterDef = {
     {
       id: "p_uibyeong_1895",
       title: "단발령",
-      speaker: { name: "제천 유생 의병장 (가상)", sprite: "righteous_army" },
+      speaker: { name: "제천 유생 의병장", sprite: "righteous_army" },
       body: [
         "국모가 시해되었는데 내각은 상투를 자르라 하오. 유인석 같은 선비들이 고을마다 일어나고 있소.",
         "고갯길 아래 일본군 수비대를 치려 하오. 그대의 칼 솜씨를 들었소.",
-        "그대는 상투를 자르겠소?",
+        "그대는 이 단발령을 어찌 보오?",
       ],
       options: [
         {
           id: "keep",
-          text: "오백 년 묶은 상투요. 오늘은 칼을 들겠소.",
+          text: "오백 년 묵은 상투요. 오늘은 칼을 들겠소.",
           hint: "의병 합류 · 명예 ▲",
+          requires: { k: "variant", eq: "m" },
           effects: [
             { k: "point", point: "honor", add: 8 },
             { k: "favor", faction: "uibyeong", add: 10 },
@@ -996,11 +997,32 @@ export const ch15: ChapterDef = {
           id: "cut",
           text: "머리는 잘라도 뜻은 자르지 않소. 함께 갑시다.",
           hint: "의병 합류 · 개혁 ▲",
+          requires: { k: "variant", eq: "m" },
           effects: [
             { k: "flag", flag: "ch15_danbal" },
             { k: "nation", key: "reform", add: 1 },
             { k: "favor", faction: "uibyeong", add: 10 },
-            { k: "toast", text: "오백 년 만에 처음으로 거울 속 모습이 바뀌었다.", tone: "info" },
+            { k: "toast", text: "오백 년 만에 처음으로 상투를 잘랐다. 거울 속 모습이 낯설다.", tone: "info" },
+          ],
+        },
+        {
+          id: "keep_f",
+          text: "자를 상투는 없소만, 오늘은 칼을 들겠소.",
+          hint: "의병 합류 · 명예 ▲",
+          requires: { k: "variant", eq: "f" },
+          effects: [
+            { k: "point", point: "honor", add: 8 },
+            { k: "favor", faction: "uibyeong", add: 10 },
+          ],
+        },
+        {
+          id: "reform_f",
+          text: "머리 모양보다 나라가 먼저요. 새 법은 따르되, 함께 갑시다.",
+          hint: "의병 합류 · 개혁 ▲",
+          requires: { k: "variant", eq: "f" },
+          effects: [
+            { k: "nation", key: "reform", add: 1 },
+            { k: "favor", faction: "uibyeong", add: 10 },
           ],
         },
       ],
@@ -1035,8 +1057,8 @@ export const ch15: ChapterDef = {
       id: "s4",
       year: 1882,
       objectives: [
-        { id: "o_b5_ok", text: "조용한 장마철", kind: "prompt", target: "p_b5_ok", requires: B5_OK },
-        { id: "o_imo_escape", text: "궁인들을 데리고 동쪽 문으로 빠져나간다", kind: "battle", target: "b_imo_escape", site: "hanyang", offset: [5, 2], requires: not(B5_OK) },
+        { id: "o_b5_ok", solemn: true, text: "조용한 장마철", kind: "prompt", target: "p_b5_ok", requires: B5_OK },
+        { id: "o_imo_escape", text: "궁인들을 데리고 동쪽 문으로 빠져나간다", kind: "battle", target: "b_imo_escape", requires: not(B5_OK) },
       ],
     },
     {
@@ -1059,8 +1081,8 @@ export const ch15: ChapterDef = {
       id: "s7",
       year: 1885,
       objectives: [
-        { id: "o_gapsin_ok", text: "연회의 뒤", kind: "prompt", target: "p_gapsin_ok", requires: B6_OK },
-        { id: "o_gapsin_fail", text: "사흘의 뒤", kind: "prompt", target: "p_gapsin_fail", requires: not(B6_OK) },
+        { id: "o_gapsin_ok", solemn: true, text: "연회의 뒤", kind: "prompt", target: "p_gapsin_ok", requires: B6_OK },
+        { id: "o_gapsin_fail", solemn: true, text: "사흘의 뒤", kind: "prompt", target: "p_gapsin_fail", requires: not(B6_OK) },
         { id: "o_tianjin", text: "톈진조약의 조문을 고종에게 아뢴다", kind: "talk", target: "gojong", site: "hanyang", offset: [0, -3], prompt: "p_tianjin" },
       ],
     },
@@ -1117,22 +1139,22 @@ export const ch15: ChapterDef = {
       id: "s13",
       year: 1894,
       objectives: [
-        { id: "o_b8_ok", text: "고요한 7월", kind: "prompt", target: "p_b8_ok", requires: B8_OK },
-        { id: "o_gyeongbok", text: "경복궁에서 궁인들이 피할 시간을 번다 (70초)", kind: "battle", target: "b_gyeongbok", site: "hanyang", offset: [0, -4], requires: not(B8_OK) },
+        { id: "o_b8_ok", solemn: true, text: "고요한 7월", kind: "prompt", target: "p_b8_ok", requires: B8_OK },
+        { id: "o_gyeongbok", text: "경복궁에서 궁인들이 피할 시간을 번다 (70초)", kind: "battle", target: "b_gyeongbok", requires: not(B8_OK) },
       ],
     },
     {
       id: "s14",
       year: 1894,
       objectives: [
-        { id: "o_jipgangso", text: "집강소의 가을", kind: "prompt", target: "p_jipgangso", requires: B8_OK },
-        { id: "o_ugeumchi", text: "우금치", kind: "prompt", target: "p_ugeumchi", requires: not(B8_OK) },
+        { id: "o_jipgangso", solemn: true, text: "집강소의 가을", kind: "prompt", target: "p_jipgangso", requires: B8_OK },
+        { id: "o_ugeumchi", solemn: true, text: "우금치", kind: "prompt", target: "p_ugeumchi", requires: not(B8_OK) },
       ],
     },
     {
       id: "s15",
       year: 1895,
-      objectives: [{ id: "o_eulmi", text: "1895년 10월 8일", kind: "prompt", target: "p_eulmi" }],
+      objectives: [{ id: "o_eulmi", solemn: true, text: "1895년 10월 8일", kind: "prompt", target: "p_eulmi" }],
     },
     {
       id: "s16",
@@ -1146,7 +1168,7 @@ export const ch15: ChapterDef = {
       id: "s17",
       year: 1895,
       objectives: [
-        { id: "o_eulmi_battle", text: "일본군 수비대를 친다", kind: "battle", target: "b_eulmi", site: "wonju", offset: [3, 2] },
+        { id: "o_eulmi_battle", text: "일본군 수비대를 친다", kind: "battle", target: "b_eulmi" },
       ],
     },
   ],

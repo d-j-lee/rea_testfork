@@ -1,12 +1,15 @@
 // Referential integrity of all game content: every id a chapter mentions must
 // exist, every objective must be completable, and texts must stay respectful.
 import assert from "node:assert/strict";
+import { readdirSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import { CHAPTERS, CONTENT } from "../../src/shared/content/index.ts";
 import {
   BRANCH_IDS,
   CHAPTER_IDS,
+  DISCIPLE_XP_FLAG,
   NATION_KEYS,
+  SCHOOL_FLAG,
   STAT_KEYS,
   type ChapterDef,
   type Cond,
@@ -79,6 +82,8 @@ function checkChapter(chapter: ChapterDef): string[] {
   if (!siteIds.has(chapter.start.site)) problems.push(where(`start site ${chapter.start.site}`));
   if (chapter.briefing.length === 0) problems.push(where("empty briefing"));
   if (chapter.history.length === 0) problems.push(where("empty history note"));
+  if (chapter.demoStart !== undefined && !stepIds.has(chapter.demoStart))
+    problems.push(where(`demoStart ${chapter.demoStart} is not a step`));
   for (const npc of chapter.npcs) {
     if (!siteIds.has(npc.site)) problems.push(where(`npc ${npc.id} site ${npc.site}`));
     if (!characterSprites.has(npc.sprite)) problems.push(where(`npc ${npc.id} sprite ${npc.sprite}`));
@@ -102,6 +107,8 @@ function checkChapter(chapter: ChapterDef): string[] {
       if (phase.summon && !CONTENT.enemies[phase.summon.enemy])
         problems.push(where(`battle ${battle.id} summon ${phase.summon.enemy}`));
     if (battle.kind === "boss" && !battle.boss) problems.push(where(`battle ${battle.id} boss kind without boss`));
+    if (battle.boss && typeof battle.boss.historical !== "boolean")
+      problems.push(where(`battle ${battle.id} boss must declare historical (record or 가상)`));
     if (battle.kind === "defend" && !battle.defend) problems.push(where(`battle ${battle.id} defend without target`));
     if (["survive", "escape", "defend"].includes(battle.kind) && !battle.timeLimit)
       problems.push(where(`battle ${battle.id} ${battle.kind} needs timeLimit`));
@@ -147,6 +154,9 @@ function checkChapter(chapter: ChapterDef): string[] {
           break;
         case "battle":
           if (!target || !battleIds.has(target)) problems.push(where(`objective ${objective.id} battle ${target}`));
+          // The BattleDef owns where the battle is; a second copy drifts (o_hansan named 'tongyeong').
+          if (objective.site !== undefined || objective.offset !== undefined)
+            problems.push(where(`battle objective ${objective.id} repeats its battle's place`));
           break;
         case "prompt":
           if (!target || !promptIds.has(target)) problems.push(where(`objective ${objective.id} prompt ${target}`));
@@ -236,11 +246,26 @@ for (const id of CHAPTER_IDS) {
   });
 }
 
+test("no slur appears in any player-facing table", () => {
+  const tables = {
+    enemies: CONTENT.enemies,
+    companions: CONTENT.companions,
+    endings: CONTENT.endings,
+    items: CONTENT.items,
+    skills: { ...CONTENT.skills, longevity: CONTENT.longevity },
+    origins: CONTENT.origins,
+    offices: CONTENT.offices,
+  };
+  for (const [name, table] of Object.entries(tables)) {
+    const text = JSON.stringify(table);
+    for (const word of BANNED) assert.ok(!text.includes(word), `${name}: banned word ${word}`);
+  }
+});
+
 test("enemy and skill tables are well-formed", () => {
   for (const enemy of Object.values(CONTENT.enemies)) {
     assert.ok(characterSprites.has(enemy.sprite), enemy.id);
     assert.ok(enemy.hp > 0 && enemy.speed > 0 && enemy.range > 0, enemy.id);
-    for (const word of BANNED) assert.ok(!enemy.name.includes(word), enemy.id);
   }
   for (const skill of Object.values(CONTENT.skills)) assert.ok(CHAPTER_IDS.includes(skill.unlock), skill.id);
 });
@@ -255,4 +280,147 @@ test("companions and endings exist", () => {
   for (const id of ["P0", "P1", "P2", "P3", "P4", "P5"] as const)
     assert.ok(CONTENT.endings.personal[id].body.length > 0, id);
   assert.ok(CONTENT.endings.historyNote.length > 0);
+});
+
+/** Every effect list in a chapter: options, battle outcomes, step entries and objective completions. */
+function* effectLists(chapter: ChapterDef): Generator<{ where: string; effects: readonly Effect[] }> {
+  for (const prompt of chapter.prompts)
+    for (const option of prompt.options) yield { where: `${prompt.id}.${option.id}`, effects: option.effects };
+  for (const battle of chapter.battles) {
+    yield { where: `${battle.id} victory`, effects: battle.victory };
+    yield { where: `${battle.id} defeat`, effects: battle.defeat };
+  }
+  for (const step of chapter.steps) {
+    if (step.onEnter) yield { where: `${step.id} onEnter`, effects: step.onEnter };
+    for (const objective of step.objectives)
+      if (objective.onComplete) yield { where: `${objective.id} onComplete`, effects: objective.onComplete };
+  }
+}
+
+test("history cards and the finale are solemn: no '목표 달성' toast or quest sound", () => {
+  for (const chapter of Object.values(CHAPTERS)) {
+    const prompts = new Map(chapter.prompts.map((prompt) => [prompt.id, prompt]));
+    for (const step of chapter.steps)
+      for (const objective of step.objectives) {
+        const opened = prompts.get((objective.kind === "prompt" ? objective.target : objective.prompt) ?? "");
+        if (opened?.style === "history")
+          assert.equal(objective.solemn, true, `${chapter.id} ${objective.id} opens history card ${opened.id}`);
+      }
+  }
+  const finale = CHAPTERS.ch16.steps.flatMap((step) => step.objectives).find((objective) => objective.id === "o_finale");
+  assert.equal(finale?.solemn, true, "the 1910 finale is no achievement");
+});
+
+/** HISTORY.md §1.5: cards for these tragedies only record or care; no title, 명예, 공적, 경험치 or loot. */
+const TRAGEDY_PROMPTS = [
+  "ch03_seonjuk", "ch06_cheongnyeong", "p_dongnae_fall", "p_jinju2", "p_admiral_falls", "p_samjeondo", "p_imo",
+  "p_jeongjo_dies", "p_hong_end", "p_persecution", "p_gwangseong_after", "p_ugeumchi", "p_eulmi", "p_1909", "p_finale",
+];
+/** Allowed beside a tragedy besides the care choice's 공덕: the record, flags and the risk care carries. */
+const RECORD_EFFECTS = new Set<Effect["k"]>(["chronicle", "flag", "toast", "suspicion"]);
+
+test("tragedy cards grant nothing but the record and 공덕 for helping people", () => {
+  const prompts = new Map(Object.values(CHAPTERS).flatMap((chapter) => chapter.prompts.map((prompt) => [prompt.id, prompt] as const)));
+  for (const id of TRAGEDY_PROMPTS) {
+    const prompt = prompts.get(id);
+    assert.ok(prompt, `${id} exists`);
+    for (const option of prompt.options)
+      for (const effect of walkEffects(option.effects)) {
+        const care = effect.k === "point" && effect.point === "virtue" && effect.add > 0;
+        assert.ok(RECORD_EFFECTS.has(effect.k) || care, `${id}.${option.id}: ${JSON.stringify(effect)}`);
+      }
+  }
+});
+
+test("counterfactual outcomes reach 나의 실록 tagged 대체역사", () => {
+  for (const chapter of Object.values(CHAPTERS)) {
+    // A chronicle beside a won branch (or inside its if/check) states something that did not happen.
+    const visit = (effects: readonly Effect[], where: string, counterfactual: boolean): void => {
+      const branchWon = counterfactual || effects.some((effect) => effect.k === "branch" && effect.ok);
+      for (const effect of effects) {
+        if (effect.k === "chronicle" && branchWon) assert.equal(effect.alt, true, `${chapter.id} ${where}: ${effect.text}`);
+        if (effect.k === "check") {
+          visit(effect.success, where, branchWon);
+          visit(effect.failure, where, branchWon);
+        }
+        if (effect.k === "if") {
+          visit(effect.then, where, branchWon);
+          visit(effect.else ?? [], where, branchWon);
+        }
+      }
+    };
+    for (const { where, effects } of effectLists(chapter)) visit(effects, where, false);
+    for (const battle of chapter.battles) {
+      // The banner copy and the flag agree until the subtitle marker is rendered from the flag.
+      assert.equal(battle.alt === true, battle.subtitle?.includes("[대체역사]") === true, `${chapter.id} ${battle.id}`);
+      if (!battle.alt) continue;
+      for (const effect of walkEffects(battle.victory))
+        if (effect.k === "chronicle") assert.equal(effect.alt, true, `${battle.id}: ${effect.text}`);
+    }
+  }
+});
+
+/**
+ * Flags the rules read, and the ones the rules or the host write themselves
+ * (directly or as a flag effect, e.g. the 사사 escape's `escaped`), from source.
+ */
+function rulesFlags(): { read: Set<string>; written: Set<string> } {
+  const constants: Readonly<Record<string, string>> = { SCHOOL_FLAG, DISCIPLE_XP_FLAG };
+  const read = new Set<string>();
+  const written = new Set<string>();
+  const name = (token: string): string | undefined => (token.startsWith('"') ? token.slice(1, -1) : constants[token]);
+  for (const layer of ["rules", "host"]) {
+    const dir = new URL(`../../src/shared/${layer}/`, import.meta.url);
+    for (const file of readdirSync(dir).filter((entry) => entry.endsWith(".ts"))) {
+      const source = readFileSync(new URL(file, dir), "utf8");
+      for (const match of source.matchAll(/flags(?:\[("[^"]+"|[A-Z_]+)\]|\.(\w+))(\s*=(?!=))?/g)) {
+        const flag = match[2] ?? name(match[1] ?? "");
+        if (flag && match[3]) written.add(flag);
+        else if (flag && layer === "rules") read.add(flag);
+      }
+      for (const match of source.matchAll(/k: "flag", flag: ("[^"]+"|[A-Z_]+)/g)) {
+        const flag = name(match[1] ?? "");
+        if (flag) written.add(flag);
+      }
+      if (layer === "rules")
+        for (const match of source.matchAll(/numberFlag\(save, ("[^"]+"|[A-Z_]+)\)/g)) {
+          const flag = name(match[1] ?? "");
+          if (flag) read.add(flag);
+        }
+    }
+  }
+  return { read, written };
+}
+
+/** Rule reads that nothing writes yet: each names its open handoff and must stay unwritten until fixed. */
+const UNWRITTEN_RULE_FLAGS: ReadonlyMap<string, string> = new Map([
+  ["righteous", "rules/progression.ts heroSprite reads it; no content or rule sets it (handoff)"],
+]);
+
+test("every flag the rules read is written by content or by the rules", () => {
+  const { read, written } = rulesFlags();
+  const content = new Set<string>();
+  for (const chapter of Object.values(CHAPTERS))
+    for (const { effects } of effectLists(chapter))
+      for (const effect of walkEffects(effects)) {
+        if (effect.k === "flag") content.add(effect.flag);
+        if (effect.k === "disciple") content.add(DISCIPLE_XP_FLAG);
+      }
+  assert.ok(read.has(SCHOOL_FLAG) && read.has(DISCIPLE_XP_FLAG), "the scan sees the 유파 flags");
+  assert.ok(content.has(SCHOOL_FLAG) && content.has(DISCIPLE_XP_FLAG), "choices found the 유파 and train disciples (P3)");
+  for (const flag of read) {
+    if (UNWRITTEN_RULE_FLAGS.has(flag)) {
+      assert.ok(!content.has(flag) && !written.has(flag), `${flag} is written now: drop it from UNWRITTEN_RULE_FLAGS`);
+      continue;
+    }
+    assert.ok(content.has(flag) || written.has(flag), `rules read flag '${flag}' that nothing writes`);
+  }
+});
+
+test("narration names a chapter's 공동 실록 by its title", () => {
+  for (const chapter of Object.values(CHAPTERS))
+    for (const step of chapter.steps)
+      for (const line of step.narration ?? [])
+        for (const match of line.matchAll(/공동 실록 '([^']+)'/g))
+          assert.equal(match[1], chapter.worldEvent?.title, `${chapter.id} ${step.id}`);
 });

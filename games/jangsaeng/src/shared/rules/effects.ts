@@ -2,7 +2,7 @@
 // save; runtime effects (prompt, battle, objective, goto, worldEvent) are
 // collected into an EffectOutcome for the session to perform.
 import type { ContentIndex } from "../content/index.ts";
-import type { BattleDef, Cond, Effect, PurgeSpec } from "../content/schema.ts";
+import { DISCIPLE_XP_FLAG, type BattleDef, type Cond, type Effect, type PurgeSpec } from "../content/schema.ts";
 import type { PlayerSave, ResultView } from "../types.ts";
 import { changeSuspicion, suggestName, washIdentity } from "./identity.ts";
 import { changeLife, lifeLine } from "./lifespan.ts";
@@ -14,12 +14,14 @@ import {
   chronicle,
   clamp,
   cloneSave,
+  discipleGeneration,
   factionName,
   flagTruthy,
   gainVirtue,
   hashRoll,
   line,
   nationName,
+  numberFlag,
   pointName,
   signed,
   siteName,
@@ -81,6 +83,8 @@ export function evalCond(content: ContentIndex, save: PlayerSave, cond: Cond | u
       return save.identity.kind === cond.kind;
     case "origin":
       return save.origin === cond.origin;
+    case "variant":
+      return save.variant === cond.eq;
     case "item":
       return (save.inventory[cond.item] ?? 0) >= (cond.count ?? 1);
     case "battleWon":
@@ -260,6 +264,11 @@ function applyOne(
       save.flags[effect.flag] = value;
       return;
     }
+    case "disciple": {
+      save.flags[DISCIPLE_XP_FLAG] = numberFlag(save, DISCIPLE_XP_FLAG) + effect.add;
+      lines.push(line(`제자 경험 ${signed(effect.add)} (제자 ${discipleGeneration(save)}세대)`, "good"));
+      return;
+    }
     case "branch": {
       setBranch(save, effect.id, effect.ok);
       lines.push(line(`역사의 분기 ${effect.id} ${BRANCH_LABELS[effect.id]} — ${effect.ok ? "성공" : "실패"}`, effect.ok ? "epic" : "bad"));
@@ -287,7 +296,7 @@ function applyOne(
       return;
     }
     case "chronicle":
-      chronicle(save, effect.text);
+      chronicle(save, effect.text, undefined, effect.alt);
       return;
     case "toast":
       out.toasts.push({ text: effect.text, tone: effect.tone ?? "info" });
@@ -429,7 +438,7 @@ export function battleResult(content: ContentIndex, save: PlayerSave, battle: Ba
     changeLife(save, 2);
     save.flags["renowned"] = true;
     out.lines.push(line(`대전 — ${battle.title}`, "epic"), lifeLine(2));
-    chronicle(save, `${battle.title}에서 이기다.`, "epic");
+    chronicle(save, `${battle.title}에서 이기다.`, "epic", battle.alt);
   }
   if (battle.kind === "defend" || battle.kind === "survive") {
     const gained = gainVirtue(save, HOLD_VICTORY_VIRTUE);
