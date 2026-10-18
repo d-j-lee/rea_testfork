@@ -1,0 +1,89 @@
+// Objective tracker (right side) with progress and completion check, plus the
+// presenter-only demo skip button.
+import type { InputHint } from "../../shared/content/schema.ts";
+import type { ObjectiveView, SelfView } from "../../shared/types.ts";
+import type { AudioEngine } from "../audio/types.ts";
+import { chapterNumber } from "./chapters.ts";
+import { button, h, setText, toggle } from "./dom.ts";
+import { ObjectiveCues } from "./objective-cues.ts";
+
+/**
+ * Control names for an objective's input hints, per device. They only name
+ * the controls; how to use one (holding the bow longer) is in the
+ * objective's own device-neutral text.
+ */
+const INPUT_HINT_TEXT: Readonly<Record<InputHint, { keys: string; touch: string }>> = {
+  move: { keys: "이동: WASD·방향키", touch: "이동: 화면 왼쪽 끌기" },
+  interact: { keys: "말 걸기: E", touch: "말 걸기: 手(행동) 버튼" },
+  attack: { keys: "공격: J·Space·클릭", touch: "공격: 劍 버튼" },
+  bow: { keys: "활: K·우클릭", touch: "활: 弓 버튼" },
+  roll: { keys: "구르기: Shift·L", touch: "구르기: 轉 버튼" },
+  skill: { keys: "기술: 1·2·3", touch: "기술: 1·2·3 칸" },
+};
+
+/** The settings store publishes the active input mode on <html data-touch>. */
+export function touchInput(): boolean {
+  return document.documentElement.dataset["touch"] === "on";
+}
+
+/** The controls an objective teaches, named for the keyboard or the touch buttons. */
+export function inputHintText(hints: readonly InputHint[] | undefined, touch: boolean): string {
+  return (hints ?? []).map((hint) => INPUT_HINT_TEXT[hint][touch ? "touch" : "keys"]).join(" · ");
+}
+
+export class ObjectiveTracker {
+  readonly el: HTMLElement;
+  readonly #list = h("ol", { class: "obj-list" });
+  readonly #head = h("span", { class: "obj-chapter" });
+  readonly #skip: HTMLButtonElement;
+  readonly #audio: AudioEngine;
+  readonly #cues = new ObjectiveCues();
+  #key = "";
+
+  constructor(audio: AudioEngine, onSkip: () => void) {
+    this.#audio = audio;
+    this.#skip = button("시연: 건너뛰기 ⏭", onSkip, { class: "btn-demo-skip hidden", title: "현재 목표를 즉시 완료합니다 (시연 모드 전용)" });
+    this.el = h(
+      "section",
+      { class: "hud-obj", "aria-label": "목표", "aria-live": "polite" },
+      h("header", { class: "obj-head" }, h("span", { class: "obj-k" }, "목표"), this.#head),
+      this.#list,
+      this.#skip,
+    );
+  }
+
+  update(self: SelfView): void {
+    setText(this.#head, `${chapterNumber(self.chapter.order)} · ${self.chapter.title}`);
+    toggle(this.#skip, "hidden", !self.demo);
+    const list = self.objectives;
+    const touch = touchInput();
+    const key = `${touch ? "t" : "k"}|${list.map((o) => `${o.id}:${o.done ? 1 : 0}:${o.progress?.[0] ?? ""}/${o.progress?.[1] ?? ""}:${o.text}`).join("|")}`;
+    if (key === this.#key) return;
+    this.#key = key;
+    const cue = this.#cues.next(list);
+    if (cue) this.#audio.sfx(cue);
+    // Pending first, then completed; optional ones last among pending.
+    const sorted = [...list].sort((a, b) => Number(a.done) - Number(b.done) || Number(a.optional) - Number(b.optional));
+    this.#list.replaceChildren(...sorted.map((o) => this.#item(o, touch)));
+    toggle(this.el, "empty", list.length === 0);
+  }
+
+  #item(o: ObjectiveView, touch: boolean): HTMLElement {
+    const progress = o.progress ? h("span", { class: "obj-prog" }, `${o.progress[0]}/${o.progress[1]}`) : null;
+    const keys = o.done ? "" : inputHintText(o.hint, touch);
+    return h(
+      "li",
+      { class: `obj${o.done ? " done" : ""}${o.optional ? " optional" : ""}` },
+      h("span", { class: "obj-box", "aria-hidden": "true" }),
+      h("span", { class: "obj-text" },
+        o.optional ? h("span", { class: "obj-opt" }, "선택") : null,
+        o.alt ? h("span", { class: "hn-tag obj-alt", title: "게임 속 대체역사" }, "대체역사") : null,
+        o.alt ? " " : null,
+        o.text,
+        keys ? h("small", { class: "obj-keys" }, keys) : null,
+        o.siteName && !o.done ? h("small", { class: "obj-site" }, o.siteName) : null),
+      progress,
+      o.done ? h("span", { class: "sr-only" }, "완료") : null,
+    );
+  }
+}
