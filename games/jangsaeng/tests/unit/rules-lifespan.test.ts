@@ -28,15 +28,12 @@ test("changeLife records gains and losses", () => {
   assert.deepEqual([save.record.lifeGained, save.record.lifeSpent], [2, 3]);
 });
 
-test("offering: 100 virtue → +1 year, max 5 per chapter", () => {
+test("offering: 100 virtue → +1 year, at most 5 (the one offering of a chapter's passage)", () => {
   const save = newSave();
   save.points.virtue = 750;
   assert.equal(offerVirtue(save), 5);
   assert.equal(save.points.virtue, 250);
-  assert.equal(save.offeredThisChapter, 5);
   assert.equal(save.lifeEnd, 1866);
-  assert.equal(offerVirtue(save), 0, "chapter cap reached");
-  save.offeredThisChapter = 0;
   assert.equal(offerVirtue(save), 2);
   assert.equal(offerVirtue(save), 0, "less than 100 virtue left");
 });

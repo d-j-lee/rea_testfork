@@ -5,7 +5,7 @@ import { createRng } from "../rng.ts";
 import { AWAKENING_AGE, AWAKENING_YEAR, type PlayerSave } from "../types.ts";
 import { rankLabel, setRank } from "./progression.ts";
 import { changeLife } from "./lifespan.ts";
-import { chronicle, clamp, gainVirtue, isRenowned, line, round1, signed, type Line } from "./util.ts";
+import { chronicle, clamp, gainVirtue, isRenowned, josa, line, round1, signed, type Line } from "./util.ts";
 
 export const BIRTH_YEAR = AWAKENING_YEAR - AWAKENING_AGE;
 
@@ -135,6 +135,8 @@ export interface WashSpec {
   desc: string;
   /** Money paid up front; "all" gives everything away (monk). */
   cost: number | "all";
+  /** 공덕 per 100전 given away (출가's alms). */
+  alms?: number;
   life: number;
   suspicion: number;
   /** Fractions carried into the new identity; rank "exam" = min(4, 1 + floor(agility / 15)). */
@@ -157,7 +159,7 @@ export const WASH_METHODS: Readonly<Record<WashMethod | "forced", WashSpec>> = {
   monk: {
     name: "출가",
     desc: "재산을 모두 시주한다(100전당 공덕 +10). 인연 60%를 잇고 승병의 길이 열린다.",
-    cost: "all", life: 0, suspicion: 5, carry: { money: 0, rank: 0, bonds: 0.6, merit: 0 },
+    cost: "all", alms: 10, life: 0, suspicion: 5, carry: { money: 0, rank: 0, bonds: 0.6, merit: 0 },
   },
   merchant: {
     name: "상인 행세",
@@ -189,6 +191,11 @@ const KIND_NAMES: Readonly<Record<IdentityKind, string>> = {
 
 export function identityKindName(kind: IdentityKind): string {
   return KIND_NAMES[kind];
+}
+
+/** 공덕 that alms of `rate` per 100전 bring when `money` is given away (출가). */
+export function almsVirtue(rate: number, money: number): number {
+  return rate * Math.floor(Math.max(0, money) / 100);
 }
 
 /** The ch04 호패법 tutorial wash is free once. */
@@ -248,7 +255,7 @@ export function washIdentity(
   const cost = Math.min(washCost(save, method), save.points.money);
   const detail: string[] = [];
   if (method === "monk") {
-    const alms = gainVirtue(save, 10 * Math.floor(cost / 100));
+    const alms = gainVirtue(save, almsVirtue(spec.alms ?? 0, cost));
     save.points.money = 0;
     if (cost > 0) detail.push(`시주 ${Math.floor(cost)}전`);
     if (alms > 0) detail.push(`공덕 +${alms}`);
@@ -272,7 +279,7 @@ export function washIdentity(
   save.suspicion = spec.suspicion;
   startIdentity(save, method, name, Math.round(apparentAge(save.year)));
   save.record.washes += 1;
-  chronicle(save, `${oldName}의 이름을 버리고 ${name}(으)로 살아가다 (${spec.name}).`, method === "forced" ? "bad" : "info");
+  chronicle(save, `${oldName}의 이름을 버리고 ${josa(name, "으로/로")} 살아가다 (${spec.name}).`, method === "forced" ? "bad" : "info");
   detail.push(`의심도 ${spec.suspicion}`);
   detail.push(save.rank > 0 ? `품계 ${rankLabel(save.rank, save.year)}` : "품계 없음");
   if (spec.life !== 0) detail.push(`천수 ${signed(spec.life)}년`);

@@ -236,7 +236,7 @@ export const YEARS_PROMPT: PromptView = {
     washAdvised: true,
     lifeEnd: 1861,
     virtue: 140,
-    canOffer: 3,
+    purse: 600,
     suggested: { activities: ["study", "study"], offer: true },
     suggestedName: "윤현",
   },

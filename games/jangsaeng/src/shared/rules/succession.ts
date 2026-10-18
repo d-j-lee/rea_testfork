@@ -5,7 +5,7 @@ import { STAT_KEYS } from "../content/schema.ts";
 import type { PlayerSave } from "../types.ts";
 import { startIdentity, suggestName } from "./identity.ts";
 import { setRank } from "./progression.ts";
-import { chronicle, line, type Line } from "./util.ts";
+import { chronicle, josa, line, type Line } from "./util.ts";
 
 export const SUCCESSOR_LIFESPAN = 60;
 export const SUCCESSOR_START_AGE = 25;
@@ -32,9 +32,9 @@ export function successorTakeover(content: ContentIndex, save: PlayerSave): Line
   save.graceUsed = true;
   save.lifeEnd = save.year + SUCCESSOR_LIFESPAN;
   startIdentity(save, "successor", name, SUCCESSOR_START_AGE);
-  chronicle(save, `${oldName}의 천수가 다하다. ${name}이(가) 유지를 잇는다 (${generation}대).`, "epic");
+  chronicle(save, `${oldName}의 천수가 다하다. ${josa(name, "이/가")} 유지를 잇는다 (${generation}대).`, "epic");
   return [
     line(`천수가 다했다 — ${oldName}의 오백 년이 여기서 멈춘다`, "bad"),
-    line(`${name}이(가) 유지를 잇는다 (${generation}대 · 능력치 70% · 품계 절반 · 인연 80% · 재산 70%)`, "epic"),
+    line(`${josa(name, "이/가")} 유지를 잇는다 (${generation}대 · 능력치 70% · 품계 절반 · 인연 80% · 재산 70%)`, "epic"),
   ];
 }

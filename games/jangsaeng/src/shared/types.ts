@@ -31,6 +31,8 @@ export const FINAL_YEAR = 1910;
  */
 export const DEMO_PATHS = ["history", "reform"] as const;
 export type DemoPath = (typeof DEMO_PATHS)[number];
+/** The path a demo takes when none is named. */
+export const DEFAULT_DEMO_PATH: DemoPath = "history";
 
 export interface IdentityRecord {
   name: string;
@@ -82,8 +84,6 @@ export interface PlayerSave {
   graceUsed: boolean;
   /** 노인성 일섬 uses in the current chapter (max 3). */
   longevityUses: number;
-  /** Lifespan years granted by virtue offering in the current chapter (max 5). */
-  offeredThisChapter: number;
   suspicion: number;
   rank: number;
   /** 개국공신 grade: 1-3 등, 4 = 원종공신. */
@@ -238,12 +238,37 @@ export interface PromptView {
   data?: YearsPlanView | ResultView;
 }
 
+/**
+ * One activity of the years planner. life, virtue and money are what one token
+ * of it does to the numbers the planner projects (rules projectYears); absent
+ * means none.
+ */
 export interface YearsActivityView {
   id: string;
   name: string;
   desc: string;
   effect: string;
   disabled?: string;
+  /** 천수 years (산중 수행 +1). */
+  life?: number;
+  /** 공덕 gained (선행·구휼 +60). */
+  virtue?: number;
+  /** 전 earned (+) or spent (−); a token that spends runs only while the purse holds it. */
+  money?: number;
+}
+
+/** One identity wash of the years planner, with what projectYears needs (absent: none). */
+export interface YearsWashView {
+  id: string;
+  name: string;
+  desc: string;
+  disabled?: string;
+  /** 천수 years it costs (전사 위장 −1). */
+  life?: number;
+  /** 전 it needs; absent when it gives the whole purse away instead (출가). */
+  cost?: number;
+  /** 공덕 per 100전 it gives away (출가 +10). */
+  alms?: number;
 }
 
 export interface YearsPlanView {
@@ -260,13 +285,19 @@ export interface YearsPlanView {
   /** Planner heading for the tokens, e.g. "1659~1776년, 이 시대를 어떻게 보냈나 · 5마디". */
   summary: string;
   activities: YearsActivityView[];
-  washes: { id: string; name: string; desc: string; disabled?: string }[];
+  washes: YearsWashView[];
   /** Suggest washing when suspicion is high. */
   washAdvised: boolean;
   lifeEnd: number;
+  /** 공덕 held before the passage; the 노인성 봉헌 buys a year per 100 of it and what the plan adds. */
   virtue: number;
-  /** Years the 노인성 봉헌 adds now (100 공덕 a year, this chapter's allowance). */
-  canOffer: number;
+  /** 전 in hand when the tokens start: the purse once the chapter's salary is paid. */
+  purse: number;
+  /**
+   * 노인성 감응 on leaving this chapter, when it is still due: `years`, and
+   * `bonus` more once the passage has gained `bonusAt` 공덕 (0: already earned).
+   */
+  resonance?: { years: number; bonus: number; bonusAt: number };
   /**
    * 노인성의 마지막 은혜: the years it adds, present only while it can be taken.
    * Once in a run and it takes all 공덕 left and 10 명망, so only the player

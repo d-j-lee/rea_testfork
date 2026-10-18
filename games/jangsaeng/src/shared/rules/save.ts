@@ -3,12 +3,12 @@ import type { ContentIndex } from "../content/index.ts";
 import type { ChapterDef, ChapterId, Effect, FlagValue, NationKey, OriginDef, OriginId, StatKey, WashMethod } from "../content/schema.ts";
 import { CHAPTER_IDS, DISCIPLE_XP_FLAG, NATION_KEYS, POINT_KEYS, SCHOOL_FLAG, STAT_KEYS } from "../content/schema.ts";
 import type { BodyVariant } from "../sprites.ts";
-import { AWAKENING_AGE, AWAKENING_YEAR, BASE_LIFESPAN, SAVE_VERSION, type DemoPath, type PlayerSave } from "../types.ts";
-import { apparentAge, cleanName, suggestName } from "./identity.ts";
+import { AWAKENING_AGE, AWAKENING_YEAR, BASE_LIFESPAN, DEFAULT_DEMO_PATH, SAVE_VERSION, type DemoPath, type PlayerSave } from "../types.ts";
+import { apparentAge, cleanName, suggestName, WASH_METHODS } from "./identity.ts";
 import { meritSubjectTitle } from "./effects.ts";
 import { chapterBranches, closeChapterBranches, setBranch, setLongFlag } from "./nation.ts";
 import { DEFAULT_ARMOR, DEFAULT_WEAPON, eraGear, LEVEL_CAP, SKILL_SLOTS } from "./progression.ts";
-import { clamp, FAMILY_BONDS } from "./util.ts";
+import { clamp, FAMILY_BONDS, hashRoll, josa } from "./util.ts";
 
 export interface CreateOptions {
   token: string;
@@ -57,9 +57,19 @@ const DEMO_RANK: readonly number[] = [0, 2, 5, 14, 12, 13, 10, 11, 12, 13, 12, 1
 const DEMO_ROLE_ORDER: readonly StatKey[] = [
   "power", "body", "agility", "wit", "tact", "power", "spirit", "body", "agility", "tact", "wit", "power",
 ];
-const DEMO_WASH_KINDS: readonly WashMethod[] = ["descendant", "exam"];
-const DEMO_WASH_SPACING = 120;
+/** Demo identity history: a wash every 30–40 years, as a played run needs (README: 30~40년마다 신분 세탁). */
+const DEMO_WASH_KINDS: readonly WashMethod[] = ["descendant", "exam", "merchant"];
+const DEMO_WASH_EVERY = 35;
+const DEMO_WASH_JITTER = 3;
+/** The shortest history that has a wash: the birth name is kept at least this long. */
+const DEMO_WASH_GAP = 30;
 const DEMO_LAST_WASH_AGO = 15;
+/**
+ * Demo record per chapter already lived, beside what content gives (its
+ * battles, field spawns and purges): allies raised, the chapter's free
+ * self-revive, and 천수 spent on two 노인성 일섬.
+ */
+const DEMO_RECORD_PER_CHAPTER = { revivesGiven: 4, selfRevives: 1, lifeSpent: 2 } as const;
 
 export function originOf(content: ContentIndex, origin: string): OriginDef {
   return content.origins[origin] ?? (Object.values(content.origins)[0] as OriginDef);
@@ -110,7 +120,6 @@ export function createSave(content: ContentIndex, options: CreateOptions): Playe
     lifeEnd: START_LIFE_END,
     graceUsed: false,
     longevityUses: 0,
-    offeredThisChapter: 0,
     suspicion: 0,
     rank: 0,
     titles: [],
@@ -141,15 +150,84 @@ export function createSave(content: ContentIndex, options: CreateOptions): Playe
   };
   if (!content.items.rice_ball) delete save.inventory["rice_ball"];
   const demo = options.demoChapter ? content.chapters[options.demoChapter] : undefined;
-  if (demo) applyDemoPreset(content, save, demo, options.demoPath ?? "history");
+  if (demo) applyDemoPreset(content, save, demo, options.demoPath ?? DEFAULT_DEMO_PATH);
   return save;
 }
 
-/** Years of past washes for a demo identity history: every ~120 years, last one 15 years ago. */
-function demoWashYears(startYear: number): number[] {
-  const years: number[] = [];
-  for (let year = startYear - DEMO_LAST_WASH_AGO; year >= 1401; year -= DEMO_WASH_SPACING) years.unshift(year);
-  return years;
+/**
+ * Years of past washes for a demo identity history: the last one 15 years
+ * before the chapter, the others spread evenly from 1361 about every 35 years
+ * and moved up to 4 years either way (stable per save), so the names last
+ * 30–40 years over a long history. None before CH04's own 호패법 wash.
+ */
+function demoWashYears(seed: number, startYear: number): number[] {
+  const last = startYear - DEMO_LAST_WASH_AGO;
+  const span = last - AWAKENING_YEAR;
+  const count = span >= DEMO_WASH_GAP ? Math.round(span / DEMO_WASH_EVERY) : 0;
+  return Array.from({ length: count }, (_, index) => {
+    if (index === count - 1) return last;
+    const jitter = (hashRoll(seed, `demo:wash:${index}`) % (2 * DEMO_WASH_JITTER + 1)) - DEMO_WASH_JITTER;
+    return AWAKENING_YEAR + Math.round((span * (index + 1)) / count) + jitter;
+  });
+}
+
+/** The kind of the `index`-th demo wash in `year`: 후손 행세, 무과 재응시 (once there is a 무과), 상인 행세 in turn. */
+function demoWashKind(index: number, year: number): WashMethod {
+  const kind = DEMO_WASH_KINDS[index % DEMO_WASH_KINDS.length] as WashMethod;
+  const from = WASH_METHODS[kind].minYear;
+  return from !== undefined && year < from ? "descendant" : kind;
+}
+
+/** Every effect a chapter's story can run: on entering a step, completing an objective, answering a card or winning a battle. */
+function* chapterEffects(chapter: ChapterDef): Generator<Effect> {
+  function* walk(effects: readonly Effect[]): Generator<Effect> {
+    for (const effect of effects) {
+      yield effect;
+      if (effect.k === "check") {
+        yield* walk(effect.success);
+        yield* walk(effect.failure);
+      } else if (effect.k === "if") {
+        yield* walk(effect.then);
+        yield* walk(effect.else ?? []);
+      }
+    }
+  }
+  for (const step of chapter.steps) {
+    yield* walk(step.onEnter ?? []);
+    for (const objective of step.objectives) yield* walk(objective.onComplete ?? []);
+  }
+  for (const prompt of chapter.prompts) for (const option of prompt.options) yield* walk(option.effects);
+  for (const battle of chapter.battles) yield* walk(battle.victory);
+}
+
+/**
+ * The record of the chapters a demo preset has already lived, so its ending
+ * reads like a run: the enemies of their battles (counterfactual ones only on
+ * the reform path) and their field spawns, their bosses and purges, and per
+ * chapter the allies raised, self-revives and 천수 spent (DEMO_RECORD_PER_CHAPTER).
+ */
+function applyDemoRecord(content: ContentIndex, save: PlayerSave, chapter: ChapterDef, path: DemoPath): void {
+  const earlier = CHAPTER_IDS.slice(0, CHAPTER_IDS.indexOf(chapter.id));
+  const record = save.record;
+  for (const id of earlier) {
+    const def = content.chapters[id];
+    if (!def) continue;
+    for (const battle of def.battles) {
+      if (battle.alt && path !== "reform") continue;
+      for (const wave of battle.waves) for (const group of wave.enemies) record.kills += group.count;
+      if (battle.boss) {
+        record.kills += 1;
+        record.bossKills += 1;
+      }
+    }
+    for (const spawn of def.spawns) record.kills += spawn.count;
+    const purges = new Set<string>();
+    for (const effect of chapterEffects(def)) if (effect.k === "purge") purges.add(effect.spec.id);
+    record.purgesSurvived += purges.size;
+  }
+  record.revivesGiven += DEMO_RECORD_PER_CHAPTER.revivesGiven * earlier.length;
+  record.selfRevives += DEMO_RECORD_PER_CHAPTER.selfRevives * earlier.length;
+  record.lifeSpent += DEMO_RECORD_PER_CHAPTER.lifeSpent * earlier.length;
 }
 
 /**
@@ -186,9 +264,11 @@ function applyDemoPreset(content: ContentIndex, save: PlayerSave, chapter: Chapt
     save.flags[SCHOOL_FLAG] = true;
     save.flags[DISCIPLE_XP_FLAG] = Math.floor((order - 4) / 3);
   }
-  // §3.5: lifespan = chapter start + 60 (never below the natural 1861 track).
+  // §3.5: lifespan = chapter start + 60 (never below the natural 1861 track);
+  // the years gained cover what the lived chapters spent (applyDemoRecord).
   save.lifeEnd = Math.max(START_LIFE_END + 4 * (order - 1), chapter.years[0] + DEMO_LIFE_AHEAD);
-  save.record.lifeGained = save.lifeEnd - START_LIFE_END;
+  applyDemoRecord(content, save, chapter, path);
+  save.record.lifeGained = save.lifeEnd - START_LIFE_END + save.record.lifeSpent;
   save.year = chapter.years[0];
   save.chapter = chapter.id;
   save.step = 0;
@@ -210,20 +290,24 @@ function applyDemoPreset(content: ContentIndex, save: PlayerSave, chapter: Chapt
   if (chapter.ruling) save.favor[chapter.ruling] = Math.max(save.favor[chapter.ruling] ?? 0, 20);
   if (order >= 3) for (const family of FAMILY_BONDS) save.bonds[family] = Math.min(48, 4 * order);
 
-  // Plausible identity history: one wash per ~120 years with suggested names.
-  const washYears = demoWashYears(chapter.years[0]);
+  // Plausible identity history: a wash every 30–40 years with suggested names,
+  // written to the chronicle as washIdentity writes a played one.
+  const washYears = demoWashYears(save.seed, chapter.years[0]);
   const playerName = save.name;
   if (washYears.length > 0) {
     save.name = "";
     save.birthName = suggestName(save, "demo:birth");
     save.identities = [{ name: save.birthName, kind: "birth", from: AWAKENING_YEAR }];
     washYears.forEach((year, index) => {
-      const kind = DEMO_WASH_KINDS[index % DEMO_WASH_KINDS.length] as WashMethod;
+      const kind = demoWashKind(index, year);
       const last = index === washYears.length - 1;
       const previous = save.identities[save.identities.length - 1];
       if (previous) previous.to = year;
       const alias = last ? playerName : suggestName(save, `demo:${index}`);
-      save.chronicle.push({ year, text: `${previous?.name ?? save.birthName}의 이름을 버리고 ${alias}(으)로 살아가다.` });
+      save.chronicle.push({
+        year,
+        text: `${previous?.name ?? save.birthName}의 이름을 버리고 ${josa(alias, "으로/로")} 살아가다 (${WASH_METHODS[kind].name}).`,
+      });
       save.identities.push({ name: alias, kind, from: year });
       save.identity = { kind, startYear: year, startAge: Math.round(apparentAge(year)) };
     });
@@ -263,25 +347,10 @@ function applyEarlierChapters(content: ContentIndex, save: PlayerSave, chapter: 
  */
 function bestLongFlags(chapter: ChapterDef): Map<string, { key: NationKey; add: number }> {
   const best = new Map<string, { key: NationKey; add: number }>();
-  const visit = (effects: readonly Effect[]): void => {
-    for (const effect of effects) {
-      if (effect.k === "longFlag") {
-        const known = best.get(effect.flag);
-        if (effect.add > 0 && (!known || effect.add > known.add)) best.set(effect.flag, { key: effect.key, add: effect.add });
-      } else if (effect.k === "check") {
-        visit(effect.success);
-        visit(effect.failure);
-      } else if (effect.k === "if") {
-        visit(effect.then);
-        visit(effect.else ?? []);
-      }
-    }
-  };
-  for (const step of chapter.steps) {
-    visit(step.onEnter ?? []);
-    for (const objective of step.objectives) visit(objective.onComplete ?? []);
+  for (const effect of chapterEffects(chapter)) {
+    if (effect.k !== "longFlag") continue;
+    const known = best.get(effect.flag);
+    if (effect.add > 0 && (!known || effect.add > known.add)) best.set(effect.flag, { key: effect.key, add: effect.add });
   }
-  for (const prompt of chapter.prompts) for (const option of prompt.options) visit(option.effects);
-  for (const battle of chapter.battles) visit(battle.victory);
   return best;
 }

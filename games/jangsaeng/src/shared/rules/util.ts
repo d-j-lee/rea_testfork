@@ -63,6 +63,54 @@ export function chronicle(save: PlayerSave, text: string, tone?: "info" | "good"
   save.chronicle.push(entry);
 }
 
+// ── Particles (조사) ─────────────────────────────────────────────────────
+
+/** A particle pair: the form after a final consonant / the form after a vowel. 으로/로 also takes 로 after ㄹ. */
+export type JosaPair = "은/는" | "이/가" | "을/를" | "과/와" | "으로/로";
+
+type FinalSound = "none" | "rieul" | "other";
+
+/** How each digit is read at the end of a number (영 일 이 삼 사 오 육 칠 팔 구; a trailing 0 reads 십·백·천·만). */
+const DIGIT_FINAL: Readonly<Record<string, FinalSound>> = {
+  "0": "other", "1": "rieul", "2": "none", "3": "other", "4": "none",
+  "5": "none", "6": "other", "7": "rieul", "8": "rieul", "9": "none",
+};
+
+/** Latin letters read with a final consonant in Korean (Kim 김, Bob 밥, Eric 에릭); l is ㄹ (Paul 폴). */
+const LATIN_CLOSED = new Set(["b", "c", "d", "g", "k", "m", "n", "p", "q", "t"]);
+
+/** The final sound of the last pronounced character, skipping closing marks such as 」 or ). */
+function finalSound(word: string): FinalSound | null {
+  for (let index = word.length - 1; index >= 0; index--) {
+    const char = word[index] as string;
+    const code = char.charCodeAt(0);
+    if (code >= 0xac00 && code <= 0xd7a3) {
+      const final = (code - 0xac00) % 28;
+      return final === 0 ? "none" : final === 8 ? "rieul" : "other";
+    }
+    const digit = DIGIT_FINAL[char];
+    if (digit) return digit;
+    const letter = char.toLowerCase();
+    if (letter >= "a" && letter <= "z") return letter === "l" ? "rieul" : LATIN_CLOSED.has(letter) ? "other" : "none";
+    if (/[\s)\]」』'"’”.,!?·]/.test(char)) continue;
+    return null;
+  }
+  return null;
+}
+
+/**
+ * `word` followed by the particle its last sound takes: josa("윤무진", "으로/로")
+ * → "윤무진으로", josa("「장용영」", "이/가") → "「장용영」이". A word whose
+ * sound is unknown keeps both forms (이(가), (으)로).
+ */
+export function josa(word: string, pair: JosaPair): string {
+  const [closed, open] = pair.split("/") as [string, string];
+  const sound = finalSound(word);
+  if (sound === null) return `${word}${pair === "으로/로" ? "(으)로" : `${closed}(${open})`}`;
+  if (pair === "으로/로") return `${word}${sound === "other" ? closed : open}`;
+  return `${word}${sound === "none" ? open : closed}`;
+}
+
 // ── Names ────────────────────────────────────────────────────────────────
 
 /** The three fictional families whose bonds carry across generations (GDD §5.8.2). */

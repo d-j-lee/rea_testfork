@@ -9,7 +9,7 @@ import type { PurgeSpec } from "../content/schema.ts";
 import type { PlayerSave } from "../types.ts";
 import { changeLife } from "./lifespan.ts";
 import { rankLabel, setRank, SENIOR_RANK } from "./progression.ts";
-import { chronicle, clamp, hashRoll, isFamilyBond, isRenowned, line, siteName, type Line } from "./util.ts";
+import { chronicle, clamp, hashRoll, isFamilyBond, isRenowned, josa, line, siteName, type Line } from "./util.ts";
 
 export const DEFAULT_EXILE_SITE = "jeju";
 
@@ -112,7 +112,7 @@ export function resolvePurge(save: PlayerSave, spec: PurgeSpec): PurgeResolution
       changeLife(save, -1);
       const site = spec.exileSite ?? DEFAULT_EXILE_SITE;
       save.exile = site;
-      chronicle(save, `${siteName(site)}(으)로 유배되다.`, "bad");
+      chronicle(save, `${josa(siteName(site), "으로/로")} 유배되다.`, "bad");
       lines.push(line(`유배 — 품계 −5 · 천수 −1년 · 다음 시대를 ${siteName(site)}에서 맞는다`, "bad"));
     } else {
       verdict = "sentenced";

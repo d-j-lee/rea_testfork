@@ -31,7 +31,8 @@ export {
 
 export type { EffectOutcome } from "./effects.ts";
 export { applyEffects, battleResult, evalCond, HOLD_VICTORY_VIRTUE, purgeRisk, purgeRiskShown } from "./effects.ts";
-export { bondName, discipleGeneration, hashRoll, virtueEarned } from "./util.ts";
+export type { JosaPair } from "./util.ts";
+export { bondName, discipleGeneration, hashRoll, josa, virtueEarned } from "./util.ts";
 
 export { purgeProtection, purgeSide, purgeTerms } from "./politics.ts";
 
@@ -64,8 +65,8 @@ export {
 
 export { successorTakeover } from "./succession.ts";
 
-export type { YearsChoice } from "./years.ts";
-export { advanceStepYear, advanceYears, smallEventAt, tokensBetween, yearsPlan } from "./years.ts";
+export type { YearsChoice, YearsProjection, YearsProjectionChoice } from "./years.ts";
+export { advanceStepYear, advanceYears, projectYears, smallEventAt, tokensBetween, yearsPlan } from "./years.ts";
 
 export {
   BRANCH_CHAPTER,
@@ -75,6 +76,8 @@ export {
   closeChapterBranches,
   completeWorldEvent,
   computeEnding,
+  ENDING_RULE,
+  INFILTRATION_NOTE,
   finalInfiltration,
   longFlagSum,
   nationValue,

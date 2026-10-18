@@ -7,6 +7,7 @@ import { FINAL_YEAR, type PlayerSave } from "../types.ts";
 import { chapterVirtue, chronicle, itemName, line, signed, virtueEarned, type Line } from "./util.ts";
 
 export const OFFER_COST = 100;
+/** The offering is made once, in the passage of years that closes a chapter. */
 export const OFFER_MAX_PER_CHAPTER = 5;
 export const GRACE_YEARS = 10;
 /** Grace is offered when the next chapter starts in or after this year. */
@@ -15,6 +16,8 @@ export const LONGEVITY_MAX_PER_CHAPTER = 3;
 
 /** 노인성 감응 when leaving these chapters: +4, +2 more at the cumulative-virtue threshold. */
 export const RESONANCE: Readonly<Partial<Record<ChapterId, number>>> = { ch03: 600, ch10: 2000, ch13: 2800 };
+export const RESONANCE_YEARS = 4;
+export const RESONANCE_BONUS = 2;
 
 /** Adds or removes lifespan years and records gained/spent totals. */
 export function changeLife(save: PlayerSave, years: number): void {
@@ -30,18 +33,16 @@ export function lifeLine(years: number): Line {
   return line(`천수 ${signed(years)}년`, years >= 0 ? "good" : "bad");
 }
 
-/** Years an offering would grant right now (this chapter's allowance). */
-export function offerableYears(save: PlayerSave): number {
-  const room = Math.max(0, OFFER_MAX_PER_CHAPTER - save.offeredThisChapter);
-  return Math.max(0, Math.min(room, Math.floor(save.points.virtue / OFFER_COST)));
+/** Years an offering of `virtue` 공덕 buys (100 a year, at most 5). */
+export function offerYears(virtue: number): number {
+  return Math.max(0, Math.min(OFFER_MAX_PER_CHAPTER, Math.floor(virtue / OFFER_COST)));
 }
 
-/** Converts virtue into lifespan (100 → +1 year, max 5 per chapter). */
+/** Converts virtue into lifespan (100 → +1 year, at most 5). */
 export function offerVirtue(save: PlayerSave): number {
-  const years = offerableYears(save);
+  const years = offerYears(save.points.virtue);
   if (years <= 0) return 0;
   save.points.virtue -= years * OFFER_COST;
-  save.offeredThisChapter += years;
   changeLife(save, years);
   return years;
 }
@@ -66,16 +67,22 @@ export function applyGrace(save: PlayerSave): Line[] {
   ];
 }
 
+/** The 노인성 감응 still due on leaving `chapter`: its years, and the bonus once cumulative 공덕 reaches `threshold`. */
+export function resonanceDue(save: PlayerSave, chapter: ChapterId): { years: number; bonus: number; threshold: number } | null {
+  const threshold = RESONANCE[chapter];
+  if (threshold === undefined || save.flags[`resonance:${chapter}`] === true) return null;
+  return { years: RESONANCE_YEARS, bonus: RESONANCE_BONUS, threshold };
+}
+
 /** 노인성 감응 (§5.3.2) for the chapter being left; once per chapter. */
 export function applyResonance(save: PlayerSave, chapter: ChapterId): Line[] {
-  const threshold = RESONANCE[chapter];
-  const flag = `resonance:${chapter}`;
-  if (threshold === undefined || save.flags[flag] === true) return [];
-  save.flags[flag] = true;
-  const bonus = virtueEarned(save) >= threshold ? 2 : 0;
-  changeLife(save, 4 + bonus);
+  const due = resonanceDue(save, chapter);
+  if (!due) return [];
+  save.flags[`resonance:${chapter}`] = true;
+  const bonus = virtueEarned(save) >= due.threshold ? due.bonus : 0;
+  changeLife(save, due.years + bonus);
   chronicle(save, "노인성이 다시 빛났다. 지켜 온 사람들의 숨결이 천수가 되었다.", "epic");
-  return [line(`노인성 감응 — 천수 +${4 + bonus}년${bonus ? ` (누적 공덕 ${threshold} 이상 +2)` : ""}`, "epic")];
+  return [line(`노인성 감응 — 천수 +${due.years + bonus}년${bonus ? ` (누적 공덕 ${due.threshold} 이상 +${bonus})` : ""}`, "epic")];
 }
 
 /**

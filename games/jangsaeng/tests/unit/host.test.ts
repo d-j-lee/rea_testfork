@@ -249,6 +249,55 @@ test("the demo path decides where CH16 can lead", () => {
   assert.deepEqual(endings, { history: "N3", reform: "N1" });
 });
 
+test("a demo's seed comes from its chapter and path: a presenter meets the same rolls, readings and names on every run", () => {
+  const run = (demo: ChapterId | undefined, demoPath?: "history" | "reform") => {
+    const { connect, advance, store } = setup();
+    const client = connect();
+    hello(client, demo ? { demo, ...(demoPath ? { demoPath } : {}) } : {});
+    advance(300);
+    const start = structuredClone(stored(store, client.token));
+    if (demo) playUntil(client, advance, () => client.ending || client.chapters.length > 1, 400);
+    const save = stored(store, client.token);
+    return {
+      token: client.token,
+      seed: start.seed,
+      names: start.identities.map((identity) => identity.name),
+      branches: save.branches,
+      readings: client.prompts().flatMap((prompt) => prompt.options.flatMap((option) => (option.risk ? [`${prompt.id}:${option.id}:${option.risk.value}`] : []))),
+      checks: Object.entries(save.flags).filter(([flag]) => flag.startsWith("check:") || flag.startsWith("purge:")),
+    };
+  };
+  for (const [demo, demoPath] of [["ch06", undefined], ["ch16", "history"], ["ch16", "reform"]] as const) {
+    const first = run(demo, demoPath);
+    const again = run(demo, demoPath);
+    assert.notEqual(first.token, again.token, "every run is a new character");
+    const { token: _a, ...same } = first;
+    const { token: _b, ...also } = again;
+    assert.deepEqual(also, same, `${demo} ${demoPath ?? "default"}: the same seed, names, branches, checks and 풍향계`);
+    if (demo === "ch06") assert.ok(first.readings.length > 0, "CH06 shows 풍향계 readings");
+    if (demo === "ch16") assert.ok(first.checks.length > 0, "CH16 rolls its checks");
+  }
+  assert.equal(run("ch06").seed, run("ch06", "history").seed, "the default path is the history path");
+  assert.notEqual(run("ch16", "history").seed, run("ch16", "reform").seed, "each path its own rolls");
+  assert.notEqual(run(undefined).seed, run(undefined).seed, "a real character's seed is its token's");
+});
+
+test("노인성의 마지막 은혜 is offered in the planners into CH13 and later while 천수 ends before 1910, also on the plain demo path", () => {
+  // The rule (rules/lifespan.ts graceAvailable): not used yet, lifeEnd < 1910, next chapter from 1776 (CH13 on).
+  // The CH12 and CH13 demo presets end before 1910 (1905, 1909): their planners offer it; earlier ones never do.
+  for (const [chapter, offered] of [["ch07", false], ["ch11", false], ["ch12", true], ["ch13", true]] as const) {
+    const { connect, advance } = setup();
+    const client = connect();
+    hello(client, { demo: chapter });
+    advance(300);
+    assert.ok(playUntil(client, advance, () => client.prompt?.kind === "years", 800), `${chapter}: the years card opens`);
+    const plan = client.prompt?.data?.type === "years" ? client.prompt.data : null;
+    assert.ok(plan, chapter);
+    assert.equal(plan.graceYears, offered ? 10 : undefined, `${chapter}: lifeEnd ${client.self?.lifeEnd}`);
+    assert.equal("grace" in plan.suggested, false, `${chapter}: the suggestion never takes the grace`);
+  }
+});
+
 // ── Card queue, reloads and settlement ────────────────────────────────────
 
 /** The stored save for a token (the store keeps what the session last persisted). */

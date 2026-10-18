@@ -1,11 +1,14 @@
 // Passage of years (prompt kind "years"): one activity per token of the era
 // (spans and heading come from the host's plan), optional identity wash with a
 // new name, the 노인성 offering, the once-in-a-run 마지막 은혜 (its own switch,
-// off unless the player turns it on) and a lifespan projection. The planner
+// off unless the player turns it on) and the lifespan projection, which the
+// rules make from the plan's own numbers (projectYears) as the choices change.
+// The planner
 // starts from the plan's suggestion and suggested name. Confirming starts the
 // year-counter roll here and hands the plan, with the roll's promise, to the
 // owner, which sends { t: "years" } and re-syncs when the roll has ended.
 import type { WashMethod } from "../../shared/content/schema.ts";
+import { projectYears, type YearsProjection } from "../../shared/rules/index.ts";
 import type { PromptView, YearsPlanView } from "../../shared/types.ts";
 import { AWAKENING_YEAR, FINAL_YEAR } from "../../shared/types.ts";
 import type { AudioEngine } from "../audio/types.ts";
@@ -26,6 +29,16 @@ const WASH_IDS: readonly string[] = ["descendant", "fakeDeath", "monk", "merchan
 const isWash = (id: string): id is WashMethod => WASH_IDS.includes(id);
 /** How far the year counter moves: the panel's kicker and the roll show the same span. */
 const rollSpan = (from: number, to: number): string => `${from}년 → ${to}년`;
+/** "+3년" / "−1년" with a true minus sign. */
+const signedYears = (years: number): string => `${years < 0 ? "−" : "+"}${Math.abs(years)}년`;
+/** The parts of the projection the planner names under the lifespan line. */
+const PROJECTION_PARTS: readonly (readonly [Exclude<keyof YearsProjection, "lifeEnd" | "offerable">, string])[] = [
+  ["activities", "활동"],
+  ["wash", "세탁"],
+  ["resonance", "노인성 감응"],
+  ["offer", "봉헌"],
+  ["grace", "마지막 은혜"],
+];
 
 /**
  * Called once per confirmed plan. `passage` is the year-counter roll the
@@ -101,7 +114,7 @@ export class YearsPlanner {
     const chosen: string[] = Array.from({ length: tokens }, (_, i) => plan.suggested.activities[i] ?? plan.suggested.activities[0] ?? "");
     let current = 0;
     let wash: WashMethod | null = null;
-    let offer = plan.suggested.offer && plan.canOffer > 0;
+    let offer = plan.suggested.offer;
     const graceYears = plan.graceYears ?? 0;
     let grace = false;
     // The host's suggestion is the name a wash takes when the field is left as it is.
@@ -175,23 +188,33 @@ export class YearsPlanner {
         ),
       );
     };
+    // The rules project the plan from its own numbers; the planner only shows them.
     const renderProjection = () => {
-      const added = (offer ? plan.canOffer : 0) + (grace ? graceYears : 0);
-      const end = plan.lifeEnd + added;
+      const p = projectYears(plan, { activities: chosen, wash, offer, grace });
+      const end = p.lifeEnd;
+      const added = end - plan.lifeEnd;
       const axis = Math.max(FINAL_YEAR, end) - AWAKENING_YEAR;
       const at = (y: number) => ratio(y - AWAKENING_YEAR, axis).toFixed(4);
       const short = FINAL_YEAR - end;
+      const parts = PROJECTION_PARTS.filter(([key]) => p[key] !== 0).map(([key, label]) => `${label} ${signedYears(p[key])}`);
+      // A gain reads green; a loss (전사 위장 alone) stays in ink.
+      const tone = added > 0 ? { class: "good" } : null;
       summary.replaceChildren(
         h("span", { class: "st-k" }, "천수"),
         `${end}년`,
-        h("b", { class: "good" }, added > 0 ? ` +${added}` : ""),
+        h("b", tone, added !== 0 ? ` ${signedYears(added)}` : ""),
         short > 0 ? h("span", { class: "yr-short-chip" }, `${FINAL_YEAR}까지 −${short}년`) : h("span", { class: "yr-ok-chip" }, `${FINAL_YEAR}까지 닿는다`),
       );
+      offerLine.textContent = p.offerable > 0
+        ? `공덕을 바쳐 천수 +${p.offerable}년 (지닌 공덕 ${plan.virtue})`
+        : `공덕 ${plan.virtue} · 바칠 만큼 모이지 않았다`;
+      offerBtn.disabled = p.offerable <= 0 && !offer;
       projection.replaceChildren(
         h("p", null,
           h("span", { class: "st-k" }, "천수"), ` ${end}년까지`,
-          added > 0 ? h("b", { class: "good" }, ` (+${added})`) : null,
+          added !== 0 ? h("b", tone, ` (${signedYears(added)})`) : null,
           ` · ${plan.toYear}년에 ${Math.max(0, end - plan.toYear)}년 남음`),
+        ...(parts.length ? [h("p", { class: "muted" }, parts.join(" · "))] : []),
         h("span", { class: "life-track big", style: `--now:${at(plan.toYear)};--end:${at(end)};--goal:${at(FINAL_YEAR)}` },
           h("span", { class: "life-past" }), h("span", { class: "life-left" }), h("span", { class: "life-gap" }), h("span", { class: "life-goal" })),
         short > 0
@@ -227,12 +250,13 @@ export class YearsPlanner {
       );
       nameRow.classList.toggle("hidden", wash === null);
     };
+    // What the offering buys moves with the plan (선행·구휼, 출가 add 공덕), so renderProjection writes it.
+    const offerLine = h("span", null);
     const offerBtn = h("button", {
       type: "button",
       class: `yr-offer${offer ? " on" : ""}`,
       role: "switch",
       "aria-checked": String(offer),
-      disabled: plan.canOffer <= 0,
       onclick: () => {
         offer = !offer;
         offerBtn.setAttribute("aria-checked", String(offer));
@@ -242,9 +266,7 @@ export class YearsPlanner {
       },
     },
     h("span", { class: "offer-star", "aria-hidden": "true" }, "✦"),
-    h("span", { class: "offer-text" },
-      h("strong", null, "노인성 봉헌"),
-      h("span", null, plan.canOffer > 0 ? `공덕을 바쳐 천수 +${plan.canOffer}년 (지닌 공덕 ${plan.virtue})` : `공덕 ${plan.virtue} · 이번 장에는 더 바칠 수 없다`)),
+    h("span", { class: "offer-text" }, h("strong", null, "노인성 봉헌"), offerLine),
     h("span", { class: "switch", "aria-hidden": "true" }));
     // The last grace is offered only while it can be taken, and only ever on the player's word.
     const graceBtn = graceYears > 0
