@@ -3,7 +3,7 @@
 import type { EnemyDef } from "../content/schema.ts";
 import type { CharacterSprite, PropSprite, SpriteKey } from "../sprites.ts";
 import type { EntityKind } from "../types.ts";
-import { nearestFree } from "./physics.ts";
+import { isBlocked, nearestFree } from "./physics.ts";
 import { C, emit, type Actor, type BossState, type EnemyData, type FighterData, type Side, type Sim } from "./state.ts";
 
 export function allocId(sim: Sim): number {
@@ -94,14 +94,21 @@ export function removeActor(sim: Sim, a: Actor): void {
   releaseToken(sim, a);
 }
 
+/** True when a body of half-size `r` at (x, y) overlaps no blocked tile. */
+export function bodyFree(sim: Sim, x: number, y: number, r: number = C.BODY): boolean {
+  const g = sim.grid;
+  return (
+    !isBlocked(g, Math.floor(x - r), Math.floor(y - r)) &&
+    !isBlocked(g, Math.floor(x + r), Math.floor(y - r)) &&
+    !isBlocked(g, Math.floor(x - r), Math.floor(y + r)) &&
+    !isBlocked(g, Math.floor(x + r), Math.floor(y + r))
+  );
+}
+
 /** Walkable point near (x, y); falls back to the input when nothing is free. */
 export function freePoint(sim: Sim, x: number, y: number, radius = 12): { x: number; y: number } {
-  const tx = Math.floor(x);
-  const ty = Math.floor(y);
-  const g = sim.grid;
-  if (tx >= 0 && ty >= 0 && tx < g.width && ty < g.height && g.blocked[ty * g.width + tx] === 0)
-    return { x, y };
-  return nearestFree(g, x, y, radius) ?? { x, y };
+  if (bodyFree(sim, x, y)) return { x, y };
+  return nearestFree(sim.grid, x, y, radius) ?? { x, y };
 }
 
 export const hpScale = (level: number): number => 1 + 0.1 * (level - 1);
@@ -175,6 +182,7 @@ export function spawnEnemy(sim: Sim, def: EnemyDef, x: number, y: number, o: Ene
     detourX: 0,
     detourY: 0,
     strafe: sim.rng.chance(0.5) ? 1 : -1,
+    los: false,
   };
   a.en = en;
   return a;

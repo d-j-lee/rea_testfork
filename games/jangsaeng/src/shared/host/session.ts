@@ -17,15 +17,21 @@ import type {
 import type { GameMap } from "../map/generate.ts";
 import type { ClientMsg, PlayerAction, ServerMsg } from "../protocol.ts";
 import {
+  advanceStepYear,
   advanceYears,
   allocatePoint,
   applyEffects,
-  changeLife,
+  battleResult,
   computeEnding,
   derived,
+  equipItem,
   evalCond,
   heroSprite,
+  selfRevive,
+  slotSkill,
   suggestName,
+  useItem,
+  useLongevity,
   yearsPlan,
   type EffectOutcome,
 } from "../rules/index.ts";
@@ -245,7 +251,11 @@ export class Session {
     }
     this.save.step = index;
     if (fresh) this.save.objectives = {};
-    this.save.year = Math.max(this.save.year, step.year);
+    const passing = advanceStepYear(this.content, this.save, step.year);
+    if (passing.length) {
+      this.#refreshEntity();
+      this.#enqueue({ type: "result", id: serial("result"), title: `${step.year}년`, lines: passing });
+    }
     if (step.narration?.length)
       this.#enqueue({ type: "notice", id: serial("narration"), title: `${step.year}년`, body: [...step.narration] });
     if (step.onEnter?.length) this.#apply(step.onEnter);
@@ -392,23 +402,19 @@ export class Session {
   }
 
   onBattleEnd(battle: BattleDef, result: "victory" | "defeat"): void {
-    if (result === "victory") {
-      const first = !this.save.battlesWon.includes(battle.id);
-      if (first) {
-        this.save.battlesWon.push(battle.id);
-        this.#apply(battle.victory);
-        if (battle.great) {
-          changeLife(this.save, 2);
-          this.send({ t: "toast", text: `대첩 — ${battle.title}! 천수 +2년`, tone: "epic" });
-          this.save.chronicle.push({ year: this.save.year, text: `${battle.title}에서 승리했다.`, tone: "epic" });
-        } else this.send({ t: "toast", text: `${battle.title} 승리`, tone: "good" });
-      }
+    const won = result === "victory";
+    const first = won && !this.save.battlesWon.includes(battle.id);
+    // Victory rewards are granted once per battle; defeats always apply.
+    if (!won || first) {
+      const outcome = this.#process(battleResult(this.content, this.save, battle, won), true);
+      for (const line of outcome.lines)
+        if (line.tone === "epic") this.send({ t: "toast", text: line.text, tone: "epic" });
+    }
+    if (won) {
+      if (!battle.great) this.send({ t: "toast", text: `${battle.title} 승리`, tone: "good" });
       for (const objective of this.#visibleObjectives())
         if (objective.kind === "battle" && objective.target === battle.id) this.#completeObjective(objective.id);
-    } else {
-      this.#apply(battle.defeat);
-      this.send({ t: "toast", text: `${battle.title} — 물러났다. 다시 도전할 수 있다.`, tone: "bad" });
-    }
+    } else this.send({ t: "toast", text: `${battle.title} — 물러났다. 다시 도전할 수 있다.`, tone: "bad" });
     this.#markSelf();
     this.persist();
   }
@@ -420,9 +426,7 @@ export class Session {
 
   onRevived(byName: string | null): void {
     if (byName === null) {
-      changeLife(this.save, -1);
-      this.save.record.selfRevives++;
-      this.send({ t: "toast", text: "스스로 일어섰다. 천수 −1년", tone: "warn" });
+      for (const line of selfRevive(this.save)) this.send({ t: "toast", text: line.text, tone: "warn" });
     } else this.send({ t: "toast", text: `${byName}의 도움으로 일어섰다.`, tone: "good" });
     this.#markSelf();
   }
@@ -432,8 +436,7 @@ export class Session {
   }
 
   onLongevity(): void {
-    changeLife(this.save, -1);
-    this.save.longevityUses++;
+    if (!useLongevity(this.save)) return;
     this.send({
       t: "toast",
       text: `천수 1년을 태웠다 — 노인성 일섬 (${this.save.longevityUses}/3)`,
@@ -644,26 +647,15 @@ export class Session {
       case "allocate":
         if (allocatePoint(this.save, action.stat)) this.#refreshEntity();
         break;
-      case "equip": {
-        const item = this.content.items[action.item];
-        if (!item || !(this.save.inventory[item.id] ?? 0)) break;
-        if (item.kind === "weapon") this.save.equipment.weapon = item.id;
-        else if (item.kind === "armor") this.save.equipment.armor = item.id;
-        else break;
-        this.#refreshEntity();
+      case "equip":
+        if (equipItem(this.content, this.save, action.item)) this.#refreshEntity();
         break;
-      }
       case "use":
         this.#use(action.item);
         break;
-      case "slot": {
-        if (!this.save.skills.includes(action.skill)) break;
-        const slots = this.save.skillSlots.filter((skill) => skill !== action.skill);
-        slots.splice(action.slot - 1, 0, action.skill);
-        this.save.skillSlots = slots.slice(0, 4);
-        this.#refreshEntity();
+      case "slot":
+        if (slotSkill(this.save, action.skill, action.slot)) this.#refreshEntity();
         break;
-      }
       case "travel":
         this.#travel(action.site);
         break;
@@ -681,22 +673,12 @@ export class Session {
   }
 
   #use(itemId: string): void {
-    const item = this.content.items[itemId];
-    const world = this.channel?.world;
-    if (!item || !(this.save.inventory[itemId] ?? 0)) return;
-    if (item.kind === "consumable") {
-      if (item.heal) world?.heal(this.id, item.heal);
-      if (item.life) {
-        changeLife(this.save, item.life);
-        this.send({ t: "toast", text: `${item.name} — 천수 +${item.life}년`, tone: "epic" });
-      }
-      this.save.inventory[itemId] = (this.save.inventory[itemId] ?? 1) - 1;
-      this.#fxSelf("heal");
-    } else if (item.kind === "treasure" && item.price) {
-      this.save.inventory[itemId] = (this.save.inventory[itemId] ?? 1) - 1;
-      this.save.points.money += item.price;
-      this.#fxSelf("sfx", "coin");
-    }
+    const result = useItem(this.content, this.save, itemId);
+    if (!result.ok) return;
+    if (result.heal) this.channel?.world.heal(this.id, result.heal);
+    for (const line of result.lines)
+      this.send({ t: "toast", text: line.text, tone: result.life ? "epic" : "info" });
+    this.#fxSelf(result.heal || result.life ? "heal" : "sfx", result.heal || result.life ? undefined : "coin");
   }
 
   #travel(siteId: string): void {
@@ -740,7 +722,11 @@ export class Session {
   // ── Effects ────────────────────────────────────────────────────────────
 
   #apply(effects: readonly Effect[], collectLines = false): EffectOutcome {
-    const outcome = applyEffects(this.content, this.save, effects);
+    return this.#process(applyEffects(this.content, this.save, effects), collectLines);
+  }
+
+  /** Performs the runtime half of an effect outcome (single owner for both rule entry points). */
+  #process(outcome: EffectOutcome, collectLines = false): EffectOutcome {
     for (const toast of outcome.toasts) this.send({ t: "toast", text: toast.text, tone: toast.tone });
     if (outcome.levelsGained > 0) {
       this.send({ t: "toast", text: `레벨 ${this.save.level}!`, tone: "epic" });

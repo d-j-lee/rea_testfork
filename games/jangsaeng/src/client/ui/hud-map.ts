@@ -12,6 +12,7 @@ const VIEW_TILES = 44;
 
 interface MapCache {
   year: number;
+  ppt: number;
   canvas: HTMLCanvasElement;
 }
 
@@ -19,10 +20,10 @@ const caches: MapCache[] = [];
 
 /** Minimap surface for an era; at most two years are kept. */
 export function minimapFor(map: GameMap, year: number, ppt = SRC_PPT): HTMLCanvasElement {
-  const hit = caches.find((c) => c.year === year && c.canvas.width === map.width * ppt);
+  const hit = caches.find((c) => c.year === year && c.ppt === ppt);
   if (hit) return hit.canvas;
   const canvas = renderMinimap(map, year, ppt);
-  caches.unshift({ year, canvas });
+  caches.unshift({ year, ppt, canvas });
   if (caches.length > 2) caches.length = 2;
   return canvas;
 }
@@ -47,7 +48,7 @@ const MENU_BUTTONS: readonly { cmd: UiCommand; glyph: string; label: string; key
   { cmd: "character", glyph: "人", label: "인물", key: "C" },
   { cmd: "inventory", glyph: "囊", label: "소지품", key: "I", opt: true },
   { cmd: "nation", glyph: "國", label: "국운", key: "N" },
-  { cmd: "chronicle", glyph: "史", label: "연대기", key: "L", opt: true },
+  { cmd: "chronicle", glyph: "史", label: "연대기", key: "T", opt: true },
   { cmd: "menu", glyph: "≡", label: "메뉴", key: "Esc" },
 ];
 

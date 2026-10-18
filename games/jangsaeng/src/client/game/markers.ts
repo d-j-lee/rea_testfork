@@ -110,8 +110,17 @@ export function objectiveVisible(o: ObjectiveView): boolean {
   return !o.done && typeof o.x === "number" && typeof o.y === "number" && Number.isFinite(o.x) && Number.isFinite(o.y);
 }
 
-/** Floating chevron + ground pulse over an objective (world space). */
-export function drawObjectiveMarker(ctx: CanvasRenderingContext2D, o: ObjectiveView, timeMs: number): void {
+/**
+ * Floating chevron + ground pulse over an objective (world space). When a
+ * character stands on it, `anchorTop` (world y above its name plate) lifts
+ * the chevron clear of the plate.
+ */
+export function drawObjectiveMarker(
+  ctx: CanvasRenderingContext2D,
+  o: ObjectiveView,
+  timeMs: number,
+  anchorTop: number | null,
+): void {
   const x = Math.round((o.x as number) * TILE_PX);
   const y = Math.round((o.y as number) * TILE_PX);
   const k = (timeMs % 1600) / 1600;
@@ -123,7 +132,8 @@ export function drawObjectiveMarker(ctx: CanvasRenderingContext2D, o: ObjectiveV
   disc(ctx, x, y, 2);
   ctx.globalAlpha = prev;
   const s = chevronSurface(o.optional);
-  if (s) ctx.drawImage(s, x - 5, y - 30 + Math.round(Math.abs(Math.sin(timeMs / 320)) * -4));
+  const top = anchorTop !== null ? Math.round(anchorTop) - 12 : y - 34;
+  if (s) ctx.drawImage(s, x - 5, top + Math.round(Math.abs(Math.sin(timeMs / 320)) * -4));
 }
 
 /**

@@ -129,8 +129,14 @@ export interface OfflineSession {
 
 const TICK_MS = 50;
 
-/** Starts the in-page host. Throws when the host cannot be created. */
-export function startOffline(log: (line: string) => void): OfflineSession {
+/** A host that keeps failing to tick this long (ms) is abandoned. */
+const FATAL_MS = 2000;
+
+/**
+ * Starts the in-page host. Throws when the host cannot be created;
+ * `onFatal` reports a host that keeps failing to tick (the session stops).
+ */
+export function startOffline(log: (line: string) => void, onFatal: (reason: string) => void): OfflineSession {
   const store = new LocalStorageStore();
   const host = createGameHost({
     seed: "jangsaeng",
@@ -140,14 +146,25 @@ export function startOffline(log: (line: string) => void): OfflineSession {
     botsPerChannel: 8,
     log,
   });
-  let failures = 0;
+  let logged = false;
+  let failingSince = -1;
+  let stopped = false;
   const pump = () => {
+    if (stopped) return;
+    const now = performance.now();
     try {
       // host.tick runs every fixed step due since the last call, so the
       // timer also catches up after background-tab throttling.
-      host.tick(performance.now());
+      host.tick(now);
+      failingSince = -1;
     } catch (error) {
-      if (failures++ === 0) console.error("[offline host] tick failed", error);
+      if (!logged) console.error("[offline host] tick failed", error);
+      logged = true;
+      if (failingSince < 0) failingSince = now;
+      else if (now - failingSince > FATAL_MS) {
+        session.stop();
+        onFatal(`호스트 오류: ${error instanceof Error ? error.message : String(error)}`);
+      }
     }
   };
   const flush = () => {
@@ -165,12 +182,14 @@ export function startOffline(log: (line: string) => void): OfflineSession {
   window.addEventListener("pagehide", flush);
   document.addEventListener("visibilitychange", onHide);
   const transport = connectLoopback(host);
-  return {
+  const session: OfflineSession = {
     host,
     transport,
     pump,
     flush,
     stop() {
+      if (stopped) return;
+      stopped = true;
       clearInterval(timer);
       window.removeEventListener("pagehide", flush);
       document.removeEventListener("visibilitychange", onHide);
@@ -178,4 +197,5 @@ export function startOffline(log: (line: string) => void): OfflineSession {
       flush();
     },
   };
+  return session;
 }

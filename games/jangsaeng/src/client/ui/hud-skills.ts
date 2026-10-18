@@ -89,7 +89,7 @@ export class SkillState {
       const q = this.#quick;
       setText(it.glyph, q ? q.name.slice(0, 2) : "");
       setText(it.count, q ? String(q.count) : "");
-      it.el.title = q ? `${q.name} 사용 (Q) — ${q.desc}` : "쓸 수 있는 소모품이 없다";
+      it.el.title = q ? `${q.name} 사용 — ${q.desc}` : "쓸 수 있는 소모품이 없다";
       toggle(it.el, "empty", !q);
     }
     this.tick(now);
@@ -123,7 +123,7 @@ export class SkillBar {
     });
     const glyph = h("span", { class: "it-name" });
     const count = h("span", { class: "it-count" });
-    const item = h("button", { type: "button", class: "sk sk-item sk-bar", onclick: onItem }, glyph, count, h("span", { class: "sk-key", "aria-hidden": "true" }, "Q"));
+    const item = h("button", { type: "button", class: "sk sk-item sk-bar", onclick: onItem }, glyph, count);
     state.registerItem(item, glyph, count);
     this.el = h(
       "section",

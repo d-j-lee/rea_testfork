@@ -6,7 +6,6 @@ import type { BranchId, ChapterId, FlagValue, IdentityKind, NationKey, StatKey }
 import { BRANCH_IDS, CHAPTER_IDS, NATION_KEYS, POINT_KEYS, STAT_KEYS } from "../content/schema.ts";
 import type { ChronicleEntry, EndingResult, IdentityRecord, PlayerSave } from "../types.ts";
 import { SAVE_VERSION } from "../types.ts";
-import { INFILTRATION_MIN_BASE } from "./nation.ts";
 import { ensureEquipment, LEVEL_CAP, RANK_CAP, SKILL_SLOTS, STAT_CAP } from "./progression.ts";
 import { createSave } from "./save.ts";
 import { round1 } from "./util.ts";
@@ -176,7 +175,7 @@ function parse(content: ContentIndex, raw: unknown): PlayerSave | null {
 
   const nation = isRecord(raw.nation) ? raw.nation : {};
   for (const key of NATION_KEYS) save.nation[key] = num(nation[key], chapterDef.hist[key], 0, 100);
-  save.infiltration = num(raw.infiltration, 0, INFILTRATION_MIN_BASE, 100);
+  save.infiltration = num(raw.infiltration, 0, 0, 100);
   save.longFlags = {};
   for (const [flag, entry] of safeEntries(raw.longFlags)) {
     if (!isRecord(entry) || typeof entry.key !== "string" || !(NATION_KEYS as readonly string[]).includes(entry.key)) continue;

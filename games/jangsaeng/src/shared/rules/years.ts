@@ -48,96 +48,95 @@ function commerceGain(save: PlayerSave): number {
 
 // ── Activities ───────────────────────────────────────────────────────────
 
-interface ActivityDef {
+export interface ActivityDef {
   id: string;
   name: string;
   desc: string;
+  /** Planner hint for this save. */
   effect: (save: PlayerSave) => string;
   blocker?: (save: PlayerSave) => string | undefined;
+  /** Pure effects for one token. */
+  effects: (save: PlayerSave, ruling: string | undefined, salt: string) => Effect[];
+  /** Changes with no Effect kind (free points, bond decay, lineage counter); returns notes. */
+  extra?: (save: PlayerSave) => string[];
 }
 
 export const ACTIVITIES: readonly ActivityDef[] = [
-  { id: "martial", name: "무예 수련", desc: "산과 들에서 칼과 활을 갈고닦는다.", effect: () => "능력치 점수 +2" },
-  { id: "mountain", name: "산중 수행", desc: "깊은 산에 들어 세상과 인연을 끊고 기를 기른다.", effect: () => "천수 +1년 · 의심도 −8 · 인연 −5%" },
+  {
+    id: "martial", name: "무예 수련", desc: "산과 들에서 칼과 활을 갈고닦는다.", effect: () => "능력치 점수 +2",
+    effects: () => [],
+    extra: (save) => {
+      save.freePoints += 2;
+      return ["능력치 점수 +2"];
+    },
+  },
+  {
+    id: "mountain", name: "산중 수행", desc: "깊은 산에 들어 세상과 인연을 끊고 기를 기른다.",
+    effect: () => "천수 +1년 · 의심도 −8 · 인연 −5%",
+    effects: () => [{ k: "life", add: 1 }, { k: "suspicion", add: -8 }],
+    extra: (save) => {
+      for (const [npc, value] of Object.entries(save.bonds)) save.bonds[npc] = Math.round(value * 0.95);
+      return ["인연 −5%"];
+    },
+  },
   {
     id: "commerce", name: "치부", desc: "상단을 꾸려 물산을 사고판다.",
     effect: (save) => `전 +${commerceGain(save)} · 의심도 +2 · 명망 +1`,
+    effects: (save) => [
+      { k: "point", point: "money", add: commerceGain(save) },
+      { k: "suspicion", add: 2 },
+      { k: "point", point: "fame", add: 1 },
+    ],
   },
   {
     id: "office", name: "관직 근무", desc: "맡은 자리에서 성실히 봉직한다.",
     effect: (save) => `공적 +20 · 전 +${save.rank * SALARY_PER_RANK} · 집권 파벌 총애 +5 · 의심도 +4`,
     blocker: (save) => (save.rank >= 1 ? undefined : "관직이 없다"),
+    effects: (save, ruling) => [
+      { k: "point", point: "merit", add: 20 },
+      { k: "point", point: "money", add: save.rank * SALARY_PER_RANK },
+      ...(ruling ? [{ k: "favor", faction: ruling, add: 5 } as const] : []),
+      { k: "suspicion", add: 4 },
+    ],
   },
-  { id: "study", name: "학문", desc: "경서와 병서를 읽는다.", effect: () => "지략 +2" },
+  {
+    id: "study", name: "학문", desc: "경서와 병서를 읽는다.", effect: () => "지략 +2",
+    effects: () => [{ k: "stat", stat: "wit", add: 2 }],
+  },
   {
     id: "charity", name: "선행·구휼", desc: "굶주린 이웃에게 곡식을 나눈다.", effect: () => "전 −150 · 공덕 +60 · 민심 +1",
     blocker: (save) => (save.points.money >= 150 ? undefined : "전 150이 필요하다"),
+    effects: () => [
+      { k: "point", point: "money", add: -150 },
+      { k: "point", point: "virtue", add: 60 },
+      { k: "nation", key: "people", add: 1 },
+    ],
   },
-  { id: "network", name: "인맥 쌓기", desc: "오랜 가문들을 찾아 정을 잇는다.", effect: () => "가문 인연 +10" },
-  { id: "disciples", name: "제자 양성", desc: "뒤를 이을 제자를 길러 낸다.", effect: () => "제자 인연 +10 · 제자 계보 +1" },
+  {
+    id: "network", name: "인맥 쌓기", desc: "오랜 가문들을 찾아 정을 잇는다.", effect: () => "가문 인연 +10",
+    effects: (save, _ruling, salt) => [
+      { k: "bond", npc: FAMILY_BONDS[hashRoll(save.seed, `network:${salt}`) % FAMILY_BONDS.length] ?? "smith", add: 10 },
+    ],
+  },
+  {
+    id: "disciples", name: "제자 양성", desc: "뒤를 이을 제자를 길러 낸다.", effect: () => "제자 인연 +10 · 제자 계보 +1",
+    effects: () => [{ k: "bond", npc: "disciple", add: 10 }],
+    extra: (save) => {
+      const generations = save.flags["disciples"];
+      save.flags["disciples"] = (typeof generations === "number" ? generations : 0) + 1;
+      return ["제자 계보 +1"];
+    },
+  },
 ];
 
-function activityEffects(content: ContentIndex, save: PlayerSave, id: string, salt: string): Effect[] | "bonds" | undefined {
-  const ruling = content.chapters[save.chapter]?.ruling;
-  switch (id) {
-    case "martial":
-      return [];
-    case "mountain":
-      return "bonds";
-    case "commerce":
-      return [
-        { k: "point", point: "money", add: commerceGain(save) },
-        { k: "suspicion", add: 2 },
-        { k: "point", point: "fame", add: 1 },
-      ];
-    case "office":
-      return [
-        { k: "point", point: "merit", add: 20 },
-        { k: "point", point: "money", add: save.rank * SALARY_PER_RANK },
-        ...(ruling ? [{ k: "favor", faction: ruling, add: 5 } as const] : []),
-        { k: "suspicion", add: 4 },
-      ];
-    case "study":
-      return [{ k: "stat", stat: "wit", add: 2 }];
-    case "charity":
-      return [
-        { k: "point", point: "money", add: -150 },
-        { k: "point", point: "virtue", add: 60 },
-        { k: "nation", key: "people", add: 1 },
-      ];
-    case "network": {
-      const family = FAMILY_BONDS[hashRoll(save.seed, `network:${salt}`) % FAMILY_BONDS.length] ?? "smith";
-      return [{ k: "bond", npc: family, add: 10 }];
-    }
-    case "disciples":
-      return [{ k: "bond", npc: "disciple", add: 10 }];
-    default:
-      return undefined;
-  }
-}
-
+/** Runs one token; a blocked or unknown activity falls back to 무예 수련. */
 function runActivity(content: ContentIndex, save: PlayerSave, id: string, salt: string, label: string): Line[] {
   const def = ACTIVITIES.find((activity) => activity.id === id);
-  const blocked = def?.blocker?.(save);
+  const blocked = def ? def.blocker?.(save) : "알 수 없는 활동";
   const chosen = def && !blocked ? def : (ACTIVITIES[0] as ActivityDef);
-  const notes: string[] = [];
   const out = emptyOutcome();
-  const effects = activityEffects(content, save, chosen.id, salt);
-  if (chosen.id === "martial") {
-    save.freePoints += 2;
-    notes.push("능력치 점수 +2");
-  } else if (effects === "bonds") {
-    applyEffectsInto(content, save, [{ k: "life", add: 1 }, { k: "suspicion", add: -8 }], out);
-    for (const [npc, value] of Object.entries(save.bonds)) save.bonds[npc] = Math.round(value * 0.95);
-  } else if (effects) {
-    applyEffectsInto(content, save, effects, out);
-  }
-  if (chosen.id === "disciples") {
-    const generations = save.flags["disciples"];
-    save.flags["disciples"] = (typeof generations === "number" ? generations : 0) + 1;
-    notes.push("제자 계보 +1");
-  }
-  if (chosen.id === "mountain") notes.push("인연 −5%");
+  applyEffectsInto(content, save, chosen.effects(save, content.chapters[save.chapter]?.ruling, salt), out);
+  const notes = chosen.extra?.(save) ?? [];
   const detail = [...out.lines.map((entry) => entry.text), ...notes].join(" · ");
   const prefix = blocked ? `${label} · ${def?.name ?? id} 불가(${blocked}) → ${chosen.name}` : `${label} · ${chosen.name}`;
   return [line(detail ? `${prefix} — ${detail}` : prefix, "info")];

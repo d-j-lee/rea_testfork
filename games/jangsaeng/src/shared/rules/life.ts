@@ -2,6 +2,7 @@
 // successor takeover. GDD §4.3 / §4.4 / §4.8.
 import type { ContentIndex } from "../content/index.ts";
 import type { ChapterId, IdentityKind, WashMethod } from "../content/schema.ts";
+import { STAT_KEYS } from "../content/schema.ts";
 import { createRng } from "../rng.ts";
 import { AWAKENING_AGE, AWAKENING_YEAR, FINAL_YEAR, type PlayerSave } from "../types.ts";
 import { rankLabel, setRank } from "./progression.ts";
@@ -350,9 +351,7 @@ export function successorTakeover(content: ContentIndex, save: PlayerSave): Line
   const generation = (save.successor?.generation ?? 0) + 1;
   const oldName = save.name;
   const name = suggestName(save, `successor:${generation}`);
-  for (const stat of Object.keys(save.stats) as (keyof PlayerSave["stats"])[]) {
-    save.stats[stat] = Math.max(5, Math.floor(save.stats[stat] * 0.7));
-  }
+  for (const stat of STAT_KEYS) save.stats[stat] = Math.max(5, Math.floor(save.stats[stat] * 0.7));
   setRank(save, Math.floor(save.rank * 0.5));
   scaleBonds(save, 0.8);
   save.successor = { generation };

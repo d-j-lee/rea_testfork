@@ -72,16 +72,32 @@ export function connectWebSocket(
 /**
  * In-memory transport to a host running in this page. Messages are delivered
  * asynchronously (microtasks) in both directions, like a real socket, and are
- * structured-cloned so neither side can mutate the other's objects.
+ * structured-cloned so neither side can mutate the other's objects. A host
+ * exception while handling a message is logged; if the host has not answered
+ * anything yet (the handshake failed) the transport closes with the reason.
  */
 export function connectLoopback(host: GameHost): Transport {
   const handlers: ((message: ServerMsg) => void)[] = [];
   const closers: ((reason: string) => void)[] = [];
   let open = true;
+  let answered = false;
+  let failures = 0;
+  const shut = (reason: string) => {
+    if (!open) return;
+    open = false;
+    try {
+      connection.close(reason);
+    } catch (error) {
+      console.error("[loopback] host close failed", error);
+    }
+    for (const closer of closers) closer(reason);
+  };
   const connection: HostConnection = host.connect((message) => {
     if (!open) return;
+    answered = true;
     const copy = structuredClone(message);
     queueMicrotask(() => {
+      if (!open) return;
       for (const handler of handlers) handler(copy);
     });
   });
@@ -90,15 +106,18 @@ export function connectLoopback(host: GameHost): Transport {
     send: (message) => {
       if (!open) return;
       const copy = structuredClone(message);
-      queueMicrotask(() => connection.receive(copy));
+      queueMicrotask(() => {
+        if (!open) return;
+        try {
+          connection.receive(copy);
+        } catch (error) {
+          if (failures++ < 3) console.error(`[loopback] host failed on "${message.t}"`, error);
+          if (!answered) shut(`호스트 오류: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      });
     },
     onMessage: (handler) => handlers.push(handler),
     onClose: (handler) => closers.push(handler),
-    close: () => {
-      if (!open) return;
-      open = false;
-      connection.close("client closed");
-      for (const closer of closers) closer("closed");
-    },
+    close: () => shut("closed"),
   };
 }

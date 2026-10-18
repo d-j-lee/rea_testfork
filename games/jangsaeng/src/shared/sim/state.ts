@@ -204,6 +204,8 @@ export interface EnemyData {
   detourX: number;
   detourY: number;
   strafe: number;
+  /** Line of sight to the target at the last think. */
+  los: boolean;
 }
 
 export interface FighterData {

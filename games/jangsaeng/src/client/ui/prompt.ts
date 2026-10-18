@@ -145,7 +145,10 @@ export class PromptDialog {
             "data-option": o.id,
             "aria-disabled": o.disabled ? "true" : "false",
             onclick: () => {
-              if (this.#typing) this.#typing();
+              if (this.#typing) {
+                this.#typing();
+                return;
+              }
               if (o.disabled) {
                 this.#audio.sfx("denied");
                 return;

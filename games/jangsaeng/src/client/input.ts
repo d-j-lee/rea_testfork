@@ -8,7 +8,7 @@ export interface InputState {
   attack: boolean;
   shoot: boolean;
   dodge: boolean;
-  /** Skill slot pressed since the last sample (1-4) or 0. */
+  /** Skill pressed since the last sample: 1-4 slots, 5 = 노인성 일섬, 0 none. */
   skill: number;
   /** Interact pressed since the last sample. */
   interact: boolean;
@@ -33,7 +33,8 @@ const KEY_COMMANDS: Readonly<Record<string, UiCommand>> = {
   KeyI: "inventory",
   KeyM: "map",
   KeyN: "nation",
-  KeyL: "chronicle",
+  // T = 연대기 (chronicle); L stays a dodge key next to Shift.
+  KeyT: "chronicle",
   F1: "help",
   Slash: "help",
   Escape: "menu",
@@ -127,8 +128,12 @@ export class Input {
     }
     if (!this.#enabled) return;
     if (down) {
-      if (/^Digit[1-4]$/.test(event.code))
+      // 1-4: skill slots; 5 (or R): 노인성 일섬.
+      if (/^Digit[1-5]$/.test(event.code))
         this.#skill = Number(event.code.slice(5));
+      else if (/^Numpad[1-5]$/.test(event.code))
+        this.#skill = Number(event.code.slice(6));
+      else if (event.code === "KeyR") this.#skill = 5;
       if (event.code === "KeyE" || event.code === "KeyF") this.#interact = true;
       this.#down.add(event.code);
     } else this.#down.delete(event.code);

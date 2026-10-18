@@ -30,25 +30,54 @@ export const INFILTRATION_WEIGHTS: Readonly<Partial<Record<BranchId, number>>> =
 
 /** Infiltration is shown and carried from CH14 on. */
 export const INFILTRATION_FROM_ORDER = 14;
-/** Reform/diplomacy relief can push the stored base below 0, up to −15. */
-export const INFILTRATION_MIN_BASE = -15;
 export const ZEITGEIST_MAX = 5;
 
+/** Flag marking that a failed branch's weight is already inside save.infiltration. */
+export function infiltrationFlag(id: BranchId): string {
+  return `infiltration:${id}`;
+}
+
+function uncountedWeight(save: PlayerSave, include: (state: boolean | undefined) => boolean): number {
+  let sum = 0;
+  for (const id of BRANCH_IDS) {
+    if (include(save.branches[id]) && save.flags[infiltrationFlag(id)] !== true) sum += INFILTRATION_WEIGHTS[id] ?? 0;
+  }
+  return sum;
+}
+
 /**
- * Current meter value. Infiltration = stored base (content effects and
- * relief) + weights of branches already decided as failed, clamped 0..100.
+ * Records a branch outcome. A failure adds its infiltration weight to
+ * save.infiltration once (so the stored meter is what players see); a later
+ * success takes it back out.
+ */
+export function setBranch(save: PlayerSave, id: BranchId, ok: boolean): void {
+  save.branches[id] = ok;
+  const weight = INFILTRATION_WEIGHTS[id] ?? 0;
+  if (weight === 0) return;
+  const flag = infiltrationFlag(id);
+  const counted = save.flags[flag] === true;
+  if (!ok && !counted) {
+    save.infiltration = clamp(save.infiltration + weight, 0, 100);
+    save.flags[flag] = true;
+  } else if (ok && counted) {
+    save.infiltration = clamp(save.infiltration - weight, 0, 100);
+    delete save.flags[flag];
+  }
+}
+
+/**
+ * Current meter value. Infiltration also counts failed branches that were
+ * set without the branch effect (e.g. hand-built saves), clamped 0..100.
  */
 export function nationValue(save: PlayerSave, key: NationMeter): number {
   if (key !== "infiltration") return save.nation[key];
-  let value = save.infiltration;
-  for (const id of BRANCH_IDS) if (save.branches[id] === false) value += INFILTRATION_WEIGHTS[id] ?? 0;
-  return clamp(value, 0, 100);
+  return clamp(save.infiltration + uncountedWeight(save, (state) => state === false), 0, 100);
 }
 
 export function changeNation(save: PlayerSave, key: NationMeter, add: number): number {
   if (key === "infiltration") {
     const before = save.infiltration;
-    save.infiltration = clamp(Math.round(save.infiltration + add), INFILTRATION_MIN_BASE, 100);
+    save.infiltration = clamp(Math.round(save.infiltration + add), 0, 100);
     return save.infiltration - before;
   }
   const before = save.nation[key];
@@ -88,11 +117,9 @@ const WEIGHTS: readonly (readonly [NationKey, number])[] = [
   ["reform", 0.2],
 ];
 
-/** Final infiltration: unresolved branches count as failed. */
+/** Final infiltration: every branch that did not succeed adds its weight (unresolved = failed). */
 export function finalInfiltration(save: PlayerSave): number {
-  let value = save.infiltration;
-  for (const id of BRANCH_IDS) if (save.branches[id] !== true) value += INFILTRATION_WEIGHTS[id] ?? 0;
-  return clamp(value, 0, 100);
+  return clamp(save.infiltration + uncountedWeight(save, (state) => state !== true), 0, 100);
 }
 
 function round2(value: number): number {

@@ -5,9 +5,9 @@ import type { ContentIndex } from "../content/index.ts";
 import type { BattleDef, Cond, Effect, PurgeSpec } from "../content/schema.ts";
 import type { PlayerSave, ResultView } from "../types.ts";
 import { changeLife, changeSuspicion, lifeLine, suggestName, washIdentity } from "./life.ts";
-import { BRANCH_LABELS, changeNation, nationValue } from "./nation.ts";
+import { BRANCH_LABELS, changeNation, nationValue, setBranch } from "./nation.ts";
 import { computePurgeRisk, resolvePurge } from "./politics.ts";
-import { changeItem, grantExp, learnSkill, rankLabel, setRank } from "./progression.ts";
+import { changeItem, grantExp, learnSkill, rankLabel, setRank, STAT_CAP } from "./progression.ts";
 import {
   bondName,
   chronicle,
@@ -124,8 +124,9 @@ export function emptyOutcome(): EffectOutcome {
 const MERIT_SUBJECT_RANK: Readonly<Record<1 | 2 | 3 | 4, number>> = { 1: 14, 2: 13, 3: 12, 4: 10 };
 const MAX_DEPTH = 16;
 
+/** Same wording as the CH03 content titles, so the title is never duplicated. */
 export function meritSubjectTitle(grade: 1 | 2 | 3 | 4): string {
-  return grade === 4 ? "원종공신" : `개국 ${grade}등 공신`;
+  return grade === 4 ? "원종공신" : `개국공신 ${grade}등`;
 }
 
 /** Honor may go negative (betrayal); other points floor at 0. */
@@ -146,7 +147,7 @@ function applyOne(content: ContentIndex, save: PlayerSave, effect: Effect, out: 
   switch (effect.k) {
     case "stat": {
       const before = save.stats[effect.stat];
-      save.stats[effect.stat] = clamp(Math.round(before + effect.add), 1, 99);
+      save.stats[effect.stat] = clamp(Math.round(before + effect.add), 1, STAT_CAP);
       const delta = save.stats[effect.stat] - before;
       if (delta !== 0) lines.push(line(`${statName(effect.stat)} ${signed(delta)}`, toneOf(delta)));
       return;
@@ -228,7 +229,7 @@ function applyOne(content: ContentIndex, save: PlayerSave, effect: Effect, out: 
       return;
     }
     case "branch": {
-      save.branches[effect.id] = effect.ok;
+      setBranch(save, effect.id, effect.ok);
       lines.push(line(`역사의 분기 ${effect.id} ${BRANCH_LABELS[effect.id]} — ${effect.ok ? "성공" : "실패"}`, effect.ok ? "epic" : "bad"));
       return;
     }

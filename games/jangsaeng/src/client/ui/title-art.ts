@@ -58,12 +58,16 @@ function mountains(): SVGSVGElement {
     s("defs", null,
       grad("tm-far", "#4a4f63", "#2a2c38"),
       grad("tm-mid", "#2f3242", "#1b1c25"),
-      grad("tm-near", "#1d1e26", "#121217")),
+      grad("tm-near", "#1d1e26", "#121217"),
+      s("linearGradient", { id: "tm-mist", x1: "0", y1: "0", x2: "0", y2: "1" },
+        s("stop", { offset: "0", "stop-color": "#dfe3f0", "stop-opacity": "0" }),
+        s("stop", { offset: "0.55", "stop-color": "#dfe3f0", "stop-opacity": "0.13" }),
+        s("stop", { offset: "1", "stop-color": "#dfe3f0", "stop-opacity": "0" }))),
   );
   layers.forEach((layer, i) => {
     svg.appendChild(s("path", { d: ridgePath(layer.seed, layer.base, layer.amp, layer.freq), fill: layer.fill }));
     if (i < layers.length - 1)
-      svg.appendChild(s("rect", { class: `title-mist mist-${i}`, x: "-200", y: String(layer.base - 40), width: "2000", height: "120" }));
+      svg.appendChild(s("rect", { class: `title-mist mist-${i}`, x: "-300", y: String(layer.base - 70), width: "2200", height: "150", fill: "url(#tm-mist)" }));
   });
   return svg;
 }

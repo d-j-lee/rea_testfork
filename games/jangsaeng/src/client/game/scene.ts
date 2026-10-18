@@ -13,7 +13,7 @@ import {
 import type { ChapterView, SelfView, Team } from "../../shared/types.ts";
 import { characterHeight, drawCharacter, type DrawCharacterOptions } from "../render/characters.ts";
 import { EffectSystem } from "../render/effects.ts";
-import { drawAtmosphere } from "../render/lighting.ts";
+import { drawAtmosphere, type AtmosphereOptions } from "../render/lighting.ts";
 import { drawEmote, drawHpBar, drawNamePlate, drawSelectionRing } from "../render/overlays.ts";
 import { TEAM_COLORS } from "../render/palette.ts";
 import { drawProp, propHeight } from "../render/props.ts";
@@ -69,6 +69,8 @@ class EntityView implements Drawable {
   readonly opts: DrawCharacterOptions = {};
   flash: string | undefined = undefined;
   alpha = 1;
+  /** World y of the top of the overlay stack (plates, bars) this frame. */
+  top = 0;
 
   constructor(track: EntityTrack) {
     this.track = track;
@@ -124,6 +126,7 @@ export class Scene {
   readonly #views = new Map<number, EntityView>();
   readonly #drawables: Drawable[] = [];
   readonly #visible: EntityView[] = [];
+  readonly #atmosphere: AtmosphereOptions = { hour: 12, weather: "clear", timeMs: 0, pixelScale: 1 };
   #byDepth = (a: Drawable, b: Drawable) => a.sortY - b.sortY;
 
   constructor(map: GameMap) {
@@ -158,17 +161,24 @@ export class Scene {
     for (const v of this.#visible) list.push(v);
     list.sort(this.#byDepth);
     for (const d of list) d.draw(ctx, t);
+    // X-ray: when a roof or wall hides the player, show them through it.
+    if (selfView?.visible && selfView.character && this.#occluded(selfView, list)) {
+      const prev = ctx.globalAlpha;
+      ctx.globalAlpha = prev * 0.45;
+      selfView.draw(ctx, t);
+      ctx.globalAlpha = prev;
+    }
     this.ink.update(f.visualDt);
     this.ink.draw(ctx, t);
 
     // ── Atmosphere (screen space) ───────────────────────────────────────
     const chapter = f.chapter;
-    drawAtmosphere(ctx, cam.width, cam.height, {
-      hour: chapter?.hour ?? 12,
-      weather: chapter?.weather ?? "clear",
-      timeMs: t,
-      pixelScale: cam.scale,
-    });
+    const atmo = this.#atmosphere;
+    atmo.hour = chapter?.hour ?? 12;
+    atmo.weather = chapter?.weather ?? "clear";
+    atmo.timeMs = t;
+    atmo.pixelScale = cam.scale;
+    drawAtmosphere(ctx, cam.width, cam.height, atmo);
 
     // ── Readable layer (world space, above the grade) ───────────────────
     applyCamera(ctx, cam);
@@ -182,12 +192,29 @@ export class Scene {
     this.seals.update(f.visualDt);
     this.seals.draw(ctx);
     const objectives = f.self?.objectives;
-    if (objectives) for (const o of objectives) if (objectiveVisible(o)) drawObjectiveMarker(ctx, o, f.now);
+    if (objectives)
+      for (const o of objectives)
+        if (objectiveVisible(o)) drawObjectiveMarker(ctx, o, f.now, this.#anchorTop(o.x as number, o.y as number));
 
     // ── Screen-space cues ───────────────────────────────────────────────
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     if (objectives) for (const o of objectives) if (objectiveVisible(o)) drawObjectiveArrow(ctx, f.rig, o, f.unit, f.now);
     this.vignette.draw(ctx, cam.width, cam.height, f.now);
+  }
+
+  /** True when a structure drawn after `v` overlaps its sprite box. */
+  #occluded(v: EntityView, list: readonly Drawable[]): boolean {
+    const x0 = v.wx - 7;
+    const x1 = v.wx + 7;
+    const y1 = v.wy - 2;
+    const y0 = v.wy - 22;
+    for (let i = list.length - 1; i >= 0; i--) {
+      const d = list[i] as Drawable & { bounds?: { x0: number; y0: number; x1: number; y1: number } };
+      if (d.sortY <= v.sortY) break;
+      const b = d.bounds;
+      if (b && b.x0 < x1 && b.x1 > x0 && b.y0 < y1 && b.y1 > y0) return true;
+    }
+    return false;
   }
 
   #prepareViews(f: SceneFrame, view: { x0: number; y0: number; x1: number; y1: number }): void {
@@ -208,6 +235,7 @@ export class Scene {
       v.wx = Math.round(track.x * TILE_PX * s) / s;
       v.wy = Math.round(track.y * TILE_PX * s) / s;
       v.scale = s;
+      v.top = v.wy - 30;
       v.visible = v.wx >= x0 && v.wx <= x1 && v.wy >= y0 && v.wy <= y1 && (v.character !== null || v.prop !== null);
       // Enemy deaths dissolve into ink; others just lie down.
       const tm = track.snap.tm;
@@ -257,6 +285,7 @@ export class Scene {
       const isSelf = track.id === selfId;
       const boss = tm === "boss";
       let y = v.wy - (lying ? 10 : characterHeight(v.character)) - 1;
+      v.top = y;
       if (track.down) y -= 18 / s; // above the 사경 label
       const hp = Math.max(0, Math.min(100, track.hp));
       const showHp = !isSelf && !lying && (boss || tm === "enemy" || hp < 100);
@@ -270,8 +299,29 @@ export class Scene {
         drawNamePlate(ctx, snap.n, v.wx, y, { color: teamColor(tm), title, level: snap.lvl, small });
         y -= (((small ? 11 : 12) + 6 + (title ? 13 : 0)) * mult) / s;
       }
-      if (track.mk) drawEmote(ctx, track.mk, v.wx, y - 1, t);
+      if (track.mk) {
+        drawEmote(ctx, track.mk, v.wx, y - 1, t);
+        y -= 14;
+      }
+      v.top = y;
     }
+  }
+
+  /** Overlay top of the visible character standing on a tile point, if any. */
+  #anchorTop(x: number, y: number): number | null {
+    let best: EntityView | null = null;
+    let bestD = 1.2 * 1.2;
+    for (const v of this.#visible) {
+      if (!v.character) continue;
+      const dx = v.track.x - x;
+      const dy = v.track.y - y;
+      const d = dx * dx + dy * dy;
+      if (d < bestD) {
+        bestD = d;
+        best = v;
+      }
+    }
+    return best ? best.top : null;
   }
 
   /** Canvas position of an entity (for the player-screen contract). */

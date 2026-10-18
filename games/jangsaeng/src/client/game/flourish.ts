@@ -55,17 +55,16 @@ function paintSeal(seal: Seal, rows: readonly string[], seed: number): void {
   ctx.fillStyle = SEAL_DARK;
   ctx.fillRect(1, ih, iw, 1);
   ctx.fillRect(iw, 1, 1, ih);
+  // Inner rim in a lighter red, broken here and there like a hand-pressed
+  // stamp (kept off the digits so the number stays the loudest thing).
   ctx.fillStyle = SEAL_LIGHT;
-  ctx.fillRect(2, 2, iw - 3, 1);
-  // Inner border line, broken here and there like a hand-pressed stamp.
-  ctx.fillStyle = PAPER;
-  for (let x = 3; x < iw - 1; x++) {
-    if (hash01(x, 1, seed) > 0.18) ctx.fillRect(x, 3, 1, 1);
-    if (hash01(x, 2, seed) > 0.18) ctx.fillRect(x, ih - 2, 1, 1);
+  for (let x = 2; x < iw; x++) {
+    if (hash01(x, 1, seed) > 0.22) ctx.fillRect(x, 2, 1, 1);
+    if (hash01(x, 2, seed) > 0.22) ctx.fillRect(x, ih - 1, 1, 1);
   }
-  for (let y = 4; y < ih - 2; y++) {
-    if (hash01(3, y, seed) > 0.18) ctx.fillRect(3, y, 1, 1);
-    if (hash01(4, y, seed) > 0.18) ctx.fillRect(iw - 2, y, 1, 1);
+  for (let y = 3; y < ih - 1; y++) {
+    if (hash01(3, y, seed) > 0.22) ctx.fillRect(2, y, 1, 1);
+    if (hash01(4, y, seed) > 0.22) ctx.fillRect(iw - 1, y, 1, 1);
   }
   // Digits in paper colour (白文印), shadowed for depth.
   for (const [color, oy] of [
@@ -79,10 +78,6 @@ function paintSeal(seal: Seal, rows: readonly string[], seed: number): void {
         if (row[c] === "#") ctx.fillRect(1 + pad + c * s, 1 + pad + r * s + oy, s, s);
     }
   }
-  // Ink speckle: a few dry spots in the red field.
-  ctx.fillStyle = SEAL_DARK;
-  for (let i = 0; i < 4; i++)
-    ctx.fillRect(2 + Math.floor(hash01(i, 7, seed) * (iw - 2)), 2 + Math.floor(hash01(i, 9, seed) * (ih - 2)), 1, 1);
   seal.w = w;
   seal.h = h;
 }
