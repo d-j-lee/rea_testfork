@@ -144,14 +144,33 @@ export function siteAt(
 }
 
 const FOOTPRINT: Readonly<Record<SiteKind, readonly [number, number]>> = {
-  capital: [15, 13],
-  city: [11, 9],
-  town: [9, 7],
-  fortress: [9, 9],
-  port: [9, 7],
+  capital: [11, 9],
+  city: [9, 7],
+  town: [7, 5],
+  fortress: [7, 7],
+  port: [7, 5],
   battlefield: [7, 7],
-  village: [7, 5],
-  frontier: [9, 7],
+  village: [5, 5],
+  frontier: [7, 5],
+};
+
+/** Per-site footprint overrides where geography is tight. */
+const FOOTPRINT_OVERRIDE: Readonly<Record<string, readonly [number, number]>> = {
+  wihwado: [5, 3],
+  haengju: [5, 5],
+  jemulpo: [5, 5],
+};
+
+/** Placement priority: earlier kinds keep their true position on overlap. */
+const SITE_PRIORITY: Readonly<Record<SiteKind, number>> = {
+  capital: 0,
+  city: 1,
+  fortress: 2,
+  frontier: 3,
+  port: 4,
+  town: 5,
+  village: 6,
+  battlefield: 7,
 };
 
 /** Historic trunk roads (대로) and important branches between sites. */
@@ -454,7 +473,7 @@ export function generateMap(seed = "jangsaeng"): GameMap {
   const sites: Site[] = SITES.map((source) => placeSite(source));
   function placeSite(source: SiteSource): Site {
     const centre = lonLatToTile(source.at);
-    const [fw, fh] = FOOTPRINT[source.kind];
+    const [fw, fh] = FOOTPRINT_OVERRIDE[source.id] ?? FOOTPRINT[source.kind];
     const cx = Math.floor(centre.x);
     const cy = Math.floor(centre.y);
     const rect = {
@@ -476,17 +495,22 @@ export function generateMap(seed = "jangsaeng"): GameMap {
     if (source.hanja) site.hanja = source.hanja;
     return site;
   }
+  separateSites(sites, land, W, H);
   for (const site of sites) stampSite(site);
   function stampSite(site: Site) {
     const { rect } = site;
     const naval = site.kind === "battlefield" && !land[index(site.x, site.y)];
     if (naval) {
-      // Sea battles are fought on a moored fleet's decks.
-      for (let y = rect.y + 1; y < rect.y + rect.h - 1; y++)
+      // Sea battles are fought on a moored fleet's decks. Rows are stamped
+      // in even-aligned pairs so each hull renders two rows tall.
+      const top = (rect.y + 1) % 2 === 0 ? rect.y + 1 : rect.y + 2;
+      const rows = Math.max(2, Math.floor((rect.h - 2) / 2) * 2);
+      for (let y = top; y < top + rows; y++)
         for (let x = rect.x; x < rect.x + rect.w; x++)
           if (x >= 0 && y >= 0 && x < W && y < H && !land[index(x, y)])
             tiles[index(x, y)] = Tile.Deck;
-      tiles[index(site.x, site.y)] = Tile.Deck;
+      if (!land[index(site.x, site.y)] && tiles[index(site.x, site.y)] !== Tile.Deck)
+        site.y = top;
       return;
     }
     const ground = site.kind === "battlefield" ? Tile.Grass : Tile.TownGround;
@@ -494,10 +518,9 @@ export function generateMap(seed = "jangsaeng"): GameMap {
       for (let x = rect.x; x < rect.x + rect.w; x++) {
         if (x < 0 || y < 0 || x >= W || y >= H) continue;
         const i = index(x, y);
-        const current = tiles[i] as TileId;
-        if (current === Tile.River) tiles[i] = Tile.Bridge;
-        else if (land[i]) tiles[i] = ground;
+        // Rivers stay rivers inside towns; roads bridge them where they cross.
         // Ports keep their sea tiles; ships are placed there.
+        if (land[i] && tiles[i] !== Tile.River) tiles[i] = ground;
       }
     }
     if (site.kind !== "battlefield") tiles[index(site.x, site.y)] = Tile.Plaza;
@@ -635,8 +658,14 @@ export function generateMap(seed = "jangsaeng"): GameMap {
       site.kind === "fortress" ||
       site.kind === "city";
     const roadAt = (x: number, y: number) => {
-      const tile = tiles[index(x, y)];
-      return tile === Tile.Road || tile === Tile.Bridge || tile === Tile.Plaza;
+      const tile = tiles[index(x, y)] as TileId;
+      // Gaps where streets pass, and no walls standing in water.
+      return (
+        tile === Tile.Road ||
+        tile === Tile.Bridge ||
+        tile === Tile.Plaza ||
+        TILE_INFO[tile].water
+      );
     };
     const free = new Uint8Array(rect.w * rect.h);
     const mark = (x: number, y: number, w: number, h: number) => {
@@ -707,7 +736,7 @@ export function generateMap(seed = "jangsaeng"): GameMap {
     }
     if (site.kind === "capital") {
       const px = site.x - 2;
-      const py = rect.y + 2;
+      const py = rect.y + 1;
       if (site.id === "hanyang") {
         emit({
           kind: "palace",
@@ -900,6 +929,48 @@ export function generateMap(seed = "jangsaeng"): GameMap {
         siteId: site.id,
       });
     }
+  }
+}
+
+/**
+ * Moves lower-priority sites away from higher-priority ones so footprints
+ * (plus a 2-tile margin) never overlap. Searches outward in 8 directions and
+ * keeps land sites on land.
+ */
+function separateSites(sites: Site[], land: Uint8Array, width: number, height: number): void {
+  const margin = 1;
+  const overlaps = (a: Rect, b: Rect) =>
+    a.x < b.x + b.w + margin &&
+    b.x < a.x + a.w + margin &&
+    a.y < b.y + b.h + margin &&
+    b.y < a.y + a.h + margin;
+  const ordered = [...sites].sort((a, b) => SITE_PRIORITY[a.kind] - SITE_PRIORITY[b.kind]);
+  const placed: Site[] = [];
+  for (const site of ordered) {
+    const onLand = land[site.y * width + site.x] === 1;
+    const clash = (rect: Rect) => placed.some((other) => overlaps(rect, other.rect));
+    if (clash(site.rect)) {
+      // Nearest valid spot by displacement (ties broken by scan order).
+      let best: { x: number; y: number; rect: Rect; d: number } | null = null;
+      for (let dy = -14; dy <= 14; dy++)
+        for (let dx = -14; dx <= 14; dx++) {
+          const d = Math.hypot(dx, dy);
+          if (d === 0 || d > 14 || (best && d >= best.d)) continue;
+          const x = site.x + dx;
+          const y = site.y + dy;
+          const rect = { ...site.rect, x: site.rect.x + dx, y: site.rect.y + dy };
+          if (rect.x < 1 || rect.y < 1 || rect.x + rect.w >= width || rect.y + rect.h >= height) continue;
+          if (onLand && land[y * width + x] !== 1) continue;
+          if (clash(rect)) continue;
+          best = { x, y, rect, d };
+        }
+      if (best) {
+        site.x = best.x;
+        site.y = best.y;
+        site.rect = best.rect;
+      }
+    }
+    placed.push(site);
   }
 }
 
