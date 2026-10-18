@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { ENEMIES } from "../../src/shared/content/enemies.ts";
 import type { ChapterDef } from "../../src/shared/content/schema.ts";
-import { Tile } from "../../src/shared/map/tiles.ts";
+import { TILE_INFO, Tile, type TileId } from "../../src/shared/map/tiles.ts";
 import type { FxEvent } from "../../src/shared/types.ts";
 import { BOSS, CHAPTER, DERIVED, arena, fightNearest, input, makeWorld, map, run, siteCentre, spec } from "./world-fixture.ts";
 
@@ -72,8 +72,8 @@ test("a destroyed defend target loses the battle", () => {
   assert.deepEqual(log.battles, [{ id: "defend", result: "defeat", participants: [p.id] }]);
 });
 
-test("all participating humans downed at once is a defeat (bots excluded)", () => {
-  const { world, log } = makeWorld("wipe");
+test("a downed hero with a companion standing is revived and the battle goes on", () => {
+  const { world, log } = makeWorld("revive");
   const c = arena();
   const human = spec(c.x, c.y);
   const bot = spec(c.x + 1, c.y, { kind: "bot", derived: { ...DERIVED, maxHp: 100_000 } });
@@ -81,6 +81,44 @@ test("all participating humans downed at once is a defeat (bots excluded)", () =
   world.addPlayer(bot);
   world.startBattle("waves", human.id);
   run(world, 0.2);
+  world.damage(human.id, 1000);
+  run(world, 0.1);
+  assert.deepEqual(log.downed, [human.id]);
+  assert.deepEqual(log.battles, [], "the first down is not a defeat while a companion stands");
+  run(world, 2.1);
+  assert.deepEqual(log.revived, [{ player: human.id, by: bot.id }]);
+  assert.equal(world.playerStatus(human.id)?.downed, null);
+  assert.ok(world.battleView(), "the battle continues after the revive");
+  assert.deepEqual(log.battles, []);
+});
+
+test("a downed hero nobody revives loses the battle when the down timer runs out", () => {
+  const { world, log } = makeWorld("bleed-out");
+  const c = arena();
+  const human = spec(c.x, c.y);
+  const bot = spec(c.x - 5, c.y, { kind: "bot", derived: { ...DERIVED, maxHp: 100_000 } });
+  world.addPlayer(human);
+  world.addPlayer(bot);
+  world.startBattle("waves", human.id);
+  run(world, 0.2);
+  world.damage(human.id, 1000);
+  run(world, DERIVED.downSeconds - 0.5);
+  assert.deepEqual(log.battles, [], "still revivable");
+  assert.ok((world.playerStatus(human.id)?.downed ?? 0) > 0);
+  run(world, 1);
+  assert.deepEqual(log.battles, [{ id: "waves", result: "defeat", participants: [human.id, bot.id] }]);
+});
+
+test("every participant downed at once is a defeat", () => {
+  const { world, log } = makeWorld("wipe");
+  const c = arena();
+  const human = spec(c.x, c.y);
+  const bot = spec(c.x + 1, c.y, { kind: "bot" });
+  world.addPlayer(human);
+  world.addPlayer(bot);
+  world.startBattle("waves", human.id);
+  run(world, 0.2);
+  world.damage(bot.id, 1000);
   world.damage(human.id, 1000);
   run(world, 0.1);
   assert.deepEqual(log.battles, [{ id: "waves", result: "defeat", participants: [human.id, bot.id] }]);
@@ -161,6 +199,34 @@ test("scaled battles count humans 1 and bots 0.5", () => {
   assert.equal(boss.maxHp, Math.round(body.hp * (1 + 0.1 * 7) * 2.3));
   assert.equal(ents.filter((e) => e?.sprite === "bandit").length, 8);
   assert.equal(world.battleView()?.participants, 4);
+});
+
+test("waves from the sea land on the shore at the rim, away from the hero", () => {
+  const chapter = withBattles([{
+    id: "landing", title: "상륙", site: "dongnae", radius: 7, kind: "waves",
+    waves: [{ enemies: [{ enemy: "bandit", count: 6, level: 1 }], from: "sea" }], victory: [], defeat: [],
+  }]);
+  const { world } = makeWorld("landing", chapter);
+  const at = siteCentre("dongnae");
+  const hero = spec(at.x, at.y, { derived: { ...DERIVED, maxHp: 100_000 } });
+  world.addPlayer(hero);
+  assert.ok(world.startBattle("landing", hero.id));
+  run(world, 0.05);
+  const ring = world.battleView();
+  const me = world.playerStatus(hero.id);
+  assert.ok(ring && me);
+  const m = map();
+  const bandits = world.entityIds().map((id) => world.inspect(id)).filter((e) => e?.sprite === "bandit");
+  assert.equal(bandits.length, 6);
+  for (const e of bandits) {
+    assert.ok(e);
+    assert.ok(Math.hypot(e.x - ring.x, e.y - ring.y) <= ring.radius, "inside the ring");
+    assert.ok(Math.hypot(e.x - me.x, e.y - me.y) >= 4, `bandit at ${e.x},${e.y} lands on top of the hero at ${me.x},${me.y}`);
+    assert.ok(!TILE_INFO[m.tiles[Math.floor(e.y) * m.width + Math.floor(e.x)] as TileId].water);
+    const shore = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1], [2, 0], [-2, 0], [0, 2], [0, -2]]
+      .some(([dx, dy]) => TILE_INFO[m.tiles[(Math.floor(e.y) + (dy ?? 0)) * m.width + Math.floor(e.x) + (dx ?? 0)] as TileId].water);
+    assert.ok(shore, `bandit at ${e.x},${e.y} landed by the water`);
+  }
 });
 
 test("participants cannot leave the ring; aborting ends silently", () => {

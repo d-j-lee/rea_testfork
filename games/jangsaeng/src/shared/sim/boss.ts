@@ -3,6 +3,7 @@
 // shield_wall. Phase lines appear as FX text with a shout and a big shake.
 import type { BossDef, BossPhase, EnemyDef } from "../content/schema.ts";
 import { startCast, startCharge, startSpin, startVolley } from "./actions.ts";
+import { arenaSpot } from "./arena.ts";
 import { sourceOf } from "./combat.ts";
 import { spawnEnemy } from "./entities.ts";
 import { schedule } from "./projectiles.ts";
@@ -84,7 +85,10 @@ function summonDef(sim: Sim, phase: BossPhase, fallback: EnemyDef["behavior"]): 
 function addMinion(sim: Sim, a: Actor, def: EnemyDef, x: number, y: number): void {
   const b = a.en?.boss;
   if (!b || !a.en) return;
-  const m = spawnEnemy(sim, def, x, y, { level: Math.max(1, b.def.level - 1), battle: a.en.battle, leash: a.en.leash });
+  // A battle boss calls its men onto the arena's ground, never into a walled pocket.
+  const arena = a.en.battle ? sim.battle?.arena : undefined;
+  const at = arena ? arenaSpot(arena, x, y) : { x, y };
+  const m = spawnEnemy(sim, def, at.x, at.y, { level: Math.max(1, b.def.level - 1), battle: a.en.battle, leash: a.en.leash });
   if (m.en) {
     m.en.state = "chase";
     m.en.target = a.en.target;
