@@ -131,6 +131,51 @@ test("a lone hero who revives themself mid-battle fights on from the rim; the ba
   assert.ok(farthest <= ring.radius + 0.5, `the hero stayed in the fight (at most ${farthest.toFixed(1)} tiles out)`);
 });
 
+test("a lost battle's fallen get up on its rim for free, and it starts again only once the player has stepped away", () => {
+  const channel = channelOf(8);
+  const hero = join(channel, "한결");
+  const world = channel.world;
+  tick(channel, 1);
+  assert.ok(channel.startBattle(BATTLE, hero.session, true));
+  const ring = world.battleView();
+  assert.ok(ring);
+  tick(channel, 1);
+  const { lifeEnd, record } = hero.save;
+  const selfRevives = record.selfRevives;
+  for (const id of [hero.session.id, ...channel.bots.keys()]) world.damage(id, 1e6);
+  assert.notEqual(world.playerStatus(hero.session.id)?.downed, null, "the hero lies downed");
+  channel.tick(DT);
+  assert.equal(world.battleView(), null, "everyone fell at once: the battle is lost");
+  // Nobody is left lying out a down timer: the fallen withdraw to the rim at a quarter of their HP.
+  for (const id of [hero.session.id, ...channel.bots.keys()]) {
+    const status = world.playerStatus(id);
+    assert.ok(status && status.downed === null, `${id === hero.session.id ? "the hero" : `companion ${id}`} is up`);
+    const out = distance(status, ring);
+    assert.ok(out > ring.radius - 2.5 && out <= ring.radius + 0.5, `${id} stands on the rim, ${out.toFixed(1)} tiles out`);
+  }
+  const me = world.playerStatus(hero.session.id);
+  assert.ok(me && me.hp <= Math.ceil(me.maxHp * 0.3), `the hero got up hurt (${me?.hp}/${me?.maxHp})`);
+  tick(channel, 0.5);
+  // It is a withdrawal, not a revive: no 천수, no self-revive on the record, and the toast says so.
+  assert.equal(hero.save.lifeEnd, lifeEnd);
+  assert.equal(hero.save.record.selfRevives, selfRevives);
+  assert.ok(!hero.toasts.some((text) => text.startsWith("스스로 일어서다")), hero.toasts.join(" / "));
+  assert.ok(hero.toasts.some((text) => text.includes("물러났다") && text.includes("다시 들어서면")), hero.toasts.join(" / "));
+  // Standing at the ring it lost does not start it again.
+  tick(channel, 6);
+  assert.equal(world.battleView(), null, "the lost battle does not restart by itself");
+  assert.ok(world.atBattle(BATTLE, hero.session.id), "though the hero still stands at it");
+  // Walking out of its reach and back in does.
+  world.teleport(hero.session.id, ring.x, ring.y + ring.radius + 16);
+  tick(channel, 0.5);
+  assert.ok(!world.atBattle(BATTLE, hero.session.id), `the hero stepped away (${JSON.stringify(world.playerStatus(hero.session.id))})`);
+  assert.equal(world.battleView(), null, "away from it nothing starts");
+  world.teleport(hero.session.id, ring.x, ring.y + ring.radius + 2);
+  tick(channel, 0.5);
+  assert.ok(world.atBattle(BATTLE, hero.session.id), `the hero is back (${JSON.stringify(world.playerStatus(hero.session.id))} ${JSON.stringify(ring)})`);
+  assert.equal(world.battleView()?.id, BATTLE, "back at the ring, the battle is on again");
+});
+
 test("a demo skip while another person fights on leaves the battle to them", () => {
   const channel = channelOf(2);
   const presenter = join(channel, "시연자");
@@ -254,6 +299,65 @@ test("online, two people: whoever waits at the ring is resolved with the battle,
   tick(channel, 0.6);
   assert.ok(late.toasts.some((text) => text.includes("물러났다")), "the late one's defeat is resolved");
   for (const winner of [fighter, watcher]) assert.ok(!winner.toasts.some((text) => text.includes("물러났다")), "the winners take no defeat");
+});
+
+test("a level-up gets one toast: the battle record's line after a win, the session's after a kill", () => {
+  const channel = channelOf(0, "ch01");
+  const hero = join(channel, "한결", 2);
+  const gate = CONTENT.chapters.ch01.battles.find((battle) => battle.id === "ch01_gate");
+  assert.ok(gate);
+  const level = hero.save.level;
+  hero.session.onBattleEnd(gate, "victory", 8);
+  assert.ok(hero.save.level > level, "the gate's exp levels a fresh hero up");
+  const notices = hero.toasts.filter((text) => text.startsWith("레벨"));
+  assert.deepEqual(notices, [`레벨 ${hero.save.level} 달성 (능력치 점수 +${2 * (hero.save.level - level)})`], hero.toasts.join(" / "));
+  hero.toasts.length = 0;
+  const boss = CONTENT.enemies.boss_red_turban;
+  assert.ok(boss);
+  const before = hero.save.level;
+  hero.session.onKill(boss, 30, true);
+  assert.ok(hero.save.level > before);
+  assert.deepEqual(hero.toasts.filter((text) => text.startsWith("레벨")), [`레벨 ${hero.save.level}!`], hero.toasts.join(" / "));
+});
+
+test("companions arrive spread around the hero, and their chatter is rate-limited", () => {
+  const channel = channelOf(8);
+  const hero = join(channel, "한결");
+  const world = channel.world;
+  const lines: { t: number; from: string }[] = [];
+  let t = 0;
+  const original = hero.session.send.bind(hero.session);
+  hero.session.send = (message: ServerMsg) => {
+    if (message.t === "chat" && message.kind === "bot") lines.push({ t, from: message.from });
+    original(message);
+  };
+  // Joining and a story jump land them on their own sides of the hero, not stacked on one spot.
+  const spread = () => {
+    const me = world.playerStatus(hero.session.id);
+    const bots = [...channel.bots.keys()].map((id) => world.playerStatus(id));
+    assert.ok(me && bots.every((bot) => bot !== null));
+    for (const [i, bot] of bots.entries()) {
+      assert.ok(bot && distance(bot, me) >= 1, `companion ${i} is ${bot && distance(bot, me).toFixed(1)} tiles from the hero`);
+      for (const other of bots.slice(i + 1)) assert.ok(bot && other && distance(bot, other) >= 1, `two companions share a spot: ${JSON.stringify(bots.map((b) => b && [b.x, b.y]))} hero ${me.x},${me.y}`);
+    }
+  };
+  spread();
+  // A battle the story starts carries them onto its ground beside the hero, spread the same way.
+  assert.ok(channel.startBattle(BATTLE, hero.session, true));
+  spread();
+  // A battle in which the companions keep falling: each down may raise a cry, the greetings come too.
+  for (; t < 60; t += DT) {
+    if (Math.round(t / DT) % 40 === 0) for (const id of channel.bots.keys()) world.damage(id, 1e6);
+    world.damage(hero.session.id, -1);
+    channel.tick(DT);
+  }
+  assert.ok(lines.length >= 2, `the companions still talk (${lines.length} lines)`);
+  for (let i = 1; i < lines.length; i++)
+    assert.ok(lines[i]!.t - lines[i - 1]!.t >= 4.99, `two companion lines ${(lines[i]!.t - lines[i - 1]!.t).toFixed(2)} s apart`);
+  for (const [i, line] of lines.entries()) {
+    const again = lines.slice(i + 1).find((later) => later.from === line.from);
+    assert.ok(!again || again.t - line.t >= 19.99, `${line.from} spoke twice ${again && (again.t - line.t).toFixed(1)} s apart`);
+  }
 });
 
 test("a battle won inside a failed campaign is not toasted as a victory", () => {

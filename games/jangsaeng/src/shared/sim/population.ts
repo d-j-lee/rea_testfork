@@ -1,6 +1,6 @@
 // Chapter population: NPC visibility by step window, ambient spawn groups
 // (keep `count` alive, respawn, leash) and pickups on the ground.
-import { isBlocked } from "./physics.ts";
+import { components, isBlocked } from "./physics.ts";
 import { tickFighter } from "./fighters.ts";
 import { freePoint, makeActor, removeActor, spawnEnemy, spawnFighter, atkScale } from "./entities.ts";
 import { face, later, locomotion, sound, type Actor, type SpawnRuntime, type Sim } from "./state.ts";
@@ -32,25 +32,39 @@ export function siteCentre(sim: Sim, siteId: string, offset?: Offset): { x: numb
   return { x: site.x + 0.5 + (offset?.[0] ?? 0), y: site.y + 0.5 + (offset?.[1] ?? 0) };
 }
 
-function nearNpc(sim: Sim, x: number, y: number): boolean {
+/** True when an NPC, or a player other than `self`, stands within a tile of (x, y). */
+function occupied(sim: Sim, x: number, y: number, self: number): boolean {
   for (const id of sim.npcs.values()) {
     const n = sim.actors.get(id);
     if (n && Math.hypot(n.x - x, n.y - y) < 1) return true;
   }
+  for (const p of sim.players.values()) if (p.id !== self && Math.hypot(p.x - x, p.y - y) < 1) return true;
   return false;
 }
 
-/** Walkable spot near (x, y) at least one tile away from every NPC. */
-export function safeSpot(sim: Sim, x: number, y: number): { x: number; y: number } {
+/**
+ * Walkable spot near (x, y) at least a tile away from every NPC and every
+ * other player (`self` is the one being placed), in the same walkable region
+ * as the nearest free spot: a party carried to one point (a story jump, a
+ * companion catching up) lands side by side, not stacked on one tile.
+ */
+export function safeSpot(sim: Sim, x: number, y: number, self = -1): { x: number; y: number } {
   const base = freePoint(sim, x, y, 12);
-  if (!nearNpc(sim, base.x, base.y)) return base;
+  if (!occupied(sim, base.x, base.y, self)) return base;
+  const { labels } = components(sim.grid);
+  const { width } = sim.grid;
+  const bx = Math.floor(base.x);
+  const by = Math.floor(base.y);
+  const region = labels[by * width + bx];
   for (let r = 1; r <= 5; r++)
-    for (let k = 0; k < 8; k++) {
-      const ang = (k / 8) * Math.PI * 2;
-      const px = Math.floor(base.x + Math.cos(ang) * r) + 0.5;
-      const py = Math.floor(base.y + Math.sin(ang) * r) + 0.5;
-      if (!isBlocked(sim.grid, Math.floor(px), Math.floor(py)) && !nearNpc(sim, px, py)) return { x: px, y: py };
-    }
+    for (let dy = -r; dy <= r; dy++)
+      for (let dx = -r; dx <= r; dx++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+        const tx = bx + dx;
+        const ty = by + dy;
+        if (isBlocked(sim.grid, tx, ty) || labels[ty * width + tx] !== region) continue;
+        if (!occupied(sim, tx + 0.5, ty + 0.5, self)) return { x: tx + 0.5, y: ty + 0.5 };
+      }
   return base;
 }
 

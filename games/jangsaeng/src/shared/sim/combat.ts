@@ -248,9 +248,15 @@ export function downPlayer(sim: Sim, a: Actor): void {
   later(sim, () => sim.hooks.onDowned(id));
 }
 
-export function revivePlayer(sim: Sim, a: Actor, ratio: number, by: number | null): void {
+/**
+ * Gets a downed player up with `ratio` of their max HP and a moment of
+ * invulnerability. No hook: a revive reports itself (revivePlayer); a lost
+ * battle's withdrawal is reported as the defeat (sim/battle.ts withdraw).
+ * False when `a` was not down.
+ */
+export function standUp(sim: Sim, a: Actor, ratio: number): boolean {
   const pl = a.pl;
-  if (!pl || pl.downedAt < 0) return;
+  if (!pl || pl.downedAt < 0) return false;
   pl.downedAt = -1;
   pl.revive = 0;
   a.hp = Math.max(1, Math.round(a.maxHp * ratio));
@@ -259,6 +265,12 @@ export function revivePlayer(sim: Sim, a: Actor, ratio: number, by: number | nul
   emit(sim, { k: "heal", x: a.x, y: a.y });
   floatText(sim, a.x, a.y, `+${a.hp}`, COLOR.heal);
   sound(sim, "heal", a.x, a.y);
+  return true;
+}
+
+/** A revive by an ally (`by`) or by the player themself (null): stands them up and tells the host (WorldHooks.onRevived). */
+export function revivePlayer(sim: Sim, a: Actor, ratio: number, by: number | null): void {
+  if (!standUp(sim, a, ratio)) return;
   const id = a.id;
   later(sim, () => sim.hooks.onRevived(id, by));
 }

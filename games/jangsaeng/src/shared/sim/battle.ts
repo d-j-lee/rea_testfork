@@ -6,8 +6,9 @@ import type { BattleDef, WaveDef } from "../content/schema.ts";
 import { TILE_INFO, type TileId } from "../map/tiles.ts";
 import { isPropSprite } from "../sprites.ts";
 import type { BattleView } from "../types.ts";
-import { arenaSpot, arrivalSpot, battleArena, boardingSpot, bossSpot, deckSpot, inRing, onArena, onArenaTile, onDeck, rimSpot, type Arena } from "./arena.ts";
+import { allySpot, arenaSpot, arrivalSpot, battleArena, boardingSpot, bossSpot, deckSpot, inRing, onArena, onArenaTile, onDeck, rimSpot, tileOf, type Arena } from "./arena.ts";
 import { makeBossState } from "./boss.ts";
+import { standUp } from "./combat.ts";
 import { atkScale, bodyFree, makeActor, placePlayer, releaseToken, spawnEnemy, spawnFighter } from "./entities.ts";
 import type { CollisionGrid } from "./physics.ts";
 import { COLOR, emit, floatText, isDowned, later, sound, type Actor, type Sim } from "./state.ts";
@@ -186,18 +187,19 @@ export function startRefusal(sim: Sim, battleId: string, starterId: number): Sta
  * Puts a participant on the arena's ground: the starter wherever the trigger
  * caught them (onto a deck in a deck battle), anyone else only when they
  * stand in a walled pocket of the ring. Every action in flight is cancelled.
+ * `taken`: the ground tiles those entered so far stand on; whoever is moved
+ * gets a tile of their own.
  */
-function enter(sim: Sim, b: BattleRuntime, a: Actor): void {
+function enter(sim: Sim, b: BattleRuntime, a: Actor, taken: Set<number>): void {
   const { arena } = b;
   if (a.id === b.starter && arena.naval && !onDeck(arena, a.x, a.y)) {
     const p = deckSpot(arena, a.x, a.y);
     placePlayer(sim, a, p.x, p.y);
-    return;
+  } else if (!onArena(arena, a.x, a.y) && (a.id === b.starter || Math.hypot(a.x - arena.x, a.y - arena.y) <= arena.radius + 0.5)) {
+    const p = arenaSpot(arena, a.x, a.y, taken);
+    placePlayer(sim, a, p.x, p.y);
   }
-  if (onArena(arena, a.x, a.y)) return;
-  if (a.id !== b.starter && Math.hypot(a.x - arena.x, a.y - arena.y) > arena.radius + 0.5) return;
-  const p = arenaSpot(arena, a.x, a.y);
-  placePlayer(sim, a, p.x, p.y);
+  if (onArena(arena, a.x, a.y)) taken.add(tileOf(arena, a.x, a.y));
 }
 
 /** Starts a chapter battle for its starter and everyone at it who fights it; null when refused (startRefusal). */
@@ -229,11 +231,12 @@ export function startBattle(sim: Sim, battleId: string, starterId: number): Batt
   sim.battle = b;
   // The starter steps onto the ground wherever they stand; then everyone at the battle who fights it joins.
   const starter = sim.players.get(starterId);
-  if (starter) enter(sim, b, starter);
+  const taken = new Set<number>();
+  if (starter) enter(sim, b, starter, taken);
   muster(sim, b);
   for (const id of b.participants) {
     const a = sim.players.get(id);
-    if (a && id !== starterId) enter(sim, b, a);
+    if (a && id !== starterId) enter(sim, b, a, taken);
   }
   rescale(sim, b);
   const level = battleLevel(sim, def);
@@ -246,18 +249,20 @@ export function startBattle(sim: Sim, battleId: string, starterId: number): Batt
     a.defend = true;
     b.defendId = a.id;
   }
-  if (!duel)
+  if (!duel) {
+    // The allied line spreads along an arc on the friendly side, clear of the people fighting.
+    const used = new Set<number>();
+    const people = standing(sim, b);
     for (const group of def.allies ?? [])
       for (let i = 0; i < group.count; i++) {
-        const ang = foeAngle + Math.PI + sim.rng.range(-0.8, 0.8);
-        const r = 1.5 + sim.rng.range(0, 1.5);
-        const p = arenaSpot(arena, arena.x + Math.cos(ang) * r, arena.y + Math.sin(ang) * r);
+        const p = allySpot(arena, foeAngle + Math.PI + sim.rng.range(-1.2, 1.2), people, used);
         const ally = spawnFighter(sim, {
           kind: "ally", sprite: group.sprite, name: group.name, x: p.x, y: p.y,
           hp: Math.round(90 * (1 + 0.1 * (level - 1))), atk: 8 * atkScale(level), level, immortal: false,
         });
         b.allies.push(ally.id);
       }
+  }
   if (!duel)
     for (const id of sim.npcs.values()) {
       const npc = sim.actors.get(id);
@@ -499,6 +504,32 @@ export function leaveBattle(sim: Sim, id: number): void {
   b.left.add(id);
 }
 
+/**
+ * Share of max HP a participant who lay downed when the battle was lost gets
+ * up with (an ally's revive gives C.REVIVE_HP, a self-revive C.SELF_REVIVE_HP).
+ */
+const WITHDRAW_HP = 0.25;
+
+/**
+ * A lost battle's fallen get up and withdraw: every participant lying
+ * downed stands up at WITHDRAW_HP on the arena's rim on their side, a tile
+ * of their own each. The enemies are already routed off the field (flee), so
+ * the rim is not kept clear of them. Nobody is left lying out a down timer
+ * after the fight is over, and it costs no 천수: it is no revive (standUp
+ * fires no onRevived); the host reports the defeat.
+ */
+function withdraw(sim: Sim, b: BattleRuntime): void {
+  const { arena } = b;
+  const used = new Set<number>();
+  for (const id of b.participants) {
+    const a = sim.players.get(id);
+    if (!a || !isDowned(a)) continue;
+    const p = rimSpot(arena, Math.atan2(a.y - arena.y, a.x - arena.x), [], used);
+    placePlayer(sim, a, p.x, p.y);
+    standUp(sim, a, WITHDRAW_HP);
+  }
+}
+
 /** Ends the active battle; `result` null aborts without a hook call. */
 export function endBattle(sim: Sim, result: "victory" | "defeat" | null): void {
   const b = sim.battle;
@@ -524,6 +555,7 @@ export function endBattle(sim: Sim, result: "victory" | "defeat" | null): void {
   }
   if (!result) return;
   const won = result === "victory";
+  if (!won) withdraw(sim, b);
   floatText(sim, b.arena.x, b.arena.y, won ? (b.def.victoryLabel ?? "승리") : "패배", won ? COLOR.crit : COLOR.hurt, true);
   const participants = [...b.participants];
   const id = b.def.id;

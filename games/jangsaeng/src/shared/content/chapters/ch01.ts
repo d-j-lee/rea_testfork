@@ -229,21 +229,22 @@ export const ch01: ChapterDef = {
       title: "개경 수복 — 북문",
       subtitle: "1362 · 개경",
       site: "gaegyeong",
-      offset: [0, -9],
+      // The snowfield before the north gate, clear of the gate hall's roof: the town wall is its backdrop.
+      offset: [0, -14],
       radius: 8,
-      kind: "boss",
+      kind: "waves",
       music: "war",
       weather: "snow",
       intro: ["성문 위에 붉은 두건이 빽빽하다.", "별빛을 받은 이들이여, 함께 성문을 열자!"],
       waves: [
-        { enemies: [{ enemy: "red_turban_spear", count: 6, level: 3 }], from: "north", line: "홍건적 창병이 성문 밖으로 몰려나온다!" },
+        { enemies: [{ enemy: "red_turban_spear", count: 5, level: 3 }], from: "north", line: "홍건적 창병이 눈벌판을 건너온다!" },
         {
           enemies: [
-            { enemy: "red_turban_spear", count: 4, level: 3 },
-            { enemy: "red_turban_axe", count: 2, level: 3 },
+            { enemy: "red_turban_spear", count: 3, level: 3 },
+            { enemy: "red_turban_axe", count: 1, level: 3 },
           ],
           from: "north",
-          line: "도부수가 섞였다 — 내려찍기는 굴러서 피하라!",
+          line: "선봉장 적건 도통이 나섰다 — 도부수의 내려찍기는 굴러서 피하라!",
         },
       ],
       boss: {
@@ -251,11 +252,12 @@ export const ch01: ChapterDef = {
         name: "적건 도통",
         title: "홍건적 선봉장",
         historical: false,
-        level: 4,
-        hpScale: 1.2,
+        // The first real fight: a match for a Lv-3 hero, brought in with the last wave (about 25~35 s with eight ◇).
+        level: 3,
+        hpScale: 1.4,
         phases: [
           { at: 1, mechanic: "charge", line: "성문을 넘보는 자는 모두 쓸어 버려라!" },
-          { at: 0.6, mechanic: "summon", summon: { enemy: "red_turban_spear", count: 4 }, line: "형제들, 붉은 두건 아래 모여라!" },
+          { at: 0.6, mechanic: "summon", summon: { enemy: "red_turban_spear", count: 2 }, line: "형제들, 붉은 두건 아래 모여라!" },
           { at: 0.3, mechanic: "fire_zone", line: "성문에 불을 질러라! — 불길이 번진다, 피하라!" },
         ],
       },

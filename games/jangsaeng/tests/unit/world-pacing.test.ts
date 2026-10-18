@@ -17,7 +17,8 @@ const map = generateMap("jangsaeng");
 let nextId = 2_000_000;
 const DT = 0.05;
 
-function demoBattle(chapterId: ChapterId, step: string, battleId: string, bots: number) {
+/** `level`: the hero's level when the presenter reaches the battle, if above the chapter's preset. */
+function demoBattle(chapterId: ChapterId, step: string, battleId: string, bots: number, level?: number) {
   const chapter = CHAPTERS[chapterId];
   const channel = new Channel(
     { content: CONTENT, map, seed: "pacing", mode: "offline", botsPerChannel: bots, nextId: () => nextId++, log: () => {} },
@@ -25,6 +26,7 @@ function demoBattle(chapterId: ChapterId, step: string, battleId: string, bots: 
     1,
   );
   const save = createSave(CONTENT, { token: "f".repeat(32), name: "한결", variant: "m", origin: "northeast", seed: 1234, demoChapter: chapterId });
+  if (level !== undefined) save.level = level;
   const toasts: string[] = [];
   const session = new Session(nextId++, "f".repeat(32), save, (message) => {
     if (message.t === "toast") toasts.push(message.text);
@@ -35,7 +37,7 @@ function demoBattle(chapterId: ChapterId, step: string, battleId: string, bots: 
   world.setStep(step);
   for (let i = 0; i < 20; i++) channel.tick(DT);
   assert.ok(channel.startBattle(battleId, session, true));
-  return { channel, world, hero: session.id, toasts };
+  return { channel, world, hero: session.id, toasts, save };
 }
 
 /** The hero fights like a presenter: walks to the nearest enemy and strikes. */
@@ -109,4 +111,50 @@ test("companions revive the fallen hero in pairs while the others cover", () => 
   assert.ok(world.battleView(), "the first down did not lose the battle");
   assert.ok(crowd <= 4, `${crowd} of 8 companions crowded onto the fallen hero`);
   assert.ok(toasts.some((text) => text.endsWith("의 도움으로 일어섰다.")));
+});
+
+/**
+ * Runs a demo battle for up to `limit` s with a presenter hero who strikes
+ * the nearest enemy and presses skill 1 or 2 every 6 s in reach (never
+ * dodging): when its commander came, when it ended and how.
+ */
+function playOut(chapterId: ChapterId, step: string, battleId: string, limit: number, level?: number) {
+  const { channel, world, hero, save } = demoBattle(chapterId, step, battleId, 8, level);
+  let bossAt = -1;
+  let skillAt = 3;
+  let t = 0;
+  for (; t < limit && world.battleView(); t += DT) {
+    fight(world, hero);
+    const me = world.query().player(hero);
+    const foe = me && !me.downed ? world.query().nearestEnemy(me.x, me.y, 3) : null;
+    if (foe && t >= skillAt) {
+      world.setInput(hero, { mx: 0, my: 0, attack: false, shoot: false, dodge: false, skill: 1 + (Math.floor(t) % 2), interact: false, ax: foe.x - (me?.x ?? 0), ay: foe.y - (me?.y ?? 0) });
+      skillAt = t + 6;
+    }
+    channel.tick(DT);
+    if (bossAt < 0 && world.battleView()?.boss) bossAt = t;
+  }
+  return { bossAt, end: t, running: world.battleView() !== null, won: save.battlesWon.includes(battleId) };
+}
+
+test("개경 북문, the first real fight: a Lv-3 hero and eight companions win it in half a minute, the commander with the last wave", () => {
+  const { bossAt, end, running, won } = playOut("ch01", "s3", "ch01_gate", 90, 3);
+  assert.ok(!running && won, `won (${end.toFixed(1)} s)`);
+  assert.ok(end >= 20 && end <= 45, `it took ${end.toFixed(1)} s`);
+  assert.ok(bossAt >= 3, `적건 도통 came with the second wave, at ${bossAt.toFixed(1)} s`);
+});
+
+test("명량: the commander boards at about half a minute, however the deck fares, and falls within the minute", () => {
+  const { bossAt, end, running, won } = playOut("ch10", "s7", "b_myeongnyang", 120);
+  assert.ok(bossAt >= 25 && bossAt <= 35, `the commander boarded at ${bossAt.toFixed(1)} s`);
+  assert.ok(!running && won && end <= 75, `won at ${end.toFixed(1)} s`);
+});
+
+test("남한산성: the commander rides in with half the night to hold, and his fall, not the clock, ends it", () => {
+  const def = CHAPTERS.ch11.battles.find((battle) => battle.id === "b_namhan");
+  assert.ok(def?.timeLimit);
+  const { bossAt, end, running, won } = playOut("ch11", "s6b", "b_namhan", 160);
+  assert.ok(bossAt >= 0 && def.timeLimit - bossAt >= 60, `the commander came at ${bossAt.toFixed(1)} s of ${def.timeLimit}`);
+  assert.ok(!running && won, `held (${end.toFixed(1)} s)`);
+  assert.ok(end < def.timeLimit - 5, `felled before the clock ran out (${end.toFixed(1)} s)`);
 });

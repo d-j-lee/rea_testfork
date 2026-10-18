@@ -170,11 +170,12 @@ export const onDeck = (arena: Arena, x: number, y: number): boolean =>
 
 const centreOf = (arena: Arena, i: number) => ({ x: (i % arena.width) + 0.5, y: Math.floor(i / arena.width) + 0.5 });
 
-/** Centre of the tile among `tiles` nearest to (x, y); the arena centre when there are none. */
-function nearestOf(arena: Arena, tiles: ReadonlySet<number>, x: number, y: number): Point {
+/** Centre of the tile among `tiles` (not in `taken`) nearest to (x, y); the arena centre when there are none. */
+function nearestOf(arena: Arena, tiles: ReadonlySet<number>, x: number, y: number, taken?: ReadonlySet<number>): Point {
   let best = { x: arena.x, y: arena.y };
   let bestD = Infinity;
   for (const i of tiles) {
+    if (taken?.has(i)) continue;
     const p = centreOf(arena, i);
     const d = Math.hypot(p.x - x, p.y - y);
     if (d < bestD) {
@@ -185,10 +186,16 @@ function nearestOf(arena: Arena, tiles: ReadonlySet<number>, x: number, y: numbe
   return best;
 }
 
-/** Centre of the arena tile nearest to (x, y). */
-export function arenaSpot(arena: Arena, x: number, y: number): Point {
-  if (onArena(arena, x, y)) return { x: Math.floor(x) + 0.5, y: Math.floor(y) + 0.5 };
-  return nearestOf(arena, arena.tiles, x, y);
+/** Tile index of (x, y) in the arena's grid. */
+export const tileOf = (arena: Arena, x: number, y: number): number => Math.floor(y) * arena.width + Math.floor(x);
+
+/**
+ * Centre of the arena tile nearest to (x, y); with `taken`, one nobody
+ * stands on yet, so several people put on the ground at once do not stack.
+ */
+export function arenaSpot(arena: Arena, x: number, y: number, taken?: ReadonlySet<number>): Point {
+  if (onArena(arena, x, y) && !taken?.has(tileOf(arena, x, y))) return { x: Math.floor(x) + 0.5, y: Math.floor(y) + 0.5 };
+  return nearestOf(arena, arena.tiles, x, y, taken);
 }
 
 /** Centre of the deck tile nearest to (x, y), where a deck battle's starter stands; arenaSpot without decks. */
@@ -238,6 +245,34 @@ function bestTile(arena: Arena, tiles: ReadonlySet<number>, score: (p: Point) =>
   return best;
 }
 
+/** How far out from the centre a battle's allied line stands, as a share of the radius. */
+const ALLY_LINE = 0.45;
+
+/**
+ * Where the next of a battle's allied soldiers stands: on its side of the
+ * field (`angle`, away from the enemy), ALLY_LINE of the way out, a tile
+ * apart from the soldiers already placed (`used`) and clear of the people
+ * fighting (`avoid`), so the line spreads along an arc instead of stacking
+ * its bodies and name plates on the hero. Marks the tile used.
+ */
+export function allySpot(arena: Arena, angle: number, avoid: readonly Point[], used: Set<number>): Point {
+  const near = (p: Point) => {
+    let n = 0;
+    for (const i of used) {
+      const q = centreOf(arena, i);
+      if (Math.hypot(p.x - q.x, p.y - q.y) < 1.5) n++;
+    }
+    return n;
+  };
+  const best = bestTile(arena, arena.tiles, (p) => {
+    const d = Math.hypot(p.x - arena.x, p.y - arena.y);
+    return angleGap(Math.atan2(p.y - arena.y, p.x - arena.x), angle) * 1.5 + Math.abs(d / arena.radius - ALLY_LINE) * 4 + crowding(p, avoid) / 2 + near(p) * 3 + hidden(arena, p);
+  }, used);
+  if (best < 0) return { x: arena.x, y: arena.y };
+  used.add(best);
+  return centreOf(arena, best);
+}
+
 /** Where a boss enters: 40% of the way to the rim on the enemy side, clear of the people already there. */
 export function bossSpot(arena: Arena, angle: number, avoid: readonly Point[]): Point {
   const r = arena.radius * 0.4;
@@ -250,6 +285,12 @@ export function bossSpot(arena: Arena, angle: number, avoid: readonly Point[]): 
 const angleGap = (a: number, b: number) => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
 
 /**
+ * Score weight of a rim spot's distance in from the rim: above the largest
+ * angle gap's (2π), so the search runs along the arc before it comes inward.
+ */
+const RIM_PULL = 7;
+
+/**
  * An unused arena tile on the rim toward `angle`: the outermost ground in
  * that direction, searched along the arc when the rim there is water or
  * wall, and kept away from the people in `avoid` (a wave is seen walking in;
@@ -258,7 +299,7 @@ const angleGap = (a: number, b: number) => Math.abs(Math.atan2(Math.sin(a - b), 
 export function rimSpot(arena: Arena, angle: number, avoid: readonly Point[], used: Set<number>): Point {
   const best = bestTile(arena, arena.tiles, (p) => {
     const d = Math.hypot(p.x - arena.x, p.y - arena.y);
-    return angleGap(Math.atan2(p.y - arena.y, p.x - arena.x), angle) * 2 + (1 - d / arena.radius) * 3 + crowding(p, avoid) + hidden(arena, p);
+    return angleGap(Math.atan2(p.y - arena.y, p.x - arena.x), angle) * 2 + (1 - d / arena.radius) * RIM_PULL + crowding(p, avoid) + hidden(arena, p);
   }, used);
   if (best < 0) return { x: arena.x, y: arena.y };
   used.add(best);

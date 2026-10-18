@@ -285,7 +285,7 @@ export class World {
     const sim = this.#sim;
     const a = sim.players.get(id);
     if (!a) return;
-    const p = safeSpot(sim, x, y);
+    const p = safeSpot(sim, x, y, id);
     placePlayer(sim, a, p.x, p.y);
   }
 
@@ -326,7 +326,7 @@ export class World {
           station = site;
         }
       }
-      if (station) spot = safeSpot(sim, station.x + 0.5, station.y + 0.5);
+      if (station) spot = safeSpot(sim, station.x + 0.5, station.y + 0.5, id);
     }
     if (spot) placePlayer(sim, a, spot.x, spot.y);
     revivePlayer(sim, a, C.SELF_REVIVE_HP, null);
