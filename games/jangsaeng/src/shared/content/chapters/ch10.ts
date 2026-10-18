@@ -187,21 +187,25 @@ export const ch10: ChapterDef = {
       great: true,
       music: "naval",
       weather: "fog",
+      // 9월 16일 아침 (s6 narration).
+      hour: 8,
       intro: [
         "죽고자 하면 살고, 살고자 하면 죽는다 — 어젯밤 통제사가 장수들에게 한 말이다.",
         "울돌목의 물이 운다. 지금은 물이 적의 편이다. 물이 몸을 뒤집을 때까지 버텨라.",
         "대장선이 홀로 앞에 섰다. 그 갑판을 지키는 것이 당신의 몫이다.",
       ],
+      // Timed by the tide, not by the kills: the commander boards at 28 s however the deck fares.
       waves: [
-        { from: "sea", enemies: [{ enemy: "japanese_marine", count: 5, level: 31 }], line: "밀물을 탄 적선이 몰려온다! 대장선 뱃전에 갈고리가 걸린다." },
-        { from: "sea", enemies: [{ enemy: "japanese_musket", count: 4, level: 31 }, { enemy: "japanese_marine", count: 2, level: 31 }], line: "조총 연기가 해협을 덮는다. 뒤쪽 배들이 머뭇거린다." },
-        { from: "sea", enemies: [{ enemy: "japanese_marine", count: 6, level: 32 }], line: "통제사가 초요기를 올렸다. 안위의 배가 앞으로 나온다!" },
-        { from: "sea", enemies: [{ enemy: "japanese_marine", count: 4, level: 32 }, { enemy: "japanese_musket", count: 3, level: 32 }], line: "물이 돈다! 조류가 몸을 뒤집었다 — 적선끼리 부딪힌다!" },
-        { from: "sea", enemies: [{ enemy: "japanese_marine", count: 2, level: 32 }], line: "적 선봉선의 장수가 대장선에 뛰어오른다!" },
+        { at: 0, from: "sea", enemies: [{ enemy: "japanese_marine", count: 4, level: 31 }], line: "밀물을 탄 적선이 몰려온다! 대장선 뱃전에 갈고리가 걸린다." },
+        { at: 8, from: "sea", enemies: [{ enemy: "japanese_musket", count: 2, level: 31 }, { enemy: "japanese_marine", count: 2, level: 31 }], line: "조총 연기가 해협을 덮는다. 뒤쪽 배들이 머뭇거린다." },
+        { at: 15, from: "sea", enemies: [{ enemy: "japanese_marine", count: 4, level: 32 }], line: "통제사가 초요기를 올렸다. 안위의 배가 앞으로 나온다!" },
+        { at: 22, from: "sea", enemies: [{ enemy: "japanese_marine", count: 3, level: 32 }, { enemy: "japanese_musket", count: 1, level: 32 }], line: "물이 돈다! 조류가 몸을 뒤집었다 — 적선끼리 부딪힌다!" },
+        { at: 28, from: "sea", enemies: [{ enemy: "japanese_marine", count: 2, level: 32 }], line: "적 선봉선의 갈고리대장이 대장선에 뛰어오른다!" },
       ],
       boss: {
         enemy: "boss_japanese_general",
-        name: "왜 수군 선봉장",
+        name: "갈고리대장",
+        title: "왜 수군 선봉선",
         historical: false,
         level: 32,
         hpScale: 1.2,
@@ -211,9 +215,10 @@ export const ch10: ChapterDef = {
           { at: 0.25, mechanic: "frenzy", line: "물러설 배가 없다!" },
         ],
       },
+      // A few hands on the flagship's deck, so the boarders and their commander stay in view.
       allies: [
-        { sprite: "navy_joseon", name: "대장선 격군", count: 6 },
-        { sprite: "archer_joseon", name: "사부", count: 4 },
+        { sprite: "navy_joseon", name: "대장선 격군", count: 4 },
+        { sprite: "archer_joseon", name: "사부", count: 2 },
       ],
       victory: [
         { k: "point", point: "merit", add: 120 },

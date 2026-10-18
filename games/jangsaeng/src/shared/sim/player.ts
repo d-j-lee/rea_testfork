@@ -28,7 +28,7 @@ import type { PlayerInput, PlayerSpec } from "./world.ts";
 const IDLE_INPUT: PlayerInput = { mx: 0, my: 0, attack: false, shoot: false, dodge: false, skill: 0, interact: false };
 
 export function createPlayer(sim: Sim, spec: PlayerSpec): Actor {
-  const at = safeSpot(sim, spec.x, spec.y);
+  const at = safeSpot(sim, spec.x, spec.y, spec.id);
   const a = makeActor(sim, {
     id: spec.id,
     kind: spec.kind,

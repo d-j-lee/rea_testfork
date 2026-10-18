@@ -156,14 +156,24 @@ const FOOTPRINT: Readonly<Record<SiteKind, readonly [number, number]>> = {
 
 /**
  * Per-site footprint overrides where geography is tight, or for 명량 a fleet
- * of 9 × 4 deck: with the fleet on open water its battle ring is mostly deck
- * (sim/arena.ts DECK_SHARE), not the strait's shore.
+ * of 11 × 4 deck: room for the great sea battle's boarders on the flagship's
+ * decks, out on open water (SEA_ROOM), not against the strait's shore.
  */
 const FOOTPRINT_OVERRIDE: Readonly<Record<string, readonly [number, number]>> = {
   wihwado: [5, 3],
   haengju: [5, 5],
   jemulpo: [5, 5],
-  myeongnyang: [9, 7],
+  myeongnyang: [11, 7],
+};
+
+/**
+ * Open water kept around a sea battlefield's fleet (tiles on every side).
+ * 명량's fleet lies out in the strait rather than against its shore, so the
+ * battle ring around it (radius 8) is deck and sea, with a boat bridge
+ * (moor) the only way in; elsewhere the fleet may touch the shore.
+ */
+const SEA_ROOM: Readonly<Record<string, number>> = {
+  myeongnyang: 5,
 };
 
 /** Placement priority: earlier kinds keep their true position on overlap. */
@@ -549,21 +559,23 @@ export function generateMap(seed = "jangsaeng"): GameMap {
   /**
    * Where a sea battlefield's fleet lies: its footprint's deck rows (in
    * even-aligned pairs, so each hull renders two rows tall), moved to the
-   * nearest offset within one footprint where they are all open water, or
-   * the wettest offset when none is. A site off a strait's shore (울돌목)
-   * thus gets a whole fleet, not a sliver of deck between the rocks.
+   * nearest offset within one footprint (plus its sea room) where they and
+   * `room` tiles of water around them are all open water, or the wettest
+   * offset when none is. A site off a strait's shore (울돌목) thus gets a
+   * whole fleet out on the water, not a sliver of deck between the rocks.
    */
-  function fleetAt(rect: Site["rect"]): { rect: Site["rect"]; top: number; rows: number } {
+  function fleetAt(rect: Site["rect"], room: number): { rect: Site["rect"]; top: number; rows: number } {
     const rows = Math.max(2, Math.floor((rect.h - 2) / 2) * 2);
     const top = (rect.y + 1) % 2 === 0 ? rect.y + 1 : rect.y + 2;
     const water = (dx: number, dy: number) => {
       let n = 0;
-      for (let y = top + dy; y < top + dy + rows; y++)
-        for (let x = rect.x + dx; x < rect.x + dx + rect.w; x++) if (x >= 0 && y >= 0 && x < W && y < H && !land[index(x, y)]) n++;
+      for (let y = top + dy - room; y < top + dy + rows + room; y++)
+        for (let x = rect.x + dx - room; x < rect.x + dx + rect.w + room; x++) if (x >= 0 && y >= 0 && x < W && y < H && !land[index(x, y)]) n++;
       return n;
     };
+    const span = { w: rect.w + 2 * room, h: rect.h + 2 * room };
     const offsets: (readonly [number, number])[] = [];
-    for (let dy = -rect.h + (rect.h % 2); dy <= rect.h; dy += 2) for (let dx = -rect.w; dx <= rect.w; dx++) offsets.push([dx, dy]);
+    for (let dy = -span.h + (span.h % 2); dy <= span.h; dy += 2) for (let dx = -span.w; dx <= span.w; dx++) offsets.push([dx, dy]);
     offsets.sort((m, n) => Math.abs(m[0]) + Math.abs(m[1]) - Math.abs(n[0]) - Math.abs(n[1]) || m[1] - n[1] || m[0] - n[0]);
     let best: readonly [number, number] = [0, 0];
     let most = -1;
@@ -573,7 +585,7 @@ export function generateMap(seed = "jangsaeng"): GameMap {
         most = n;
         best = offset;
       }
-      if (n === rows * rect.w) break;
+      if (n === (rows + 2 * room) * (rect.w + 2 * room)) break;
     }
     const [dx, dy] = best;
     return { rect: { ...rect, x: rect.x + dx, y: rect.y + dy }, top: top + dy, rows };
@@ -584,7 +596,7 @@ export function generateMap(seed = "jangsaeng"): GameMap {
     const naval = site.kind === "battlefield" && !land[index(site.x, site.y)];
     if (naval) {
       // Sea battles are fought on a moored fleet's decks; the site is its fleet.
-      const fleet = fleetAt(rect);
+      const fleet = fleetAt(rect, SEA_ROOM[site.id] ?? 0);
       site.rect = fleet.rect;
       const decks: number[] = [];
       for (let y = fleet.top; y < fleet.top + fleet.rows; y++)
@@ -594,9 +606,10 @@ export function generateMap(seed = "jangsaeng"): GameMap {
             decks.push(index(x, y));
           }
       moor(decks);
-      // The site stands on its fleet: the deck tile nearest its true position.
+      // The site stands on its fleet: off its decks, at the deck tile nearest the fleet's middle.
       if (tiles[index(site.x, site.y)] !== Tile.Deck) {
-        const { x: sx, y: sy } = site;
+        const sx = fleet.rect.x + (fleet.rect.w - 1) / 2;
+        const sy = fleet.top + (fleet.rows - 1) / 2;
         let nearest = Infinity;
         for (const i of decks) {
           const x = i % W;
@@ -673,7 +686,9 @@ export function generateMap(seed = "jangsaeng"): GameMap {
       else if (
         tile !== Tile.TownGround &&
         tile !== Tile.Plaza &&
-        tile !== Tile.Bridge
+        tile !== Tile.Bridge &&
+        // A road onto a fleet runs over its boat bridge and decks; it does not pave them.
+        tile !== Tile.Deck
       )
         tiles[i] = Tile.Road;
     }

@@ -10,6 +10,7 @@ import { test } from "node:test";
 import { CHAPTERS, CONTENT } from "../../src/shared/content/index.ts";
 import { CHAPTER_IDS, type ChapterDef, type Effect, type Offset, type StepDef } from "../../src/shared/content/schema.ts";
 import { collisionFor, generateMap } from "../../src/shared/map/generate.ts";
+import { TILE_INFO, Tile, type TileId } from "../../src/shared/map/tiles.ts";
 import { DECK_MIN, DECK_SHARE, arenaFits, battleArena, onArena, onDeck, type Arena } from "../../src/shared/sim/arena.ts";
 import { components, nearestFree, type CollisionGrid } from "../../src/shared/sim/physics.ts";
 import { MIN_REGION } from "../../src/shared/sim/entities.ts";
@@ -130,6 +131,31 @@ for (const id of CHAPTER_IDS) {
     assert.deepEqual(problems, []);
   });
 }
+
+test("명량 is fought out on the strait: its ring is deck and sea, with no shore in it", () => {
+  const chapter = CHAPTERS.ch10;
+  const battle = chapter.battles.find((candidate) => candidate.id === "b_myeongnyang");
+  const site = siteById.get(battle?.site ?? "");
+  assert.ok(battle && site);
+  const grid = gridAt(battleStep(chapter, battle.id).year);
+  const arena = battleArena(grid, site, battle);
+  assert.ok(arena?.naval);
+  // All of its ground is deck (the fleet and the boat bridge to it): nobody fights on the beach.
+  assert.equal(arena.deck.size, arena.tiles.size, `${arena.deck.size} deck of ${arena.tiles.size} tiles`);
+  let ring = 0;
+  let sea = 0;
+  let shore = 0;
+  for (let y = Math.floor(arena.y - arena.radius); y <= arena.y + arena.radius; y++)
+    for (let x = Math.floor(arena.x - arena.radius); x <= arena.x + arena.radius; x++) {
+      if (Math.hypot(x + 0.5 - arena.x, y + 0.5 - arena.y) > arena.radius) continue;
+      ring++;
+      const tile = map.tiles[y * map.width + x] as TileId;
+      if (TILE_INFO[tile].water) sea++;
+      else if (tile !== Tile.Deck && !grid.blocked[y * map.width + x]) shore++;
+    }
+  assert.equal(shore, 0, "no walkable shore inside the ring");
+  assert.ok(sea / ring >= 0.6, `the ring is mostly open water (${sea} of ${ring} tiles)`);
+});
 
 const QUIET: WorldHooks = {
   onKill: () => {},

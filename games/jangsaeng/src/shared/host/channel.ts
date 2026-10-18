@@ -22,6 +22,8 @@ export interface ChannelServices {
 }
 
 const FX_RADIUS = 30;
+/** Seconds between any two companions' chat lines in a channel. */
+const BOT_CHAT_GAP = 5;
 /** Snapshot cadence in ticks: 20 Hz in-page (free), 10 Hz over the network. */
 const SNAP_EVERY = { offline: 1, online: 2 } as const;
 
@@ -45,6 +47,10 @@ export class Channel {
   #chatterTimer = 45;
   #simulatedTimer = 20;
   #worldEventDone = false;
+  /** Seconds the channel has ticked with someone in it (the companions' chat clock). */
+  #clock = 0;
+  /** No companion speaks before this channel time (say). */
+  #botChatAt = 0;
 
   /** `demo`: a shard for demo-preset characters only, so a demo never shares a world with real saves. */
   constructor(services: ChannelServices, chapter: ChapterDef, shard: number, demo = false) {
@@ -133,10 +139,10 @@ export class Channel {
       const persona = personas[index];
       if (!persona || used.has(persona.name)) continue;
       const level = Math.max(1, this.#averageLevel() + this.#rng.int(-2, 2));
-      const angle = this.#rng.range(0, Math.PI * 2);
-      const bot = new Bot(this.#services.nextId(), persona, level, this, this.#services.content, this.#rng.int(1, 1e9));
+      const bot = new Bot(this.#services.nextId(), persona, level, this, this.#services.content, this.#rng.int(1, 1e9), this.bots.size);
       this.bots.set(bot.id, bot);
-      this.world.addPlayer(bot.spec(anchor.x + Math.cos(angle) * 3, anchor.y + Math.sin(angle) * 3));
+      const spot = bot.spotNear(anchor.x, anchor.y);
+      this.world.addPlayer(bot.spec(spot.x, spot.y));
     }
   }
 
@@ -326,6 +332,7 @@ export class Channel {
       return;
     }
     this.#ticks++;
+    this.#clock += dt;
     for (const bot of this.bots.values()) bot.think(dt, this.world);
     this.world.tick(dt);
     const fx = this.world.drainFx();
@@ -372,7 +379,15 @@ export class Channel {
     }
   }
 
-  say(bot: Bot, text: string): void {
+  /**
+   * A companion's chat line, unless another companion spoke within
+   * BOT_CHAT_GAP: eight companions reacting to every down, revive and win of
+   * a battle would bury the chat. True when the line went out.
+   */
+  say(bot: Bot, text: string): boolean {
+    if (this.#clock < this.#botChatAt) return false;
+    this.#botChatAt = this.#clock + BOT_CHAT_GAP;
     this.#broadcast({ t: "chat", from: bot.persona.name, text, kind: "bot" });
+    return true;
   }
 }

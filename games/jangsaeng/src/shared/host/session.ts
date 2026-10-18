@@ -70,6 +70,9 @@ type Queued = (
 
 type Active = Queued & { view: PromptView };
 
+/** Where an effect outcome's record (its result lines) is shown: see Session #process. */
+type RecordShown = "card" | "field" | "none";
+
 /** The 사사 위기 card for the sentence `<chapter>:<year>` (save.pending id). */
 const escapeCardId = (sentence: string): string => `escape:${sentence}`;
 
@@ -110,6 +113,12 @@ export class Session {
   #talkCounter = 0;
   /** Battles started by story effects while a card was up; they start when the queue drains. */
   #heldBattles: string[] = [];
+  /**
+   * The battle this player just lost and withdrew from: standing at it does
+   * not start it again, nor take them into it, until they have stepped away
+   * from it (#checkPlaces, needsBattle). A lost fight never restarts by itself.
+   */
+  #withdrawnFrom: string | null = null;
   /** While > 0, queued prompts are not shown (keeps result cards first). */
   #hold = 0;
   #refreshing = false;
@@ -544,10 +553,8 @@ export class Session {
       this.save.flags.vouch = true;
       this.send({ t: "toast", text: "함께 싸운 이들이 새 신분을 보증해 줄 것이다 (동료 보증)", tone: "info" });
     }
-    // battleResult owns the rewards: victory ones once per battle, a defeat's every time.
-    const outcome = this.#process(battleResult(this.content, this.save, battle, won), true);
-    for (const line of outcome.lines)
-      if (line.tone === "epic") this.send({ t: "toast", text: line.text, tone: "epic" });
+    // battleResult owns the rewards: victory ones once per battle, a defeat's every time; the field shows its record.
+    this.#process(battleResult(this.content, this.save, battle, won), "field");
     if (won) {
       if (!battle.great) {
         const text = battle.victoryLabel ? `${battle.title} — ${battle.victoryLabel}` : `${battle.title} 승리`;
@@ -555,7 +562,10 @@ export class Session {
       }
       for (const objective of this.#visibleObjectives())
         if (objective.kind === "battle" && objective.target === battle.id) this.#completeObjective(objective.id);
-    } else this.send({ t: "toast", text: `${battle.title} — 물러났다. 다시 도전할 수 있다.`, tone: "bad" });
+    } else {
+      this.#withdrawnFrom = battle.id;
+      this.send({ t: "toast", text: `${battle.title} — 물러났다. 전장을 벗어났다가 다시 들어서면 다시 싸운다.`, tone: "bad" });
+    }
     this.#markSelf();
     this.persist();
   }
@@ -797,9 +807,11 @@ export class Session {
     if (!evalCond(this.content, this.save, option.requires)) return;
     if (!this.save.promptsDone.includes(def.id)) this.save.promptsDone.push(def.id);
     this.#fxSelf("sfx", "choice");
-    const outcome = this.#apply(option.effects, true);
+    // A choice among several gets a result card; a one-option card's record is not shown.
+    const card = def.options.length > 1;
+    const outcome = this.#apply(option.effects, card ? "card" : "none");
     // A history card's title names the event (삼전도, 우금치); its result card is only a record.
-    if (def.options.length > 1 && outcome.lines.length)
+    if (card && outcome.lines.length)
       this.#enqueue({ type: "result", id: serial("result"), title: def.style === "history" ? "기록" : def.title, lines: outcome.lines }, true);
     active.onDone?.();
   }
@@ -828,7 +840,7 @@ export class Session {
         ],
       },
     ];
-    const outcome = this.#apply(effects, true);
+    const outcome = this.#apply(effects, "card");
     this.#enqueue({ type: "result", id: serial("result"), title: "사사의 밤", lines: outcome.lines }, true);
   }
 
@@ -851,7 +863,7 @@ export class Session {
               },
             ];
     this.save.flags.inquiry = false;
-    const outcome = this.#apply(effects, true);
+    const outcome = this.#apply(effects, "card");
     if (outcome.lines.length)
       this.#enqueue({ type: "result", id: serial("result"), title: "사헌부의 조사", lines: outcome.lines }, true);
   }
@@ -1028,15 +1040,25 @@ export class Session {
 
   // ── Effects ────────────────────────────────────────────────────────────
 
-  #apply(effects: readonly Effect[], collectLines = false): EffectOutcome {
-    return this.#process(applyEffects(this.content, this.save, effects), collectLines);
+  #apply(effects: readonly Effect[], record: RecordShown = "none"): EffectOutcome {
+    return this.#process(applyEffects(this.content, this.save, effects), record);
   }
 
-  /** Performs the runtime half of an effect outcome (single owner for both rule entry points). */
-  #process(outcome: EffectOutcome, collectLines = false): EffectOutcome {
+  /**
+   * Performs the runtime half of an effect outcome (single owner for both
+   * rule entry points). `record` says where its result lines (the rules'
+   * record, outcome.lines) are shown: on a result card the caller opens
+   * ("card": the lines are returned), live as toasts, the epic ones, because
+   * the field has no card ("field": a battle's end), or not at all ("none").
+   * A level-up gets one notice: the record's own line wherever the record is
+   * shown, else the session's toast.
+   */
+  #process(outcome: EffectOutcome, record: RecordShown = "none"): EffectOutcome {
     for (const toast of outcome.toasts) this.send({ t: "toast", text: toast.text, tone: toast.tone });
+    if (record === "field")
+      for (const line of outcome.lines) if (line.tone === "epic") this.send({ t: "toast", text: line.text, tone: "epic" });
     if (outcome.levelsGained > 0) {
-      this.send({ t: "toast", text: `레벨 ${this.save.level}!`, tone: "epic" });
+      if (record === "none") this.send({ t: "toast", text: `레벨 ${this.save.level}!`, tone: "epic" });
       this.#fxSelf("levelup");
       this.#fxSelf("sfx", "levelup");
     }
@@ -1055,7 +1077,7 @@ export class Session {
     if (outcome.worldEvent) this.channel?.addWorldEvent(outcome.worldEvent);
     if (outcome.escape) this.#queuePending("escape", `${this.save.chapter}:${this.save.year}`);
     for (const battleId of outcome.battles) this.#startOrHoldBattle(battleId);
-    if (!collectLines) outcome.lines.length = 0;
+    if (record !== "card") outcome.lines.length = 0;
     this.#markSelf();
     return outcome;
   }
@@ -1150,19 +1172,23 @@ export class Session {
 
   /**
    * Whether `battleId` is still this player's to fight: an open battle
-   * objective of their step. Standing at such a battle starts it
-   * (#checkPlaces); standing at it while it runs takes them in
-   * (WorldHooks.fights), so a winner is never pulled into its replay.
+   * objective of their step, unless they withdrew from it and have not yet
+   * stepped away. Standing at such a battle starts it (#checkPlaces);
+   * standing at it while it runs takes them in (WorldHooks.fights), so a
+   * winner is never pulled into its replay, nor the defeated back into it.
    */
   needsBattle(battleId: string): boolean {
-    return !this.#settled() && this.#openObjective("battle", battleId) !== undefined;
+    return !this.#settled() && this.#withdrawnFrom !== battleId && this.#openObjective("battle", battleId) !== undefined;
   }
 
   #checkPlaces(): void {
     const channel = this.channel;
     const world = channel?.world;
     const status = world?.playerStatus(this.id);
-    if (!channel || !world || !status || this.#active) return;
+    if (!channel || !world || !status) return;
+    // Stepping away from a lost battle (beyond the trigger's reach) makes it theirs to fight again.
+    if (this.#withdrawnFrom !== null && !world.atBattle(this.#withdrawnFrom, this.id)) this.#withdrawnFrom = null;
+    if (this.#active) return;
     const here = world.siteOf(this.id);
     for (const objective of this.#visibleObjectives()) {
       if (this.#isDone(objective) || !objective.target) continue;
@@ -1170,7 +1196,7 @@ export class Session {
         const site = world.sitePosition(objective.target);
         const near = site ? Math.hypot(site.x - status.x, site.y - status.y) <= 4 : false;
         if (here === objective.target || near) this.#completeObjective(objective.id);
-      } else if (objective.kind === "battle" && world.atBattle(objective.target, this.id)) {
+      } else if (objective.kind === "battle" && objective.target !== this.#withdrawnFrom && world.atBattle(objective.target, this.id)) {
         // The world refuses a start while another battle runs or this player is down.
         channel.startBattle(objective.target, this, false);
       }

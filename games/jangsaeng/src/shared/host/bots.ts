@@ -25,6 +25,17 @@ const RETURN_FIRE = 10;
 const SUPPORT_POWER = 0.5;
 /** Seconds between a companion's skills. */
 const SKILL_EVERY: readonly [number, number] = [9, 16];
+/** A melee companion closes in this far from its foe (within striking reach)… */
+const SURROUND = 1.2;
+/** …on its far side from the one it protects, fanned over this arc (radians) by formation slot. */
+const SURROUND_FAN = (Math.PI * 2) / 3;
+/** Seconds a companion keeps quiet after a chat line: a battle's downs and revives do not each get one. */
+const LINE_GAP = 20;
+const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
+/** Distances (tiles) companions arrive at beside the hero, by slot, alternating so neighbours are not level… */
+const ARRIVAL_SPREAD: readonly number[] = [3, 4.5];
+/** …and keep from the hero in formation. */
+const FOLLOW_SPREAD: readonly number[] = [2.6, 4];
 
 export class Bot {
   readonly id: number;
@@ -42,8 +53,16 @@ export class Bot {
   #last = { x: 0, y: 0 };
   #greetIn: number;
   #formation: number;
+  /** How far from the hero this companion arrives (spotNear)… */
+  #reach: number;
+  /** …and keeps in formation (#formationSpot). */
+  #follow: number;
   #focus: number | null = null;
+  /** Seconds this companion has been thinking (its chat clock). */
+  #clock = 0;
+  #lastLine = -Infinity;
 
+  /** `slot`: this companion's place among the channel's (0, 1, …): its side of the hero in formation. */
   constructor(
     id: number,
     persona: CompanionPersona,
@@ -51,6 +70,7 @@ export class Bot {
     channel: Channel,
     content: ContentIndex,
     seed: number,
+    slot: number,
   ) {
     this.id = id;
     this.persona = persona;
@@ -60,7 +80,19 @@ export class Bot {
     this.#rng = createRng(seed);
     this.#archer = persona.sprite.includes("archer") || persona.style === "cautious";
     this.#greetIn = this.#rng.range(2, 9);
-    this.#formation = this.#rng.range(0, Math.PI * 2);
+    // Successive slots are a golden angle apart, so any number of companions spread evenly around the hero.
+    this.#formation = (slot * GOLDEN_ANGLE) % (Math.PI * 2);
+    this.#reach = ARRIVAL_SPREAD[slot % ARRIVAL_SPREAD.length] as number;
+    this.#follow = FOLLOW_SPREAD[slot % FOLLOW_SPREAD.length] as number;
+  }
+
+  /**
+   * Where this companion stands when it arrives beside (x, y) (joining the
+   * channel, a story jump, catching up): on its own formation side, at its
+   * own distance, so a party never lands stacked on the hero.
+   */
+  spotNear(x: number, y: number): { x: number; y: number } {
+    return { x: x + Math.cos(this.#formation) * this.#reach, y: y + Math.sin(this.#formation) * this.#reach };
   }
 
   spec(x: number, y: number): PlayerSpec {
@@ -89,8 +121,10 @@ export class Bot {
     };
   }
 
+  /** Says `text` in the channel's chat unless this companion spoke within LINE_GAP or the channel holds it back (Channel.say). */
   say(text: string): void {
-    this.#channel.say(this, text);
+    if (this.#clock - this.#lastLine < LINE_GAP) return;
+    if (this.#channel.say(this, text)) this.#lastLine = this.#clock;
   }
 
   #line(kind: "greet" | "battle" | "victory" | "revive" | "downed", chance = 1): void {
@@ -124,11 +158,12 @@ export class Bot {
   }
 
   catchUp(x: number, y: number): void {
-    const angle = this.#rng.range(0, Math.PI * 2);
-    this.#channel.world.teleport(this.id, x + Math.cos(angle) * 3, y + Math.sin(angle) * 3);
+    const spot = this.spotNear(x, y);
+    this.#channel.world.teleport(this.id, spot.x, spot.y);
   }
 
   think(dt: number, world: World): void {
+    this.#clock += dt;
     if (this.#greetIn > 0) {
       this.#greetIn -= dt;
       if (this.#greetIn <= 0) this.#line("greet", 0.8);
@@ -158,7 +193,7 @@ export class Bot {
       const distance = Math.hypot(focus.x - me.x, focus.y - me.y);
       if (this.#nearer(query, focus, distance) < REVIVERS) return distance > 0.9 ? this.#moveTo(me, focus.x, focus.y, idle) : idle;
       const enemy = query.nearestEnemy(me.x, me.y, SELF_DEFENCE) ?? query.nearestEnemy(focus.x, focus.y, GUARD_RADIUS);
-      if (enemy) return this.#fight(me, enemy);
+      if (enemy) return this.#fight(me, enemy, focus);
       return distance > COVER ? this.#moveTo(me, focus.x, focus.y, idle) : idle;
     }
     this.#focus = null;
@@ -177,14 +212,14 @@ export class Bot {
         query.nearestEnemy(leader.x, leader.y, GUARD_RADIUS) ??
         (post ? query.nearestEnemy(post.x, post.y, POST_GUARD) : null) ??
         query.enemyAiming([this.id, leader.id], me.x, me.y, RETURN_FIRE);
-      if (enemy) return this.#fight(me, enemy);
+      if (enemy) return this.#fight(me, enemy, null);
     } else if (inBattle) {
       const enemy = query.nearestEnemy(me.x, me.y, 12);
-      if (enemy) return this.#fight(me, enemy);
+      if (enemy) return this.#fight(me, enemy, null);
       if (Math.hypot(battle.x - me.x, battle.y - me.y) > battle.radius * 0.6) return this.#moveTo(me, battle.x, battle.y, idle);
     } else {
       const enemy = query.nearestEnemy(me.x, me.y, 7);
-      if (enemy && (!leader || Math.hypot(enemy.x - leader.x, enemy.y - leader.y) < 10)) return this.#fight(me, enemy);
+      if (enemy && (!leader || Math.hypot(enemy.x - leader.x, enemy.y - leader.y) < 10)) return this.#fight(me, enemy, leader);
     }
     // 3. Follow the leader in formation; catch up when far behind.
     if (leader) {
@@ -193,12 +228,27 @@ export class Bot {
         this.catchUp(leader.x, leader.y);
         return idle;
       }
-      const tx = leader.x + Math.cos(this.#formation) * 2.6;
-      const ty = leader.y + Math.sin(this.#formation) * 2.6;
-      if (Math.hypot(tx - me.x, ty - me.y) > 1.4) return this.#moveTo(me, tx, ty, idle);
+      const spot = this.#formationSpot(query, leader);
+      if (Math.hypot(spot.x - me.x, spot.y - me.y) > 1.4) return this.#moveTo(me, spot.x, spot.y, idle);
     }
     this.#stuckTimer = 0;
     return idle;
+  }
+
+  /**
+   * This companion's place in the formation around its leader: on its own
+   * side at its own distance (FOLLOW_SPREAD by slot), turned toward open
+   * ground when a wall or tree stands there, so a party in a narrow street
+   * strings out along it instead of piling onto the leader.
+   */
+  #formationSpot(query: ReturnType<World["query"]>, leader: { x: number; y: number }): { x: number; y: number } {
+    const at = (angle: number) => ({ x: leader.x + Math.cos(angle) * this.#follow, y: leader.y + Math.sin(angle) * this.#follow });
+    for (let k = 0; k < 8; k++) {
+      const turn = Math.ceil(k / 2) * (k % 2 === 1 ? 1 : -1) * (Math.PI / 4);
+      const spot = at(this.#formation + turn);
+      if (query.walkable(spot.x, spot.y)) return spot;
+    }
+    return at(this.#formation);
   }
 
   /** How many standing companions are nearer to `ally` than this one (ties go to the lower id). */
@@ -231,7 +281,7 @@ export class Bot {
     return best;
   }
 
-  #fight(me: { x: number; y: number }, enemy: { x: number; y: number }): PlayerInput {
+  #fight(me: { x: number; y: number }, enemy: { x: number; y: number }, ward: { x: number; y: number } | null): PlayerInput {
     const dx = enemy.x - me.x;
     const dy = enemy.y - me.y;
     const distance = Math.hypot(dx, dy) || 1;
@@ -261,9 +311,20 @@ export class Bot {
       } else input.shoot = this.#rng.chance(0.85);
       return this.#unstick(me, input);
     }
-    if (distance > 1.1) {
-      input.mx = dx / distance;
-      input.my = dy / distance;
+    // Close in on the enemy's far side from whoever this companion protects
+    // (`ward`: its leader in the field, or a fallen ally it covers), fanned
+    // out by its formation slot; in a battle (no ward) on its own formation
+    // side, so it is not drawn off a post the battle holds. Either way
+    // companions ring a foe instead of piling onto it from the hero's side,
+    // and their bodies and name plates do not stack on the hero.
+    const fan = (this.#formation / (Math.PI * 2) - 0.5) * SURROUND_FAN;
+    const side = ward ? Math.atan2(enemy.y - ward.y, enemy.x - ward.x) + fan : this.#formation;
+    const sx = enemy.x + Math.cos(side) * SURROUND - me.x;
+    const sy = enemy.y + Math.sin(side) * SURROUND - me.y;
+    const gap = Math.hypot(sx, sy);
+    if (gap > 0.35 && distance > 1.0) {
+      input.mx = sx / gap;
+      input.my = sy / gap;
     }
     input.attack = distance < 1.8;
     return this.#unstick(me, input);

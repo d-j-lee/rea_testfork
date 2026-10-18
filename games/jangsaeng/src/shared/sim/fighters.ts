@@ -31,6 +31,9 @@ function pickFoe(sim: Sim, a: Actor): Actor | null {
   return best;
 }
 
+/** A fighter's own side of any foe it closes in on: spread by the golden angle over actor ids. */
+const surroundAngle = (id: number): number => (id * 2.39996) % (Math.PI * 2);
+
 export function stepToward(sim: Sim, a: Actor, gx: number, gy: number, speed: number, dt: number, stop: number): void {
   const dx = gx - a.x;
   const dy = gy - a.y;
@@ -69,7 +72,11 @@ export function tickFighter(sim: Sim, a: Actor, dt: number): void {
       const d = Math.hypot(foe.x - a.x, foe.y - a.y);
       const reach = f.range + foe.radius;
       if (t >= a.animUntil) {
-        if (d > reach - 0.1) stepToward(sim, a, foe.x, foe.y, f.speed, dt, reach - 0.3);
+        if (!f.ranged && d > reach - 0.1) {
+          // A soldier closes in on its own side of the foe, so a line of them rings it instead of piling up on one side.
+          const side = surroundAngle(a.id);
+          stepToward(sim, a, foe.x + Math.cos(side) * (reach - 0.3), foe.y + Math.sin(side) * (reach - 0.3), f.speed, dt, 0.2);
+        } else if (d > reach - 0.1) stepToward(sim, a, foe.x, foe.y, f.speed, dt, reach - 0.3);
         else if (f.ranged && d < 2.5) stepToward(sim, a, a.x * 2 - foe.x, a.y * 2 - foe.y, f.speed * 0.7, dt, 0);
         else a.moving = false;
       }
