@@ -6,20 +6,18 @@ import {
   applyEffects,
   applyResonance,
   changeLife,
+  completeWorldEvent,
   graceAvailable,
+  LONGEVITY_MAX_PER_CHAPTER,
+  longevityBlocker,
   offerVirtue,
+  reviveVirtue,
   selfRevive,
   successorTakeover,
   useItem,
   useLongevity,
   virtueEarned,
 } from "../../src/shared/rules/index.ts";
-import {
-  LONGEVITY_MAX_PER_CHAPTER,
-  longevityBlocker,
-  reviveVirtue,
-  worldEventVirtue,
-} from "../../src/shared/rules/lifespan.ts";
 import { at, FIXTURE, newSave } from "./rules-fixture.ts";
 
 test("changeLife records gains and losses", () => {
@@ -112,16 +110,29 @@ test("longevityBlocker is the one gate and names the reason", () => {
   assert.match(longevityBlocker(heir) ?? "", /계승자/);
 });
 
-test("공덕 for reviving: +8, ten times per chapter; for a 공동 실록: +40, twice per chapter", () => {
+test("공덕 for reviving: +8, ten times per chapter", () => {
   const save = at(newSave(), "ch04");
   const gained = Array.from({ length: 11 }, () => reviveVirtue(save));
   assert.deepEqual(gained, [8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 0]);
-  assert.deepEqual([worldEventVirtue(save), worldEventVirtue(save), worldEventVirtue(save)], [40, 40, 0]);
-  assert.equal(save.points.virtue, 160);
-  assert.equal(virtueEarned(save), 160, "counts toward 노인성 감응 and P2");
+  assert.equal(save.points.virtue, 80);
+  assert.equal(virtueEarned(save), 80, "counts toward 노인성 감응 and P2");
   save.chapter = "ch05";
   assert.equal(reviveVirtue(save), 8, "a new chapter, a new allowance");
-  assert.equal(worldEventVirtue(save), 40);
+});
+
+test("a completed 공동 실록: 시대정신 +1 once per chapter (cap 5), 공덕 +40 twice per chapter", () => {
+  const save = at(newSave(), "ch04");
+  const gains = Array.from({ length: 3 }, () => completeWorldEvent(save));
+  assert.deepEqual(gains, [{ zeitgeist: 1, virtue: 40 }, { zeitgeist: 0, virtue: 40 }, { zeitgeist: 0, virtue: 0 }]);
+  assert.equal(save.flags["zeitgeist"], 1);
+  assert.equal(virtueEarned(save), 80, "counts toward 노인성 감응 and P2");
+  save.chapter = "ch05";
+  assert.deepEqual(completeWorldEvent(save), { zeitgeist: 1, virtue: 40 }, "a new chapter, a new allowance");
+  // At the cap the chapter's completion still counts, but no 시대정신 is reported as gained.
+  save.flags["zeitgeist"] = 5;
+  save.chapter = "ch06";
+  assert.deepEqual(completeWorldEvent(save), { zeitgeist: 0, virtue: 40 });
+  assert.equal(save.flags["zeitgeist"], 5);
 });
 
 test("the first self-revive each chapter is free", () => {

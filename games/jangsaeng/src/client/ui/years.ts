@@ -1,8 +1,9 @@
 // Passage of years (prompt kind "years"): one activity per token of the era
 // (spans and heading come from the host's plan), optional identity wash with a
-// new name, the 노인성 offering and a lifespan projection. The planner starts
-// from the plan's suggestion. Confirming sends { t: "years" }; the passage then
-// rolls the year counter when the host answers.
+// new name, the 노인성 offering, the once-in-a-run 마지막 은혜 (its own switch,
+// off unless the player turns it on) and a lifespan projection. The planner
+// starts from the plan's suggestion. Confirming sends { t: "years" }; the
+// passage then rolls the year counter when the host answers.
 import type { WashMethod } from "../../shared/content/schema.ts";
 import type { PromptView, YearsPlanView } from "../../shared/types.ts";
 import { AWAKENING_YEAR, FINAL_YEAR } from "../../shared/types.ts";
@@ -17,6 +18,7 @@ export interface YearsSubmit {
   wash?: WashMethod;
   name?: string;
   offer: boolean;
+  grace: boolean;
 }
 
 const WASH_IDS: readonly string[] = ["descendant", "fakeDeath", "monk", "merchant", "exam"];
@@ -100,6 +102,8 @@ export class YearsPlanner {
     let current = 0;
     let wash: WashMethod | null = null;
     let offer = plan.suggested.offer && plan.canOffer > 0;
+    const graceYears = plan.graceYears ?? 0;
+    let grace = false;
     const nameInput = h("input", {
       class: "text-input",
       type: "text",
@@ -171,20 +175,21 @@ export class YearsPlanner {
       );
     };
     const renderProjection = () => {
-      const end = plan.lifeEnd + (offer ? plan.canOffer : 0);
+      const added = (offer ? plan.canOffer : 0) + (grace ? graceYears : 0);
+      const end = plan.lifeEnd + added;
       const axis = Math.max(FINAL_YEAR, end) - AWAKENING_YEAR;
       const at = (y: number) => ratio(y - AWAKENING_YEAR, axis).toFixed(4);
       const short = FINAL_YEAR - end;
       summary.replaceChildren(
         h("span", { class: "st-k" }, "천수"),
         `${end}년`,
-        h("b", { class: "good" }, offer && plan.canOffer > 0 ? ` +${plan.canOffer}` : ""),
+        h("b", { class: "good" }, added > 0 ? ` +${added}` : ""),
         short > 0 ? h("span", { class: "yr-short-chip" }, `${FINAL_YEAR}까지 −${short}년`) : h("span", { class: "yr-ok-chip" }, `${FINAL_YEAR}까지 닿는다`),
       );
       projection.replaceChildren(
         h("p", null,
           h("span", { class: "st-k" }, "천수"), ` ${end}년까지`,
-          offer && plan.canOffer > 0 ? h("b", { class: "good" }, ` (+${plan.canOffer})`) : null,
+          added > 0 ? h("b", { class: "good" }, ` (+${added})`) : null,
           ` · ${plan.toYear}년에 ${Math.max(0, end - plan.toYear)}년 남음`),
         h("span", { class: "life-track big", style: `--now:${at(plan.toYear)};--end:${at(end)};--goal:${at(FINAL_YEAR)}` },
           h("span", { class: "life-past" }), h("span", { class: "life-left" }), h("span", { class: "life-gap" }), h("span", { class: "life-goal" })),
@@ -238,8 +243,29 @@ export class YearsPlanner {
     h("span", { class: "offer-star", "aria-hidden": "true" }, "✦"),
     h("span", { class: "offer-text" },
       h("strong", null, "노인성 봉헌"),
-      h("span", null, plan.canOffer > 0 ? `공덕 ${plan.virtue}을 바쳐 천수 +${plan.canOffer}년` : `공덕 ${plan.virtue} · 이번 장에는 더 바칠 수 없다`)),
+      h("span", null, plan.canOffer > 0 ? `공덕을 바쳐 천수 +${plan.canOffer}년 (지닌 공덕 ${plan.virtue})` : `공덕 ${plan.virtue} · 이번 장에는 더 바칠 수 없다`)),
     h("span", { class: "switch", "aria-hidden": "true" }));
+    // The last grace is offered only while it can be taken, and only ever on the player's word.
+    const graceBtn = graceYears > 0
+      ? h("button", {
+        type: "button",
+        class: "yr-offer",
+        role: "switch",
+        "aria-checked": "false",
+        onclick: () => {
+          grace = !grace;
+          graceBtn?.setAttribute("aria-checked", String(grace));
+          graceBtn?.classList.toggle("on", grace);
+          this.#audio.sfx(grace ? "heal" : "ui_click");
+          renderProjection();
+        },
+      },
+      h("span", { class: "offer-star", "aria-hidden": "true" }, "✧"),
+      h("span", { class: "offer-text" },
+        h("strong", null, "노인성의 마지막 은혜"),
+        h("span", null, `단 한 번 · 천수 +${graceYears}년 · 봉헌하고 남은 공덕 전부와 명망 10을 바친다`)),
+      h("span", { class: "switch", "aria-hidden": "true" }))
+      : null;
     const renderAll = () => {
       renderTrack();
       renderCards();
@@ -259,7 +285,7 @@ export class YearsPlanner {
       this.#prompt = null;
       confirm.disabled = true;
       this.#audio.sfx("choice");
-      this.#submit({ prompt: p.id, activities: [...chosen], wash: wash ?? undefined, name, offer });
+      this.#submit({ prompt: p.id, activities: [...chosen], wash: wash ?? undefined, name, offer, grace });
       // Fallback if the host answers without a follow-up message.
       window.setTimeout(() => void this.playPassage(), 1200);
     }, { class: "btn btn-primary btn-wide", "data-action": "years-confirm" });
@@ -281,6 +307,7 @@ export class YearsPlanner {
       nameRow,
       h("h3", { class: "sub-title" }, "천수"),
       offerBtn,
+      graceBtn,
       projection)),
     );
   }

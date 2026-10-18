@@ -26,10 +26,30 @@ test("skilled play (GDD): S ≈ 83.7 → N1", () => {
   const save = finalSave([65, 62, 50, 65, 60], ["B1", "B4", "B6", "B7", "B8", "B11", "B12a", "B12b", "B12c"], 3);
   assert.equal(finalInfiltration(save), 25);
   const ending = computeEnding(FIXTURE, save);
-  assert.equal(ending.score, 83.65);
+  assert.equal(ending.score, 83.7);
   assert.equal(ending.nation, "N1");
-  assert.deepEqual(ending.breakdown.map((term) => term.value), [16.25, 12.4, 7.5, 13, 12, 27, -7.5, 3]);
+  assert.deepEqual(ending.breakdown.map((term) => term.value), [16.3, 12.4, 7.5, 13, 12, 27, -7.5, 3]);
   assert.equal(ending.breakdown[5]?.label, "분기 성공 9개 × 3");
+});
+
+test("the rows are settled to 0.1 and the score is their sum, so they agree as shown", () => {
+  const shown = (value: number) => value.toFixed(1);
+  let checked = 0;
+  for (let defense = 0; defense <= 100; defense += 7) {
+    for (const finance of [3, 41, 77]) {
+      for (const infiltrated of [[], ["B4", "B8"], ["B5", "B6", "B9", "B10", "B12a"]] as BranchId[][]) {
+        const won = BRANCH_IDS.filter((id) => !infiltrated.includes(id));
+        const save = finalSave([defense, 100 - defense, finance, (defense * 3) % 101, (finance * 7) % 101], won, defense % 6);
+        const ending = computeEnding(FIXTURE, save);
+        for (const row of ending.breakdown) assert.equal(Math.round(row.value * 10) / 10, row.value, `${row.label}: ${row.value}`);
+        const rows = ending.breakdown.reduce((sum, row) => sum + Number(shown(row.value)), 0);
+        assert.equal(shown(rows), shown(ending.score), `rows ${ending.breakdown.map((row) => shown(row.value)).join(" + ")} vs ${ending.score}`);
+        assert.equal(Math.round(rows * 10) / 10, ending.score, "the score is exactly the sum of the rows");
+        checked++;
+      }
+    }
+  }
+  assert.ok(checked > 100, `checked ${checked} settlements`);
 });
 
 test("§8.3 N1 boundary: 60/60/45/58/55, 10 branches, infiltration 20, P 2 → S ≈ 82.4, N1", () => {
@@ -37,7 +57,7 @@ test("§8.3 N1 boundary: 60/60/45/58/55, 10 branches, infiltration 20, P 2 → S
   const save = finalSave([60, 60, 45, 58, 55], ["B4", "B5", "B6", "B7", "B9", "B10", "B11", "B12a", "B12b", "B12c"], 2);
   assert.equal(finalInfiltration(save), 20);
   const ending = computeEnding(FIXTURE, save);
-  assert.equal(ending.score, 82.35);
+  assert.equal(ending.score, 82.4);
   assert.equal(ending.nation, "N1");
 });
 
@@ -56,7 +76,8 @@ test("average play (GDD): S ≈ 45 → N2 boundary", () => {
   const save = finalSave([45, 45, 35, 50, 45], ["B1", "B3", "B4", "B5", "B8"], 2);
   assert.equal(finalInfiltration(save), 55);
   const ending = computeEnding(FIXTURE, save);
-  assert.equal(ending.score, 45);
+  // 11.25 and 5.25 settle to 11.3 and 5.3: the rows as shown add up to 45.1.
+  assert.equal(ending.score, 45.1);
   assert.equal(ending.nation, "N2");
   save.flags["zeitgeist"] = 1;
   assert.equal(computeEnding(FIXTURE, save).nation, "N3", "just below the boundary");
@@ -66,12 +87,13 @@ test("historical path (GDD): every branch failed → infiltration 100, S ≈ −
   const save = finalSave([15, 20, 15, 40, 35], []);
   assert.equal(finalInfiltration(save), 100);
   const ending = computeEnding(FIXTURE, save);
-  assert.equal(ending.score, -5);
+  // 3.75 and 2.25 settle to 3.8 and 2.3.
+  assert.equal(ending.score, -4.9);
   assert.equal(ending.nation, "N3");
   // Unresolved branches count as failed too.
   const untouched = at(newSave(), "ch16", 1910);
   untouched.nation = { defense: 15, diplomacy: 20, finance: 15, people: 40, reform: 35 };
-  assert.equal(computeEnding(FIXTURE, untouched).score, -5);
+  assert.equal(computeEnding(FIXTURE, untouched).score, -4.9);
 });
 
 test("B12b alone guarantees N2; zeitgeist is capped at +5", () => {

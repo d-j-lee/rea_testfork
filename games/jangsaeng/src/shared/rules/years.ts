@@ -17,7 +17,7 @@ import {
   WASH_METHODS,
 } from "./identity.ts";
 import { applyGrace, applyResonance, graceAvailable, GRACE_YEARS, offerableYears, offerVirtue } from "./lifespan.ts";
-import { carryNation, INFILTRATION_FROM_ORDER } from "./nation.ts";
+import { carryNation, closeChapterBranches, INFILTRATION_FROM_ORDER } from "./nation.ts";
 import { promote, refreshEraGear } from "./progression.ts";
 import { pastLifeEnd, successorTakeover } from "./succession.ts";
 import {
@@ -35,11 +35,14 @@ import {
 } from "./util.ts";
 
 export interface YearsChoice {
-  /** One activity id per 10-year token. */
+  /** One activity id per token of the era. */
   activities: string[];
   wash?: WashMethod;
   newName?: string;
+  /** 노인성 봉헌: 100 공덕 a year, up to this chapter's allowance. */
   offer: boolean;
+  /** 노인성의 마지막 은혜: taken only when the player asks for it (never by the offering). */
+  grace?: boolean;
 }
 
 export const SALARY_PER_RANK = 40;
@@ -306,7 +309,8 @@ function projectedSuspicion(save: PlayerSave, toYear: number): number {
  * tokens stand for the whole era (chapter start → next start, §5.7.1), so the
  * view carries those spans and the copy; fromYear → toYear is only what the
  * year counter still has to move. `suggested` is the plan a plain confirm or a
- * demo skip submits: the first open activity, and the offering whenever it adds years.
+ * demo skip submits: the first open activity, and the offering whenever it adds
+ * years. The last grace is offered (`graceYears`) but never suggested.
  */
 export function yearsPlan(content: ContentIndex, save: PlayerSave, next: ChapterId): YearsPlanView {
   const toYear = Math.max(save.year, content.chapters[next]?.years[0] ?? save.year);
@@ -325,8 +329,8 @@ export function yearsPlan(content: ContentIndex, save: PlayerSave, next: Chapter
     return disabled ? { ...view, disabled } : view;
   });
   const firstOpen = activities.find((activity) => !activity.disabled)?.id ?? (ACTIVITIES[0] as ActivityDef).id;
-  const canOffer = offerableYears(save) + (graceAvailable(content, save, next) ? GRACE_YEARS : 0);
-  return {
+  const canOffer = offerableYears(save);
+  const plan: YearsPlanView = {
     type: "years",
     fromYear: save.year,
     toYear,
@@ -343,6 +347,8 @@ export function yearsPlan(content: ContentIndex, save: PlayerSave, next: Chapter
     canOffer,
     suggested: { activities: Array.from({ length: tokens }, () => firstOpen), offer: canOffer > 0 },
   };
+  if (graceAvailable(content, save, next)) plan.graceYears = GRACE_YEARS;
+  return plan;
 }
 
 // ── Advance ──────────────────────────────────────────────────────────────
@@ -359,9 +365,10 @@ function inheritFactions(content: ContentIndex, save: PlayerSave, next: ChapterI
 /**
  * Advances save.year to the next chapter's start in the §5.7.2 order:
  * 1 salary (and promotion at the chapter's settlement), 2 activities and small
- * events, 3 wash, 4 동료 보증, 5 노인성 감응 and offering/grace, 6 yearly
- * suspicion, 8 nation carry-over, 9 chapter counters reset, 10 successor,
- * 11 forced wash or inquiry, 12 era gear. (7, farewell cards, is the session's.)
+ * events, 3 wash, 4 동료 보증, 5 노인성 감응, offering and (when chosen) the
+ * last grace, 6 yearly suspicion, 8 the chapter's undecided branches fail, then
+ * nation carry-over, 9 chapter counters reset, 10 successor, 11 forced wash or
+ * inquiry, 12 era gear. (7, farewell cards, is the session's.)
  */
 export function advanceYears(content: ContentIndex, save: PlayerSave, next: ChapterId, choice: YearsChoice): ResultView["lines"] {
   const target = content.chapters[next];
@@ -409,14 +416,18 @@ export function advanceYears(content: ContentIndex, save: PlayerSave, next: Chap
     lines.push(line(`동료 보증 — 함께 싸운 장생인이 새 신분을 증언했다 (의심도 ${delta === 0 ? "0" : `−${Math.abs(delta)}`})`, "good"));
   }
 
-  // 5. 노인성 감응, then offering and the last grace.
+  // 5. 노인성 감응, then the offering, then the last grace when the player asked for it.
   lines.push(...applyResonance(save, leaving));
   if (choice.offer) {
     const years = offerVirtue(save);
-    if (years > 0) lines.push(line(`노인성 제단에 공덕을 바치다 — 천수 +${years}년 (${save.lifeEnd}년까지)`, "good"));
-    const grace = graceAvailable(content, save, next);
-    if (grace) lines.push(...applyGrace(save));
-    if (years === 0 && !grace) lines.push(line("바칠 공덕이 모자라다", "info"));
+    lines.push(years > 0
+      ? line(`노인성 제단에 공덕을 바치다 — 천수 +${years}년 (${save.lifeEnd}년까지)`, "good")
+      : line("바칠 공덕이 모자라다", "info"));
+  }
+  if (choice.grace === true) {
+    lines.push(...(graceAvailable(content, save, next)
+      ? applyGrace(save)
+      : [line("노인성의 마지막 은혜는 지금 받을 수 없다", "info")]));
   }
 
   // 6. Years pass one by one.
@@ -426,7 +437,9 @@ export function advanceYears(content: ContentIndex, save: PlayerSave, next: Chap
   const band = suspicionBand(save.suspicion);
   lines.push(line(`의심도 ${suspicionBefore} → ${save.suspicion} (${BAND_NAMES[band]})`, band === "calm" ? "info" : "bad"));
 
-  // 8. Nation carry-over and faction lineage.
+  // 8. The chapter's undecided branches fail (so infiltration holds what the
+  // ending charges), then nation carry-over and faction lineage.
+  closeChapterBranches(save, leaving);
   save.nation = carryNation(content, save, next);
   if (target.order < INFILTRATION_FROM_ORDER) save.infiltration = 0;
   inheritFactions(content, save, next);
@@ -436,6 +449,7 @@ export function advanceYears(content: ContentIndex, save: PlayerSave, next: Chap
   save.chapter = next;
   save.step = 0;
   save.objectives = {};
+  save.pending = [];
   save.longevityUses = 0;
   save.offeredThisChapter = 0;
   save.aligned = null;

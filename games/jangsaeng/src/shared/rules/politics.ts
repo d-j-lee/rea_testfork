@@ -19,7 +19,7 @@ export interface PurgeTerm {
 }
 
 /** E multiplier for standing with the winner, with the loser, or with neither (§5.5.3). */
-export const PURGE_SIDE = { winner: 0.3, loser: 1.0, neutral: 0.6 } as const;
+const PURGE_SIDE = { winner: 0.3, loser: 1.0, neutral: 0.6 } as const;
 
 /**
  * E multiplier by the side the player stands on in this event. A neutral

@@ -21,11 +21,15 @@ import {
   allocatePoint,
   applyEffects,
   battleResult,
+  completeWorldEvent,
   computeEnding,
   derived,
   equipItem,
   evalCond,
   heroSprite,
+  LONGEVITY_MAX_PER_CHAPTER,
+  longevityBlocker,
+  reviveVirtue,
   selfRevive,
   slotSkill,
   suggestName,
@@ -35,11 +39,8 @@ import {
   type EffectOutcome,
   type YearsChoice,
 } from "../rules/index.ts";
-import { LONGEVITY_MAX_PER_CHAPTER, longevityBlocker, reviveVirtue, worldEventVirtue } from "../rules/lifespan.ts";
-import { ZEITGEIST_MAX } from "../rules/nation.ts";
-import { numberFlag } from "../rules/util.ts";
 import type { PlayerInput, PlayerSpec } from "../sim/world.ts";
-import type { Marker, ObjectiveView, PlayerSave, PromptView, ResultView } from "../types.ts";
+import type { Marker, ObjectiveView, PendingStory, PlayerSave, PromptView, ResultView } from "../types.ts";
 import type { Channel } from "./channel.ts";
 import { sanitizeChat, sanitizeName } from "./parse.ts";
 import { chapterView, endingView, promptView, selfView } from "./views.ts";
@@ -56,7 +57,8 @@ export interface SessionServices {
 
 /**
  * `year`: the story year when the card was raised (shown on it even if the step moves on first).
- * `pending`: the save flag that keeps this card across a reload (see PENDING).
+ * `step`: the step index when it was raised.
+ * `pending`: its entry in save.pending, which keeps the card across a reload.
  */
 type Queued = (
   | { type: "def"; id: string; onDone?: () => void }
@@ -65,24 +67,23 @@ type Queued = (
   | { type: "years"; id: string; next: ChapterId }
   | { type: "escape"; id: string }
   | { type: "inquiry"; id: string }
-) & { year?: number; pending?: string };
+) & { year?: number; step?: number; pending?: PendingStory };
 
 type Active = Queued & { view: PromptView };
 
 /**
- * Story work the session holds for later and cannot rebuild from the step:
- * prompts raised by effects, 사사 escape cards and battles waiting behind a
- * card. Each is a save flag `pending:<kind>:<ref>` until it is shown or
- * started, so a reload (tab refresh, reconnect) resumes it. Prompt objectives,
- * talk prompts and the years card are rebuilt from the step instead, and the
- * 사헌부 card from flag `inquiry`.
+ * The years plan as the client sends it. `grace` (노인성의 마지막 은혜, only when
+ * the player turns it on) rides on the same message.
  */
-const PENDING = "pending:";
-type PendingKind = "def" | "escape" | "battle";
-const pendingKey = (kind: PendingKind, ref: string): string => `${PENDING}${kind}:${ref}`;
+type YearsMessage = Extract<ClientMsg, { t: "years" }> & { grace?: boolean };
+
+/** The 사사 위기 card for the sentence `<chapter>:<year>` (save.pending id). */
+const escapeCardId = (sentence: string): string => `escape:${sentence}`;
 
 /** Demo skip moves the presenter only when the next objective is farther than this (tiles). */
 const DEMO_NEAR = 8;
+/** Most 건너뛰기 presses a demo entry may take to reach its step (guards malformed content). */
+const DEMO_ENTRY_PRESSES = 2000;
 
 const IDLE_INPUT: PlayerInput = {
   mx: 0,
@@ -119,6 +120,8 @@ export class Session {
   /** While > 0, queued prompts are not shown (keeps result cards first). */
   #hold = 0;
   #refreshing = false;
+  /** Nothing goes to the client (a demo entry plays its skipped steps unseen). */
+  #quiet = false;
   closed = false;
 
   constructor(
@@ -148,7 +151,16 @@ export class Session {
   }
 
   send(message: ServerMsg): void {
-    if (!this.closed) this.#send(message);
+    if (!this.closed && !this.#quiet) this.#send(message);
+  }
+
+  /**
+   * A settled run (save.ending, also after a reload) takes no more changes:
+   * every inbound message but chat and ping, and every world hook the channel
+   * routes here, stops at this one gate.
+   */
+  #settled(): boolean {
+    return this.save.ending !== undefined;
   }
 
   // ── Lifecycle ──────────────────────────────────────────────────────────
@@ -161,7 +173,7 @@ export class Session {
     this.#queue = [];
     this.#active = null;
     this.#heldBattles = [];
-    if (this.save.ending) {
+    if (this.#settled()) {
       this.#sendEnding();
       return;
     }
@@ -176,31 +188,55 @@ export class Session {
         this.save.chronicle.push({ year: this.save.year, text: "유배지에서 새 시대를 맞았다.", tone: "bad" });
         this.save.exile = undefined;
       }
-      this.#enterStep(0, true);
+      if (this.save.demoEntry !== undefined) this.#playDemoEntry(this.save.demoEntry);
+      else this.#enterStep(0, true);
     } else {
       this.#resumeStep();
     }
     channel.updateStep();
     // Nothing queued: battles restored from the save start now.
-    if (!this.save.ending) this.#showNext();
+    if (!this.#settled()) this.#showNext();
     this.#markSelf();
     this.persist();
   }
 
-  /** Rebuilds the cards and held battles the save still owes (PENDING). */
-  #restorePending(): void {
-    for (const key of Object.keys(this.save.flags)) {
-      if (!key.startsWith(PENDING)) continue;
-      const rest = key.slice(PENDING.length);
-      const cut = rest.indexOf(":");
-      const kind = rest.slice(0, cut);
-      const ref = rest.slice(cut + 1);
-      if (this.save.flags[key] !== true || cut <= 0 || !ref) delete this.save.flags[key];
-      else if (kind === "def") this.#enqueue({ type: "def", id: ref, pending: key });
-      else if (kind === "escape") this.#enqueue({ type: "escape", id: `escape:${ref}`, pending: key });
-      else if (kind === "battle") this.#heldBattles.push(ref);
-      else delete this.save.flags[key];
+  /**
+   * A cold-open demo (save.demoEntry, from ChapterDef.demoStart) starts at that
+   * step. The chapter is entered as always, and the steps before the entry are
+   * played by this session's own 건너뛰기: it presses #demoSkip until the story
+   * stands at the entry step and every card raised before it is answered — the
+   * presses a presenter would make from the first step, so the save holds
+   * exactly what they would leave. Nothing is sent meanwhile; the presenter
+   * then sees the card the entry step opens with.
+   */
+  #playDemoEntry(stepId: string): void {
+    delete this.save.demoEntry;
+    const entry = this.chapter.steps.findIndex((step) => step.id === stepId);
+    const behind = () =>
+      this.save.step < entry || [this.#active, ...this.#queue].some((item) => item !== null && (item.step ?? entry) < entry);
+    this.#quiet = true;
+    try {
+      this.#enterStep(0, true);
+      for (let press = 0; press < DEMO_ENTRY_PRESSES && entry > 0 && behind() && !this.#settled(); press++) this.#demoSkip();
+    } finally {
+      this.#quiet = false;
     }
+    if (entry > 0 && behind()) this.#services.log(`demo entry ${this.chapter.id}/${stepId} stopped at step ${this.save.step}`);
+    if (this.#active) this.send({ t: "prompt", prompt: this.#active.view });
+  }
+
+  /** Rebuilds the cards and held battles the save still owes (save.pending), in order. */
+  #restorePending(): void {
+    for (const entry of this.save.pending) {
+      if (entry.kind === "battle") this.#heldBattles.push(entry.id);
+      else if (entry.kind === "escape") this.#enqueue({ type: "escape", id: escapeCardId(entry.id), pending: entry });
+      else this.#enqueue({ type: "def", id: entry.id, pending: entry });
+    }
+  }
+
+  /** The card or battle is shown or started: the save no longer owes it. */
+  #forget(entry: PendingStory): void {
+    this.save.pending = this.save.pending.filter((known) => known.kind !== entry.kind || known.id !== entry.id);
   }
 
   /** The 사헌부 card while flag `inquiry` stands (set by rules settleSuspicion), once in the queue. */
@@ -219,8 +255,7 @@ export class Session {
   // ── Inbound messages ───────────────────────────────────────────────────
 
   receive(message: ClientMsg): void {
-    // A settled run accepts no more changes, also after a reload.
-    if (this.save.ending && message.t !== "chat" && message.t !== "ping") return;
+    if (this.#settled() && message.t !== "chat" && message.t !== "ping") return;
     switch (message.t) {
       case "input":
         this.#input(message);
@@ -448,7 +483,7 @@ export class Session {
   // ── World events routed by the channel ─────────────────────────────────
 
   onTalk(npcId: string): void {
-    if (this.#active) return;
+    if (this.#settled() || this.#active) return;
     const objective = this.#visibleObjectives().find(
       (candidate) => candidate.kind === "talk" && candidate.target === npcId && !this.#isDone(candidate),
     );
@@ -475,6 +510,7 @@ export class Session {
   }
 
   onKill(enemy: EnemyDef, level: number, boss: boolean): void {
+    if (this.#settled()) return;
     const exp = Math.round(5 * level * (boss ? 25 : enemy.elite ? 4 : 1));
     this.save.record.kills++;
     if (boss) this.save.record.bossKills++;
@@ -485,6 +521,7 @@ export class Session {
   }
 
   onPickup(item: string): void {
+    if (this.#settled()) return;
     const def = this.content.items[item];
     this.#apply([{ k: "item", item, add: 1 }]);
     if (def) this.send({ t: "toast", text: `${def.name}을(를) 얻었다.`, tone: def.id === "ginseng" ? "epic" : "info" });
@@ -493,18 +530,16 @@ export class Session {
 
   /** `others`: other participants (humans or ◇ companions) in the battle. */
   onBattleEnd(battle: BattleDef, result: "victory" | "defeat", others = 0): void {
+    if (this.#settled()) return;
     const won = result === "victory";
     if (won && others > 0 && !this.save.flags.vouch) {
       this.save.flags.vouch = true;
       this.send({ t: "toast", text: "함께 싸운 이들이 새 신분을 보증해 줄 것이다 (동료 보증)", tone: "info" });
     }
-    const first = won && !this.save.battlesWon.includes(battle.id);
-    // Victory rewards are granted once per battle; defeats always apply.
-    if (!won || first) {
-      const outcome = this.#process(battleResult(this.content, this.save, battle, won), true);
-      for (const line of outcome.lines)
-        if (line.tone === "epic") this.send({ t: "toast", text: line.text, tone: "epic" });
-    }
+    // battleResult owns the rewards: victory ones once per battle, a defeat's every time.
+    const outcome = this.#process(battleResult(this.content, this.save, battle, won), true);
+    for (const line of outcome.lines)
+      if (line.tone === "epic") this.send({ t: "toast", text: line.text, tone: "epic" });
     if (won) {
       if (!battle.great) this.send({ t: "toast", text: `${battle.title} 승리`, tone: "good" });
       for (const objective of this.#visibleObjectives())
@@ -520,6 +555,7 @@ export class Session {
   }
 
   onRevived(byName: string | null): void {
+    if (this.#settled()) return;
     if (byName === null) {
       for (const line of selfRevive(this.save)) this.send({ t: "toast", text: line.text, tone: "warn" });
       this.#refreshEntity();
@@ -528,32 +564,25 @@ export class Session {
   }
 
   onRevivedOther(): void {
-    if (this.save.ending) return;
+    if (this.#settled()) return;
     this.save.record.revivesGiven++;
     const virtue = reviveVirtue(this.save);
     if (virtue > 0) this.send({ t: "toast", text: `동료를 일으켜 세웠다 — 공덕 +${virtue}`, tone: "good" });
     this.#markSelf();
   }
 
-  /** The channel's 공동 실록 is complete with this session in it: 시대정신 once per chapter, 공덕 by the rules. */
+  /** The channel's 공동 실록 is complete with this session in it: the rules grant, the session announces. */
   onWorldEventComplete(title: string): void {
-    if (this.save.ending) return;
-    const gains: string[] = [];
-    const counted = `zeitgeist:${this.save.chapter}`;
-    if (this.save.flags[counted] !== true) {
-      this.save.flags[counted] = true;
-      this.save.flags.zeitgeist = Math.min(ZEITGEIST_MAX, numberFlag(this.save, "zeitgeist") + 1);
-      gains.push("시대정신 +1");
-    }
-    const virtue = worldEventVirtue(this.save);
-    if (virtue > 0) gains.push(`공덕 +${virtue}`);
+    if (this.#settled()) return;
+    const { zeitgeist, virtue } = completeWorldEvent(this.save);
+    const gains = [...(zeitgeist > 0 ? [`시대정신 +${zeitgeist}`] : []), ...(virtue > 0 ? [`공덕 +${virtue}`] : [])];
     this.send({ t: "toast", text: `공동 실록 「${title}」 달성${gains.length ? ` — ${gains.join(" · ")}` : ""}`, tone: "epic" });
     this.#markSelf();
     this.persist();
   }
 
   onLongevity(): void {
-    if (!useLongevity(this.save)) return;
+    if (this.#settled() || !useLongevity(this.save)) return;
     this.#refreshEntity();
     this.send({
       t: "toast",
@@ -567,6 +596,7 @@ export class Session {
 
   #enqueue(item: Queued, front = false): void {
     item.year ??= this.save.year;
+    item.step ??= this.save.step;
     if (front) this.#queue.unshift(item);
     else this.#queue.push(item);
     this.#showNext();
@@ -578,7 +608,7 @@ export class Session {
       const item = this.#queue.shift() as Queued;
       const view = this.#viewFor(item);
       if (!view) {
-        if (item.pending) delete this.save.flags[item.pending];
+        if (item.pending) this.#forget(item.pending);
         continue;
       }
       view.year = item.year ?? this.save.year;
@@ -604,7 +634,7 @@ export class Session {
     }
     if (this.#heldBattles.includes(battleId)) return;
     this.#heldBattles.push(battleId);
-    this.save.flags[pendingKey("battle", battleId)] = true;
+    this.save.pending.push({ kind: "battle", id: battleId });
   }
 
   #startHeldBattles(): void {
@@ -613,7 +643,7 @@ export class Session {
     const held = this.#heldBattles;
     this.#heldBattles = [];
     for (const battleId of held) {
-      delete this.save.flags[pendingKey("battle", battleId)];
+      this.#forget({ kind: "battle", id: battleId });
       // A refusal (another battle is on) leaves the battle objective to start on foot.
       channel.startBattle(battleId, this, true);
     }
@@ -653,7 +683,8 @@ export class Session {
           kind: "years",
           title: "세월이 흐른다",
           body: [
-            `${this.save.year}년에서 ${next.years[0]}년까지, ${next.years[0] - this.save.year}년의 세월.`,
+            // The tokens stand for the whole era, as the planner heading (plan.summary) says.
+            `${plan.eraFrom}년부터 ${plan.eraTo}년까지 ${plan.eraTo - plan.eraFrom}년, 이 시대의 세월을 ${plan.tokens}마디로 보낸다.`,
             `다음 시대: ${next.title} — ${next.subtitle}`,
             `새 이름 제안: ${suggestName(this.save, item.next)}`,
           ],
@@ -714,7 +745,7 @@ export class Session {
       return;
     }
     this.#active = null;
-    if (active.pending) delete this.save.flags[active.pending];
+    if (active.pending) this.#forget(active.pending);
     this.#hold++;
     try {
       switch (active.type) {
@@ -817,11 +848,11 @@ export class Session {
    * which activity runs for a missing, unknown or blocked token and whether a
    * wash is allowed, and say so in the result lines.
    */
-  #years(message: Extract<ClientMsg, { t: "years" }>, fallback?: Active): void {
+  #years(message: YearsMessage, fallback?: Active): void {
     const active = fallback ?? this.#active;
     if (!active || active.type !== "years" || active.view.id !== message.prompt) return;
     this.#active = null;
-    const choice: YearsChoice = { activities: [...message.activities], offer: message.offer };
+    const choice: YearsChoice = { activities: [...message.activities], offer: message.offer, grace: message.grace === true };
     if (message.wash) {
       choice.wash = message.wash;
       choice.newName = (message.name ? sanitizeName(message.name) : null) ?? suggestName(this.save, active.next);
@@ -988,7 +1019,7 @@ export class Session {
     if (outcome.washed)
       this.send({ t: "toast", text: `이제부터 이름은 ${this.save.name}.`, tone: "info" });
     this.#refreshEntity();
-    for (const prompt of outcome.prompts) this.#queuePending("def", prompt);
+    for (const prompt of outcome.prompts) this.#queuePending("prompt", prompt);
     for (const objective of outcome.objectives) this.#completeObjective(objective);
     if (outcome.goto) {
       const site = this.#services.map.sites.find((candidate) => candidate.id === outcome.goto?.site);
@@ -1006,16 +1037,22 @@ export class Session {
   }
 
   /**
-   * Queues a card the step cannot rebuild and keeps it in the save until it is
-   * answered (PENDING): an effect's prompt, or the 사사 escape card (front).
+   * Queues a card the step cannot rebuild and keeps it in save.pending, in the
+   * order it will come, until it is answered: an effect's prompt (behind what
+   * waits), or the 사사 escape card (in front of everything).
    */
-  #queuePending(kind: "def" | "escape", ref: string): void {
-    const key = pendingKey(kind, ref);
-    const id = kind === "escape" ? `escape:${ref}` : ref;
-    if ([this.#active, ...this.#queue].some((item) => item?.type === kind && item.id === id)) return;
-    this.save.flags[key] = true;
-    if (kind === "escape") this.#enqueue({ type: "escape", id, pending: key }, true);
-    else this.#enqueue({ type: "def", id, pending: key });
+  #queuePending(kind: "prompt" | "escape", id: string): void {
+    const type = kind === "escape" ? "escape" : "def";
+    const cardId = kind === "escape" ? escapeCardId(id) : id;
+    if ([this.#active, ...this.#queue].some((item) => item?.type === type && item.id === cardId)) return;
+    const entry: PendingStory = { kind, id };
+    if (kind === "escape") {
+      this.save.pending.unshift(entry);
+      this.#enqueue({ type: "escape", id: cardId, pending: entry }, true);
+    } else {
+      this.save.pending.push(entry);
+      this.#enqueue({ type: "def", id: cardId, pending: entry });
+    }
   }
 
   /** Pushes level/derived/sprite/skills/name and the 노인성 일섬 gate to the world entity. */

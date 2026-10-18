@@ -2,16 +2,22 @@
 // through character creation, chapters, the passage of years and the ending.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { CONTENT } from "../../src/shared/content/index.ts";
-import { CHAPTER_IDS, type ChapterId } from "../../src/shared/content/schema.ts";
+import { CONTENT, type ContentIndex } from "../../src/shared/content/index.ts";
+import { CHAPTER_IDS, type ChapterId, type PromptDef } from "../../src/shared/content/schema.ts";
 import type { HostConnection, HostMode, ProfileStore } from "../../src/shared/host/api.ts";
 import { Channel } from "../../src/shared/host/channel.ts";
 import { createGameHost } from "../../src/shared/host/host.ts";
 import { Session } from "../../src/shared/host/session.ts";
-import { generateMap } from "../../src/shared/map/generate.ts";
+import { generateMap, type GameMap } from "../../src/shared/map/generate.ts";
 import { PROTOCOL_VERSION, type ClientMsg, type ServerMsg } from "../../src/shared/protocol.ts";
-import { createSave, growSuspicion, hashRoll, nationValue } from "../../src/shared/rules/index.ts";
-import { bondName } from "../../src/shared/rules/util.ts";
+import {
+  bondName,
+  computeEnding,
+  createSave,
+  growSuspicion,
+  hashRoll,
+  nationValue,
+} from "../../src/shared/rules/index.ts";
 import type { EndingView, PlayerSave, PromptView, SelfView } from "../../src/shared/types.ts";
 
 class MemoryStore implements ProfileStore {
@@ -291,7 +297,7 @@ test("a 사사 escape card survives a reload", () => {
   answer(client);
   advance(300);
   assert.equal(client.prompt?.title, "사사의 밤", "and resolves as before");
-  assert.ok(!Object.keys(stored(store, client.token).flags).some((flag) => flag.startsWith("pending:escape:")));
+  assert.ok(!stored(store, client.token).pending.some((entry) => entry.kind === "escape"), "the save owes it no more");
 });
 
 test("the 사헌부 card stands while flag inquiry does, also after a reload", () => {
@@ -517,30 +523,266 @@ test("demo skip carries the presenter into each battle, which starts in view bef
   }
 });
 
-test("공덕 for reviving (+8, 10 per chapter) and for a completed 공동 실록 (+40, twice per chapter)", () => {
-  const map = generateMap("jangsaeng");
-  const toasts: string[] = [];
-  let ids = 5_000;
-  const channel = new Channel(
-    { content: CONTENT, map, seed: "jangsaeng", mode: "offline", botsPerChannel: 0, nextId: () => ids++, log: () => {} },
-    CONTENT.chapters.ch01,
+// ── Sessions wired by hand: the channel's hooks, called directly ──────────
+
+let sharedMap: GameMap | null = null;
+const testMap = (): GameMap => (sharedMap ??= generateMap("jangsaeng"));
+let handIds = 5_000;
+
+interface Hand {
+  session: Session;
+  messages: ServerMsg[];
+  /** The save as the session last persisted it. */
+  stored: () => PlayerSave;
+}
+
+/** A channel for `chapter` of `content`, without companions unless asked. */
+function handChannel(content: ContentIndex, chapter: ChapterId, demo = false, botsPerChannel = 0): Channel {
+  return new Channel(
+    { content, map: testMap(), seed: "jangsaeng", mode: "offline", botsPerChannel, nextId: () => handIds++, log: () => {} },
+    content.chapters[chapter],
     1,
+    demo,
   );
-  const save = createSave(CONTENT, { token: "f".repeat(32), name: "한결", variant: "m", origin: "northeast", seed: 7 });
-  const session = new Session(ids++, save.token, save, (message) => {
-    if (message.t === "toast") toasts.push(message.text);
-  }, { content: CONTENT, map, mode: "offline", save: () => {}, relocate: () => {}, log: () => {} });
+}
+
+/** A session for `save` in `channel`; it begins at once. */
+function handSession(channel: Channel, content: ContentIndex, save: PlayerSave): Hand {
+  const messages: ServerMsg[] = [];
+  let last = structuredClone(save);
+  const session = new Session(handIds++, save.token, save, (message) => messages.push(message), {
+    content,
+    map: testMap(),
+    mode: "offline",
+    save: (_token, data) => {
+      last = structuredClone(data);
+    },
+    relocate: () => {},
+    log: () => {},
+  });
   channel.add(session);
+  return { session, messages, stored: () => last };
+}
+
+const handPrompts = (hand: Hand): PromptView[] =>
+  hand.messages.flatMap((message) => (message.t === "prompt" && message.prompt ? [message.prompt] : []));
+
+/** The card the client has open: the last prompt message (null once the queue drained). */
+function openCard(hand: Hand): PromptView | null {
+  for (let index = hand.messages.length - 1; index >= 0; index--) {
+    const message = hand.messages[index];
+    if (message?.t === "prompt") return message.prompt;
+  }
+  return null;
+}
+
+const press = (hand: Hand): void => hand.session.receive({ t: "action", action: { kind: "demoSkip" } });
+
+/** Answers the open card with its first enabled option, as a player would. */
+function answerOpen(hand: Hand): void {
+  const card = openCard(hand);
+  const option = card?.options.find((candidate) => !candidate.disabled);
+  if (card && option) hand.session.receive({ t: "choose", prompt: card.id, option: option.id });
+}
+
+function demoSave(content: ContentIndex, chapter: ChapterId, seed: number, demoPath: "history" | "reform" = "history", token = "a".repeat(32)): PlayerSave {
+  return createSave(content, { token, name: "한결", variant: "m", origin: "northeast", seed, demoChapter: chapter, demoPath });
+}
+
+/** CONTENT with `chapter`'s demo entry set to `step`, or removed. */
+function withDemoStart(chapter: ChapterId, step: string | undefined): ContentIndex {
+  const def = { ...CONTENT.chapters[chapter] };
+  if (step === undefined) delete def.demoStart;
+  else def.demoStart = step;
+  return { ...CONTENT, chapters: { ...CONTENT.chapters, [chapter]: def } };
+}
+
+test("ChapterDef.demoStart: the demo opens at that step, the steps before it played by the session's own 건너뛰기", () => {
+  let sentenced = 1;
+  while (hashRoll(sentenced, "ch07_gapja") >= 3) sentenced++;
+  const cases: [ChapterId, string, "history" | "reform", number][] = [
+    ["ch16", "s8", "history", 5],
+    ["ch16", "s8", "reform", 5],
+    ["ch07", "s4", "history", 2],
+    ["ch07", "s4", "history", sentenced],
+  ];
+  for (const [chapter, step, demoPath, seed] of cases) {
+    const where = `${chapter}/${step} ${demoPath} seed ${seed}`;
+    const steps = CONTENT.chapters[chapter].steps;
+    const entry = steps.findIndex((candidate) => candidate.id === step);
+    assert.ok(entry > 0, where);
+    const skippedCards = new Set(
+      steps.slice(0, entry).flatMap((def) => def.objectives.flatMap((objective) => [objective.prompt, objective.kind === "prompt" ? objective.target : undefined])),
+    );
+
+    const opened = withDemoStart(chapter, step);
+    const cold = handSession(handChannel(opened, chapter, true), opened, demoSave(opened, chapter, seed, demoPath));
+    assert.equal(cold.session.save.step, entry, `${where}: the demo stands at its entry step`);
+    assert.equal(cold.session.save.demoEntry, undefined, `${where}: the entry is played once`);
+    assert.ok(cold.session.save.promptsDone.length > 0, `${where}: the earlier cards were answered`);
+    const shown = handPrompts(cold);
+    assert.ok(shown.every((card) => !skippedCards.has(card.id)), `${where}: no card of a skipped step reaches the presenter (${shown.map((card) => card.id)})`);
+    assert.ok(shown.every((card) => (card.year ?? 0) >= (steps[entry]?.year ?? 0)), `${where}: nothing older than the entry step is shown (${shown.map((card) => `${card.title} ${card.year}`)})`);
+
+    // The same presenter pressing 건너뛰기 from the first step.
+    const plain = withDemoStart(chapter, undefined);
+    const live = handSession(handChannel(plain, chapter, true), plain, demoSave(plain, chapter, seed, demoPath));
+    assert.equal(live.session.save.step, 0);
+    const over = (hand: Hand) => hand.session.save.ending !== undefined || openCard(hand)?.kind === "years";
+    for (let round = 0; round < 3000 && !over(cold); round++) press(cold);
+    for (let round = 0; round < 3000 && !over(live); round++) press(live);
+    assert.ok(over(cold) && over(live), `${where}: both reach the end of the chapter`);
+    const comparable = (save: PlayerSave) => {
+      const copy = structuredClone(save);
+      delete copy.position;
+      copy.chronicle = copy.chronicle.filter((line) => !line.text.includes("시연 모드"));
+      return copy;
+    };
+    assert.deepEqual(comparable(cold.session.save), comparable(live.session.save), `${where}: the cold open leaves exactly what skipping from the first step does`);
+  }
+});
+
+/** CONTENT whose ch01 opens with a card that both raises another card and passes a death sentence. */
+function withDoubleCard(): ContentIndex {
+  const ch01 = CONTENT.chapters.ch01;
+  const double: PromptDef = {
+    id: "t_double",
+    title: "두 갈래 소식",
+    body: ["역참에서 서신 두 통이 한꺼번에 닿았다."],
+    options: [{
+      id: "ok",
+      text: "둘 다 받는다",
+      effects: [
+        { k: "prompt", prompt: "t_after" },
+        { k: "purge", spec: { id: "t_doom", intensity: 200, winner: null, loser: null } },
+      ],
+    }],
+  };
+  const after: PromptDef = {
+    id: "t_after",
+    title: "뒤늦은 서신",
+    body: ["먼저 온 소식보다 늦게 읽힌 편지."],
+    options: [{ id: "ok", text: "읽는다", effects: [{ k: "chronicle", text: "뒤늦은 서신을 읽었다." }] }],
+  };
+  const first = ch01.steps[0];
+  assert.ok(first);
+  const opening = { id: "t0", year: first.year, objectives: [{ id: "t_o", text: "소식을 받는다", kind: "prompt" as const, target: "t_double" }] };
+  return { ...CONTENT, chapters: { ...CONTENT.chapters, ch01: { ...ch01, prompts: [...ch01.prompts, double, after], steps: [opening, ...ch01.steps] } } };
+}
+
+test("an effect that raises a card and a 사사 sentence: the escape comes first, live and after a reload", () => {
+  const content = withDoubleCard();
+  let seed = 1;
+  while (hashRoll(seed, "t_doom") > 50) seed++;
+  const save = createSave(content, { token: "d".repeat(32), name: "한결", variant: "m", origin: "northeast", seed });
+  const live = handSession(handChannel(content, "ch01"), content, save);
+  assert.equal(openCard(live)?.id, "t_double");
+  answerOpen(live);
+  assert.equal(openCard(live)?.kind, "death", "the death sentence comes before anything else");
+  assert.deepEqual(live.session.save.pending.map((entry) => entry.kind), ["escape", "prompt"], "the save owes both, in that order");
+
+  // A reload at the escape card: the same order.
+  const reloaded = handSession(handChannel(content, "ch01"), content, structuredClone(live.stored()));
+  assert.equal(openCard(reloaded)?.kind, "death", "the escape card is in front after the reload");
+  answerOpen(reloaded);
+  assert.equal(openCard(reloaded)?.title, "사사의 밤", "its result");
+  answerOpen(reloaded);
+  assert.equal(openCard(reloaded)?.id, "t_after", "then the card the same effect raised");
+  assert.deepEqual(reloaded.session.save.pending, [{ kind: "prompt", id: "t_after" }]);
+  answerOpen(reloaded);
+  assert.deepEqual(reloaded.session.save.pending, [], "answered cards are no longer owed");
+});
+
+test("a settled run takes nothing more from the world: a battle ending beside it, kills, pickups, revives", () => {
+  const def = CONTENT.chapters.ch16.battles.find((battle) => battle.kind === "defend");
+  assert.ok(def);
+  const channel = handChannel(CONTENT, "ch16", true);
+  const save = demoSave(CONTENT, "ch16", 5);
+  save.ending = computeEnding(CONTENT, save);
+  const settled = handSession(channel, CONTENT, save);
+  assert.ok(settled.messages.some((message) => message.t === "ending"));
+  const fighter = handSession(channel, CONTENT, demoSave(CONTENT, "ch16", 6, "history", "b".repeat(32)));
+  const before = structuredClone(settled.session.save);
+  assert.ok(channel.startBattle(def.id, fighter.session, true), "the other player's battle starts");
+  const centre = channel.battleCentre(def);
+  assert.ok(centre);
+  channel.world.teleport(settled.session.id, centre.x, centre.y);
+  channel.world.endBattle("victory");
+  for (let tick = 0; tick < 10; tick++) channel.tick(0.05);
+  assert.ok(fighter.session.save.battlesWon.includes(def.id), "the battle was won beside the settled player");
+  const enemy = Object.values(CONTENT.enemies)[0];
+  assert.ok(enemy);
+  settled.session.onKill(enemy, 30, true);
+  settled.session.onPickup("ginseng");
+  settled.session.onRevived(null);
+  settled.session.onRevivedOther();
+  settled.session.onLongevity();
+  settled.session.onWorldEventComplete("늦은 실록");
+  settled.session.onBattleEnd(def, "defeat", 1);
+  const npc = CONTENT.chapters.ch16.npcs[0];
+  if (npc) settled.session.onTalk(npc.id);
+  const after = structuredClone(settled.session.save);
+  delete before.position;
+  delete after.position;
+  assert.deepEqual(after, before, "the settled save is unchanged");
+});
+
+test("onBattleEnd: battleResult owns first-victory rewards, and a held field's 공덕 +30 is shown", () => {
+  const def = CONTENT.chapters.ch16.battles.find((battle) => battle.kind === "defend" || battle.kind === "survive");
+  assert.ok(def);
+  const hand = handSession(handChannel(CONTENT, "ch16", true), CONTENT, demoSave(CONTENT, "ch16", 5));
+  const virtue = hand.session.save.points.virtue;
+  hand.session.onBattleEnd(def, "victory", 0);
+  const toasts = () => hand.messages.flatMap((message) => (message.t === "toast" ? [message.text] : []));
+  assert.ok(toasts().includes("지켜 낸 싸움 — 공덕 +30"), toasts().join(" / "));
+  assert.ok(hand.session.save.points.virtue >= virtue + 30);
+  const once = structuredClone(hand.session.save);
+  hand.session.onBattleEnd(def, "victory", 0);
+  assert.equal(toasts().filter((text) => text === "지켜 낸 싸움 — 공덕 +30").length, 1, "a repeat victory pays nothing");
+  assert.deepEqual(hand.session.save.points, once.points);
+  assert.deepEqual(hand.session.save.battlesWon, once.battlesWon);
+});
+
+test("the years card: its body speaks of the era the planner splits, and the last grace waits for the player", () => {
+  for (const grace of [false, true]) {
+    const save = demoSave(CONTENT, "ch12", 5);
+    save.lifeEnd = 1850;
+    save.points.virtue = 350;
+    const hand = handSession(handChannel(CONTENT, "ch12", true), CONTENT, save);
+    for (let round = 0; round < 600 && openCard(hand)?.kind !== "years"; round++) press(hand);
+    const card = openCard(hand);
+    assert.equal(card?.kind, "years");
+    const plan = card?.data?.type === "years" ? card.data : null;
+    assert.ok(card && plan);
+    assert.equal(plan.graceYears, 10, "CH13 starts in 1776: the grace is on offer");
+    assert.equal(plan.summary, `${plan.eraFrom}~${plan.eraTo}년, 이 시대를 어떻게 보냈나 · ${plan.tokens}마디`);
+    assert.equal(card.body[0], `${plan.eraFrom}년부터 ${plan.eraTo}년까지 ${plan.eraTo - plan.eraFrom}년, 이 시대의 세월을 ${plan.tokens}마디로 보낸다.`);
+    if (grace) {
+      const message = { t: "years" as const, prompt: card.id, activities: plan.suggested.activities, offer: plan.suggested.offer, grace: true };
+      hand.session.receive(message);
+    } else press(hand); // a plain confirm: the suggested plan
+    assert.equal(hand.session.save.chapter, "ch13");
+    assert.equal(hand.session.save.graceUsed, grace, grace ? "taken when asked for" : "never spent by the suggested plan");
+    assert.equal(hand.session.save.points.virtue === 0, grace, "only the grace takes all 공덕");
+  }
+});
+
+test("공덕 for reviving (+8, 10 per chapter) and for a completed 공동 실록 (+40, twice per chapter)", () => {
+  const channel = handChannel(CONTENT, "ch01");
+  const save = createSave(CONTENT, { token: "f".repeat(32), name: "한결", variant: "m", origin: "northeast", seed: 7 });
+  const hand = handSession(channel, CONTENT, save);
+  const toasts = () => hand.messages.flatMap((message) => (message.t === "toast" ? [message.text] : []));
   const start = save.points.virtue;
-  for (let revive = 0; revive < 11; revive++) session.onRevivedOther();
+  for (let revive = 0; revive < 11; revive++) hand.session.onRevivedOther();
   assert.equal(save.record.revivesGiven, 11);
   assert.equal(save.points.virtue, start + 80, "8 each, 10 times this chapter");
   channel.addWorldEvent(Number.MAX_SAFE_INTEGER);
   assert.equal(save.points.virtue, start + 120, "the completed 공동 실록 pays 40");
   assert.equal(save.flags["zeitgeist"], 1);
-  assert.ok(toasts.some((text) => text.includes("시대정신 +1 · 공덕 +40")), toasts.join(" / "));
-  session.onWorldEventComplete("다시 채운 실록");
-  session.onWorldEventComplete("세 번째 실록");
+  assert.ok(toasts().some((text) => text.includes("시대정신 +1 · 공덕 +40")), toasts().join(" / "));
+  hand.session.onWorldEventComplete("다시 채운 실록");
+  hand.session.onWorldEventComplete("세 번째 실록");
   assert.equal(save.points.virtue, start + 160, "twice per chapter");
   assert.equal(save.flags["zeitgeist"], 1, "시대정신 once per chapter");
+  assert.ok(toasts().at(-1)?.endsWith("「세 번째 실록」 달성"), "nothing granted, nothing claimed");
 });

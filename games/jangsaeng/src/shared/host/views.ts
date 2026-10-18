@@ -5,6 +5,7 @@ import { CHAPTER_IDS, type ChapterDef, type NationMeter, type PromptDef } from "
 import {
   BRANCH_LABELS,
   apparentAge,
+  bondName,
   derived,
   evalCond,
   expToNext,
@@ -15,7 +16,6 @@ import {
   rankName,
   suspicionBand,
 } from "../rules/index.ts";
-import { bondName } from "../rules/util.ts";
 import type { PlayerStatus, World } from "../sim/world.ts";
 import {
   FINAL_YEAR,
@@ -213,9 +213,10 @@ export function selfView(content: ContentIndex, save: PlayerSave, context: SelfC
 
 /**
  * The settled 1910 numbers, read from the save the ending was computed on
- * (the session accepts no changes after save.ending): the score as decided,
- * the final infiltration that the breakdown charged, and every branch that
- * was not won shown as failed — the same reading rules/nation.ts settles with.
+ * (the session accepts no changes after save.ending): the score as decided
+ * with the rows it is the sum of (all at 0.1, so they agree as shown), the
+ * final infiltration that the breakdown charged, and every branch that was
+ * not won shown as failed — the same reading rules/nation.ts settles with.
  */
 export function endingView(content: ContentIndex, save: PlayerSave): EndingView | null {
   const ending = save.ending;

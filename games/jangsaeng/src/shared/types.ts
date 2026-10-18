@@ -43,6 +43,17 @@ export interface ChronicleEntry {
   tone?: "info" | "good" | "bad" | "epic";
 }
 
+/**
+ * Story work the session owes the player across a reload, kept in the order it
+ * comes: a card an effect raised (`prompt`, a PromptDef id), the 사사 위기 card
+ * (`escape`, `<chapter>:<year>` of the sentence) and a story battle waiting
+ * behind cards (`battle`, a BattleDef id). The step rebuilds everything else.
+ */
+export interface PendingStory {
+  kind: "prompt" | "escape" | "battle";
+  id: string;
+}
+
 export interface PlayerSave {
   version: number;
   token: string;
@@ -94,6 +105,14 @@ export interface PlayerSave {
   year: number;
   /** Progress counters by objective id for the current step. */
   objectives: Record<string, number>;
+  /** Cards and held battles still owed, first to come first (PendingStory). */
+  pending: PendingStory[];
+  /**
+   * Demo preset of a chapter with ChapterDef.demoStart: the step the demo opens
+   * at. On first entry the session plays the steps before it with 건너뛰기, then
+   * clears this.
+   */
+  demoEntry?: string;
   promptsDone: string[];
   battlesWon: string[];
   /** Pending exile site: next chapter starts there. */
@@ -119,6 +138,7 @@ export interface PlayerSave {
 export interface EndingResult {
   nation: "N1" | "N2" | "N3";
   personal: "P0" | "P1" | "P2" | "P3" | "P4" | "P5";
+  /** The sum of the breakdown rows; every row and the score are settled to 0.1. */
   score: number;
   breakdown: { label: string; value: number }[];
 }
@@ -241,7 +261,14 @@ export interface YearsPlanView {
   washAdvised: boolean;
   lifeEnd: number;
   virtue: number;
+  /** Years the 노인성 봉헌 adds now (100 공덕 a year, this chapter's allowance). */
   canOffer: number;
+  /**
+   * 노인성의 마지막 은혜: the years it adds, present only while it can be taken.
+   * Once in a run and it takes all 공덕 left and 10 명망, so only the player
+   * chooses it; it is never part of `suggested`.
+   */
+  graceYears?: number;
   /** The plan a plain confirm submits; the planner starts from it. */
   suggested: { activities: string[]; offer: boolean };
 }
@@ -377,7 +404,7 @@ export interface RosterEntry {
 export interface EndingView {
   nation: { id: string; title: string; body: string[] };
   personal: { id: string; title: string; body: string[] };
-  /** The settled score; the breakdown rows add up to it (display both with the same rounding). */
+  /** The settled score: exactly the sum of the breakdown rows, all at 0.1 (show them with one decimal). */
   score: number;
   breakdown: { label: string; value: number }[];
   /** Meters at the settlement; infiltration is the final value (unresolved branches counted as failed). */

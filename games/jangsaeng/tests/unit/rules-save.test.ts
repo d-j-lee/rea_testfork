@@ -2,15 +2,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { CONTENT, type ContentIndex } from "../../src/shared/content/index.ts";
-import { BRANCH_IDS, CHAPTER_IDS, NATION_KEYS, STAT_KEYS, type BranchId, type ChapterId, type Effect } from "../../src/shared/content/schema.ts";
-import { createGameHost } from "../../src/shared/host/host.ts";
-import { PROTOCOL_VERSION } from "../../src/shared/protocol.ts";
+import { BRANCH_IDS, CHAPTER_IDS, NATION_KEYS, STAT_KEYS, type BranchId, type ChapterId, type Cond, type Effect } from "../../src/shared/content/schema.ts";
 import {
   BRANCH_CHAPTER,
   BRANCH_LABELS,
   closeChapterBranches,
   createSave,
-  demoStartIndex,
+  evalCond,
   finalInfiltration,
   heroSprite,
   longFlagSum,
@@ -19,7 +17,7 @@ import {
   REFORM_DRIFT,
   skillsUnlockedBy,
 } from "../../src/shared/rules/index.ts";
-import { SAVE_VERSION, type PlayerSave, type PromptView } from "../../src/shared/types.ts";
+import { SAVE_VERSION, type PlayerSave } from "../../src/shared/types.ts";
 import { FIXTURE, newSave } from "./rules-fixture.ts";
 
 const statTotal = (save: PlayerSave) => STAT_KEYS.reduce((sum, stat) => sum + save.stats[stat], 0);
@@ -84,8 +82,11 @@ test("closeChapterBranches fails only the chapter's undecided branches", () => {
   assert.equal(Object.keys(save.branches).length, 6, "a chapter without branches changes nothing");
 });
 
+const reformSave = (chapter: ChapterId) =>
+  createSave(CONTENT, { token: "t", name: "강휘", variant: "m", origin: "northeast", seed: 5, demoChapter: chapter, demoPath: "reform" });
+
 test("the reform demo path starts from a well-played history", () => {
-  const reform = newSave({ demoChapter: "ch16", demoPath: "reform" });
+  const reform = reformSave("ch16");
   assert.deepEqual(Object.keys(reform.branches).sort(), [...EARLIER_THAN_CH16].sort());
   assert.ok(Object.values(reform.branches).every(Boolean));
   assert.equal(reform.infiltration, 0, "won branches add no infiltration");
@@ -94,15 +95,71 @@ test("the reform demo path starts from a well-played history", () => {
   assert.equal(reform.flags["ch12_vow_seson"], true, "CH13's oath reads the 세손 vow");
   assert.equal(reform.flags["ch14_pay_gap_noted"], true, "CH15's B5 audit reads the 체불 장부");
   for (const key of NATION_KEYS)
-    assert.equal(reform.nation[key], FIXTURE.chapters.ch16.hist[key] + REFORM_DRIFT + longFlagSum(reform, key), key);
-  assert.equal(longFlagSum(reform, "defense"), 11, "훈련도감 +3, 장용영 +8");
+    assert.equal(reform.nation[key], CONTENT.chapters.ch16.hist[key] + REFORM_DRIFT + longFlagSum(reform, key), key);
+  assert.equal(reform.longFlags["jangyongyeong"]?.add, 8, "the 연판장's +8, not the 외영's +5");
   assert.match(reform.chronicle.at(-1)?.text ?? "", /개혁 누적/);
 
   // Only what earlier chapters could have won.
-  const ch14 = newSave({ demoChapter: "ch14", demoPath: "reform" });
+  const ch14 = reformSave("ch14");
   assert.deepEqual(Object.keys(ch14.branches).sort(), ["B1", "B2"]);
   assert.equal(ch14.flags["ch14_pay_gap_noted"], undefined, "CH14's own story is still ahead");
-  assert.equal(newSave({ demoChapter: "ch12", demoPath: "reform" }).flags["ch12_jeonggye_record"], undefined);
+  assert.equal(reformSave("ch12").flags["ch12_jeonggye_record"], undefined);
+});
+
+/** Every node of a content value (chapters are plain data), depth first. */
+function* nodes(value: unknown): Generator<Record<string, unknown>> {
+  if (Array.isArray(value)) for (const item of value) yield* nodes(item);
+  else if (value && typeof value === "object") {
+    yield value as Record<string, unknown>;
+    for (const inner of Object.values(value)) yield* nodes(inner);
+  }
+}
+
+test("reform path: every long flag the earlier chapters offer, at its best value — read from content, never copied", () => {
+  for (const chapter of ["ch03", "ch09", "ch14", "ch16"] as const) {
+    const expected: Record<string, { key: string; add: number }> = {};
+    for (const earlier of CHAPTER_IDS.slice(0, CHAPTER_IDS.indexOf(chapter))) {
+      for (const node of nodes(CONTENT.chapters[earlier])) {
+        if (node.k !== "longFlag" || typeof node.flag !== "string" || typeof node.add !== "number") continue;
+        const known = expected[node.flag];
+        if (!known || node.add > known.add) expected[node.flag] = { key: String(node.key), add: node.add };
+      }
+    }
+    assert.deepEqual(reformSave(chapter).longFlags, expected, chapter);
+  }
+  assert.ok(Object.keys(reformSave("ch16").longFlags).length >= 12, "the shipped long flags reach CH16");
+});
+
+test("reform path: every story flag a later chapter reads from an earlier one holds the value the read rewards", () => {
+  /** Flags each chapter's effects write, and the flag conditions it reads. */
+  const writes = new Map<ChapterId, Set<string>>();
+  const reads: { chapter: ChapterId; flag: string; cond: Cond }[] = [];
+  for (const id of CHAPTER_IDS) {
+    const written = new Set<string>();
+    const visit = (value: unknown, inCond: boolean): void => {
+      if (Array.isArray(value)) for (const item of value) visit(item, inCond);
+      else if (value && typeof value === "object") {
+        const node = value as Record<string, unknown>;
+        if (node.k === "flag" && typeof node.flag === "string") {
+          if (inCond) reads.push({ chapter: id, flag: node.flag, cond: node as unknown as Cond });
+          else written.add(node.flag);
+        }
+        for (const [key, inner] of Object.entries(node)) visit(inner, inCond || key === "requires" || key === "cond");
+      }
+    };
+    visit(CONTENT.chapters[id], false);
+    writes.set(id, written);
+  }
+  let checked = 0;
+  for (const read of reads) {
+    if (writes.get(read.chapter)?.has(read.flag)) continue;
+    const from = CHAPTER_IDS.filter((id) => CHAPTER_IDS.indexOf(id) < CHAPTER_IDS.indexOf(read.chapter) && writes.get(id)?.has(read.flag));
+    if (from.length === 0) continue;
+    assert.ok(evalCond(CONTENT, reformSave(read.chapter), read.cond), `${read.chapter} reads ${read.flag} (${from.join(", ")})`);
+    assert.ok(!evalCond(CONTENT, reformSave(from[0] as ChapterId), read.cond), `${read.flag} is not set before ${from[0]} is played`);
+    checked++;
+  }
+  assert.ok(checked >= 7, `checked ${checked} cross-chapter reads`);
 });
 
 /** Every branch (or opened prompt) effect reachable from an effect list. */
@@ -168,80 +225,47 @@ function withDemoStart(chapter: ChapterId, step: string): ContentIndex {
   return { ...CONTENT, chapters: { ...CONTENT.chapters, [chapter]: { ...CONTENT.chapters[chapter], demoStart: step } } };
 }
 
-test("ChapterDef.demoStart: the demo opens at that step with the earlier steps played out", () => {
+test("ChapterDef.demoStart: the preset starts the chapter like any entry and names the step for the session", () => {
   const content = withDemoStart("ch16", "s8");
-  const entry = demoStartIndex(content.chapters.ch16);
-  assert.equal(content.chapters.ch16.steps[entry]?.id, "s8");
-  assert.equal(demoStartIndex(CONTENT.chapters.ch01), 0, "no demoStart: the first step");
-  assert.equal(demoStartIndex({ ...CONTENT.chapters.ch01, demoStart: "nope" }), 0, "an unknown step id falls back to the first");
   for (const demoPath of ["history", "reform"] as const) {
-    const where = demoPath;
     const save = createSave(content, { token: "t", name: "강휘", variant: "m", origin: "northeast", seed: 5, demoChapter: "ch16", demoPath });
-    assert.equal(save.step, entry, where);
-    assert.equal(save.year, 1904, where);
-    assert.deepEqual(save.objectives, {}, `${where}: the entry step starts fresh`);
-    assert.equal(save.suspicion, 15, where);
-    for (const prompt of ["p_agwan", "p_empire", "p_b9_result", "p_b10"]) assert.ok(save.promptsDone.includes(prompt), `${where}: ${prompt}`);
-    assert.ok(save.battlesWon.includes("b_wonsubu"), `${where}: the 1899 duel was won`);
-    assert.notEqual(save.branches.B9, undefined, `${where}: B9 (1898) is decided`);
-    assert.notEqual(save.branches.B10, undefined, `${where}: B10 (1903) is decided`);
-    assert.equal(save.branches.B11, undefined, `${where}: B11 (1904) is still the player's`);
-    assert.equal(nationValue(save, "infiltration"), save.infiltration, where);
-    assert.match(save.chronicle.at(-1)?.text ?? "", /1904년/, where);
-    assert.deepEqual(migrateSave(content, JSON.parse(JSON.stringify(save))), save, `${where}: migrate round-trip`);
+    assert.equal(save.demoEntry, "s8", demoPath);
+    assert.deepEqual([save.step, save.year, save.suspicion], [0, 1896, 15], `${demoPath}: nothing of the chapter is played yet`);
+    assert.deepEqual(save.promptsDone, [], demoPath);
+    assert.equal(save.branches.B9, undefined, `${demoPath}: the session's 건너뛰기 decides B9`);
+    assert.match(save.chronicle.at(-1)?.text ?? "", /1896년, 1904년 장면부터/, demoPath);
+    assert.deepEqual(migrateSave(content, JSON.parse(JSON.stringify(save))), save, `${demoPath}: migrate round-trip`);
   }
-  const reform = createSave(content, { token: "t", name: "강휘", variant: "m", origin: "northeast", seed: 5, demoChapter: "ch16", demoPath: "reform" });
-  assert.equal(reform.branches.B10, true, "the reform path's treasury is unified before 1904");
-  const atStart = createSave(CONTENT, { token: "t", name: "강휘", variant: "m", origin: "northeast", seed: 5, demoChapter: "ch16", demoPath: "reform" });
-  assert.ok(reform.nation.defense >= atStart.nation.defense + 10, "B10's 국방 +10 is kept");
+  const first = CONTENT.chapters.ch05.steps[0]?.id ?? "";
+  const presetOf = (step: string) =>
+    createSave(withDemoStart("ch05", step), { token: "t", name: "강휘", variant: "m", origin: "northeast", seed: 5, demoChapter: "ch05" });
+  assert.equal(presetOf(first).demoEntry, undefined, "the first step needs no skipping");
+  assert.equal(presetOf("nope").demoEntry, undefined, "an unknown step is not an entry");
+  const raw = JSON.parse(JSON.stringify(createSave(content, { token: "t", name: "강휘", variant: "m", origin: "northeast", seed: 5, demoChapter: "ch16" })));
+  assert.equal(migrateSave(content, { ...raw, demoEntry: "s99" })?.demoEntry, undefined, "a step the chapter lacks is dropped");
+  assert.equal(migrateSave(content, { ...raw, demo: false })?.demoEntry, undefined, "only a demo has an entry");
 });
 
-test("demoStart leaves the save where 건너뛰기 from the first step would", () => {
-  const content = withDemoStart("ch16", "s8");
-  const entry = demoStartIndex(content.chapters.ch16);
-  for (const demoPath of ["history", "reform"] as const) {
-    let now = 0;
-    const saves = new Map<string, PlayerSave>();
-    const host = createGameHost({
-      seed: "jangsaeng",
-      mode: "offline",
-      store: { load: (token) => saves.get(token) ?? null, save: (token, save) => void saves.set(token, structuredClone(save)) },
-      clock: { now: () => now },
-      botsPerChannel: 0,
-    });
-    const inbox: { prompt: PromptView | null; token: string } = { prompt: null, token: "" };
-    const connection = host.connect((message) => {
-      if (message.t === "prompt") inbox.prompt = message.prompt;
-      if (message.t === "welcome") inbox.token = message.token;
-    });
-    const advance = (ms: number) => {
-      for (let elapsed = 0; elapsed < ms; elapsed += 50) host.tick((now += 50));
-    };
-    connection.receive({ t: "hello", v: PROTOCOL_VERSION, name: "강휘", variant: "m", origin: "northeast", demo: "ch16", demoPath });
-    advance(200);
-    for (let round = 0; round < 500; round++) {
-      const card = inbox.prompt;
-      if (!card && (saves.get(inbox.token)?.step ?? 0) >= entry) break;
-      inbox.prompt = null;
-      const option = card?.options.find((candidate) => !candidate.disabled);
-      if (card && option) connection.receive({ t: "choose", prompt: card.id, option: option.id });
-      else connection.receive({ t: "action", action: { kind: "demoSkip" } });
-      advance(100);
-    }
-    const live = saves.get(inbox.token);
-    assert.ok(live && live.step === entry, `${demoPath}: the host run reached the entry step`);
-    const preset = createSave(content, { token: "t", name: "강휘", variant: "m", origin: "northeast", seed: live.seed, demoChapter: "ch16", demoPath });
-    const outcome = (save: PlayerSave) => ({
-      year: save.year,
-      branches: save.branches,
-      nation: save.nation,
-      infiltration: save.infiltration,
-      longFlags: save.longFlags,
-      battlesWon: [...save.battlesWon].sort(),
-      promptsDone: [...save.promptsDone].sort(),
-    });
-    assert.deepEqual(outcome(preset), outcome(live), demoPath);
-  }
+test("migrateSave keeps the pending story in order and drops what the chapter does not hold", () => {
+  const save = createSave(CONTENT, { token: "t", name: "강휘", variant: "m", origin: "northeast", seed: 5, demoChapter: "ch04" });
+  const prompt = CONTENT.chapters.ch04.prompts[1]?.id ?? "";
+  const battle = CONTENT.chapters.ch04.battles[0]?.id ?? "";
+  save.pending = [{ kind: "escape", id: "ch04:1398" }, { kind: "prompt", id: prompt }, { kind: "battle", id: battle }];
+  assert.deepEqual(migrateSave(CONTENT, JSON.parse(JSON.stringify(save)))?.pending, save.pending);
+  const raw = JSON.parse(JSON.stringify(save));
+  raw.pending = [
+    { kind: "prompt", id: prompt },
+    { kind: "prompt", id: prompt },
+    { kind: "prompt", id: "ch09_elsewhere" },
+    { kind: "battle", id: "b_nowhere" },
+    { kind: "escape", id: "ch05:1420" },
+    { kind: "card", id: prompt },
+    "pending:def:x",
+    { kind: "escape", id: "ch04:1398" },
+  ];
+  assert.deepEqual(migrateSave(CONTENT, raw)?.pending, [{ kind: "prompt", id: prompt }, { kind: "escape", id: "ch04:1398" }]);
+  delete raw.pending;
+  assert.deepEqual(migrateSave(CONTENT, raw)?.pending, [], "an older save owes nothing");
 });
 
 test("demo presets give a sane save for every chapter", () => {
