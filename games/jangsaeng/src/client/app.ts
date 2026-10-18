@@ -74,6 +74,8 @@ function paintBoot(surface: GameCanvas, line: string, error = false): void {
   const h = surface.height;
   const u = surface.unit;
   surface.resetState();
+  // Text state set here must not leak into the game's frames.
+  ctx.save();
   ctx.fillStyle = "#14110f";
   ctx.fillRect(0, 0, w, h);
   ctx.textAlign = "center";
@@ -95,6 +97,7 @@ function paintBoot(surface: GameCanvas, line: string, error = false): void {
     } else row = next;
   }
   if (row) ctx.fillText(row, w / 2, y);
+  ctx.restore();
 }
 
 const nextPaint = () =>

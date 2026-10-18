@@ -1,6 +1,7 @@
-// Player settings: persisted per browser, applied to audio, motion and touch.
+// Player settings: persisted per browser (through the client storage owner),
+// applied to audio, motion and touch.
 import type { AudioEngine } from "../audio/types.ts";
-import { storageGet, storageSet } from "./dom.ts";
+import { isRecord, readJson, writeKey } from "../storage.ts";
 
 export interface Settings {
   music: number;
@@ -10,25 +11,21 @@ export interface Settings {
   motion: "auto" | "reduced" | "full";
 }
 
-const KEY = "jangsaeng.settings.v1";
+const KEY = "settings";
 const DEFAULTS: Settings = { music: 0.7, sfx: 0.8, muted: false, touch: "auto", motion: "auto" };
 
+/** Stored settings, each field validated; anything unusable is the default. */
 function load(): Settings {
-  const raw = storageGet(KEY);
-  if (!raw) return { ...DEFAULTS };
-  try {
-    const v = JSON.parse(raw) as Partial<Record<keyof Settings, unknown>>;
-    const num = (x: unknown, d: number) => (typeof x === "number" && x >= 0 && x <= 1 ? x : d);
-    return {
-      music: num(v.music, DEFAULTS.music),
-      sfx: num(v.sfx, DEFAULTS.sfx),
-      muted: typeof v.muted === "boolean" ? v.muted : DEFAULTS.muted,
-      touch: v.touch === "on" || v.touch === "off" ? v.touch : "auto",
-      motion: v.motion === "reduced" || v.motion === "full" ? v.motion : "auto",
-    };
-  } catch {
-    return { ...DEFAULTS };
-  }
+  const v = readJson(KEY, isRecord);
+  if (!v) return { ...DEFAULTS };
+  const num = (x: unknown, d: number) => (typeof x === "number" && x >= 0 && x <= 1 ? x : d);
+  return {
+    music: num(v["music"], DEFAULTS.music),
+    sfx: num(v["sfx"], DEFAULTS.sfx),
+    muted: typeof v["muted"] === "boolean" ? v["muted"] : DEFAULTS.muted,
+    touch: v["touch"] === "on" || v["touch"] === "off" ? v["touch"] : "auto",
+    motion: v["motion"] === "reduced" || v["motion"] === "full" ? v["motion"] : "auto",
+  };
 }
 
 export class SettingsStore {
@@ -62,7 +59,7 @@ export class SettingsStore {
 
   update(patch: Partial<Settings>): void {
     this.#value = { ...this.#value, ...patch };
-    storageSet(KEY, JSON.stringify(this.#value));
+    writeKey(KEY, JSON.stringify(this.#value));
     this.#apply();
   }
 

@@ -1,12 +1,11 @@
-// Overhead overlays with declutter: HP bars, name plates and emotes. Plates
-// are placed by priority (self, players, bosses, story NPCs, allies, NPCs,
-// enemies); a plate that would overlap one already placed is nudged up (at
-// most twice), and ally, NPC and enemy plates that still collide are dropped
-// (their HP bars stay). Enemy plates also hide when far away or in a crowd;
-// companion titles hide when the party is large.
+// Overhead overlays with declutter: HP bars, name plates and emotes. Who a
+// plate belongs to and how plates are placed is plate-layout.ts; this layer
+// measures, applies the visibility rules and draws. Enemy plates hide when
+// far away or in a crowd; companion and ally titles hide when the party is
+// large. The player's own plate wears a gold frame, and simulated companions
+// carry the ◇ mark here as in chat.
 
 import type { CharacterSprite, PropSprite } from "../../shared/sprites.ts";
-import type { Team } from "../../shared/types.ts";
 import { characterHeight } from "../render/characters.ts";
 import {
   drawEmote,
@@ -15,8 +14,18 @@ import {
   measureNamePlate,
   type NamePlateOptions,
 } from "../render/overlays.ts";
-import { TEAM_COLORS } from "../render/palette.ts";
+import { COMPANION_COLOR, SELF_FRAME, TEAM_COLORS } from "../render/palette.ts";
 import { propHeight } from "../render/props.ts";
+import { botName } from "../ui/labels.ts";
+import {
+  byPlacement,
+  isParty,
+  PARTY_TITLES_MAX,
+  placePlates,
+  plateRole,
+  type PlateBox,
+  type PlateRole,
+} from "./plate-layout.ts";
 import type { EntityTrack } from "./snapshots.ts";
 
 /** What the plate layer needs from a scene entity view. */
@@ -37,17 +46,12 @@ export interface PlateSubject {
 const ENEMY_PLATE_TILES = 10;
 /** …or when more living enemies than this are on screen. */
 const ENEMY_CROWD = 8;
-/** Companion titles show only while at most this many allies are on screen. */
-const ALLY_TITLES_MAX = 3;
-const MAX_NUDGES = 2;
 const HP_BOSS = { width: 26, color: "#e0503a" } as const;
 const HP_NORMAL = { width: 14 } as const;
 
-const PRIORITY: Readonly<Record<Team, number>> = { self: 0, player: 1, boss: 2, ally: 4, npc: 5, enemy: 6 };
-
-class Slot {
+class Slot implements PlateBox {
   v: PlateSubject | null = null;
-  prio = 0;
+  role: PlateRole = "npc";
   dist = 0;
   showHp = false;
   hpY = 0;
@@ -69,15 +73,14 @@ function plateSize(slot: Slot, level: number | undefined, mult: number): { w: nu
   const opts: Parameters<typeof measureNamePlate>[1] = { small: slot.small };
   if (slot.title !== undefined) opts.title = slot.title;
   if (level !== undefined) opts.level = level;
+  if (slot.role === "self") opts.frame = SELF_FRAME;
   return measureNamePlate(slot.name, opts, mult);
 }
-
 
 export class PlateLayer {
   readonly #slots: Slot[] = [];
   readonly #order: Slot[] = [];
   readonly #opts: NamePlateOptions = { color: TEAM_COLORS.npc };
-  readonly #byPriority = (a: Slot, b: Slot) => a.prio - b.prio || a.dist - b.dist;
 
   #slot(i: number): Slot {
     let s = this.#slots[i];
@@ -104,14 +107,15 @@ export class PlateLayer {
   ): void {
     const mult = Math.max(1, Math.round(unit));
     let enemies = 0;
-    let allies = 0;
+    let party = 0;
     for (const v of views) {
       if (!v.character || v.lying || v.dissolve >= 0) continue;
-      if (v.track.snap.tm === "enemy") enemies++;
-      else if (v.track.snap.tm === "ally") allies++;
+      const role = plateRole(v.track.snap, v.track.id === selfId);
+      if (role === "enemy") enemies++;
+      else if (isParty(role)) party++;
     }
     const crowded = enemies > ENEMY_CROWD;
-    const allyTitles = allies <= ALLY_TITLES_MAX;
+    const partyTitles = party <= PARTY_TITLES_MAX;
     const order = this.#order;
     order.length = 0;
     let n = 0;
@@ -128,27 +132,27 @@ export class PlateLayer {
       }
       if (!v.character) continue;
       const snap = track.snap;
-      const tm = snap.tm;
-      const isSelf = track.id === selfId;
-      const boss = tm === "boss";
+      const role = plateRole(snap, track.id === selfId);
+      const isSelf = role === "self";
+      const boss = role === "boss";
       const s = this.#slot(n++);
       s.v = v;
-      s.prio = isSelf ? 0 : (PRIORITY[tm] ?? 5) - (tm === "npc" && (track.mk || snap.hist) ? 2 : 0);
+      s.role = role;
       s.dist = self ? Math.hypot(track.x - self.x, track.y - self.y) : 0;
       let y = v.wy - (v.lying ? 10 : characterHeight(v.character)) - 1;
       if (track.down) y -= 18 / scale; // above the 사경 label
       const hp = Math.max(0, Math.min(100, track.hp));
-      s.showHp = !isSelf && !v.lying && (boss || tm === "enemy" || hp < 100);
+      s.showHp = !isSelf && !v.lying && (boss || role === "enemy" || hp < 100);
       if (s.showHp) {
         s.hpY = y - 3;
         y -= 5;
       }
       s.base = y;
-      s.plate = !!snap.n && !(tm === "enemy" && (crowded || s.dist > ENEMY_PLATE_TILES));
+      s.plate = !!snap.n && !(role === "enemy" && (crowded || s.dist > ENEMY_PLATE_TILES));
       if (s.plate) {
-        s.name = snap.n ?? "";
-        s.title = tm === "ally" && !allyTitles ? undefined : (snap.title ?? (snap.hist ? "역사 인물" : undefined));
-        s.small = !boss && tm !== "self" && tm !== "player";
+        s.name = role === "companion" ? botName(snap.n ?? "") : (snap.n ?? "");
+        s.title = isParty(role) && !partyTitles ? undefined : (snap.title ?? (snap.hist ? "역사 인물" : undefined));
+        s.small = role !== "self" && role !== "player" && !boss;
         const size = plateSize(s, snap.lvl, mult);
         const w = size.w / scale;
         const h = size.h / scale;
@@ -159,23 +163,8 @@ export class PlateLayer {
       }
       order.push(s);
     }
-    order.sort(this.#byPriority);
-    // Place plates in priority order.
-    for (let i = 0; i < order.length; i++) {
-      const s = order[i] as Slot;
-      if (!s.plate) continue;
-      for (let nudge = 0; ; nudge++) {
-        const hit = this.#overlap(s, i);
-        if (!hit) break;
-        if (nudge >= MAX_NUDGES) {
-          if (s.prio >= PRIORITY.ally) s.plate = false;
-          break;
-        }
-        const dy = s.y1 - hit.y0 + 0.5;
-        s.y0 -= dy;
-        s.y1 -= dy;
-      }
-    }
+    order.sort(byPlacement);
+    placePlates(order);
     // Draw back to front so higher-priority overlays end up on top.
     const o = this.#opts;
     o.pixelRatio = unit;
@@ -190,10 +179,11 @@ export class PlateLayer {
       }
       let top = s.base;
       if (s.plate) {
-        o.color = TEAM_COLORS[snap.tm] ?? TEAM_COLORS.npc;
+        o.color = s.role === "companion" ? COMPANION_COLOR : (TEAM_COLORS[snap.tm] ?? TEAM_COLORS.npc);
         o.title = s.title;
         o.level = snap.lvl;
         o.small = s.small;
+        o.frame = s.role === "self" ? SELF_FRAME : undefined;
         drawNamePlate(ctx, s.name, v.wx, s.y1, o);
         top = s.y0;
       }
@@ -204,16 +194,5 @@ export class PlateLayer {
       v.top = top;
       s.v = null;
     }
-  }
-
-  /** First already-placed plate (index < upto) overlapping slot `s`. */
-  #overlap(s: Slot, upto: number): Slot | null {
-    const order = this.#order;
-    for (let j = 0; j < upto; j++) {
-      const o = order[j] as Slot;
-      if (!o.plate) continue;
-      if (o.x0 < s.x1 && o.x1 > s.x0 && o.y0 < s.y1 && o.y1 > s.y0) return o;
-    }
-    return null;
   }
 }

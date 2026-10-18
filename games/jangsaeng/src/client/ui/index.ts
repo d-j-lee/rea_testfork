@@ -112,7 +112,8 @@ export function createUi(deps: UiDeps): Ui {
   let title: TitleScreen | null = null;
   let loading: LoadingScreen | null = null;
   let inGame = false;
-  let ending = false;
+  /** The mounted ending screen; a repeated "ending" message replaces it. */
+  let ending: HTMLElement | null = null;
   let card: { dismiss(): void } | null = null;
   let pendingCard: { chapter: ChapterView; channel: string } | null = null;
   let queuedPrompt: PromptView | null = null;
@@ -207,14 +208,16 @@ export function createUi(deps: UiDeps): Ui {
   modals.append(menu.el, prompt.el, years.el);
 
   const isBlocking = () =>
-    !inGame || ending || !!title || !!loading || !!card || prompt.open || years.open || menu.open || hud.chat.typing || !!hud.drawer || !!errorEl;
+    !inGame || !!ending || !!title || !!loading || !!card || prompt.open || years.open || menu.open || hud.chat.typing || !!hud.drawer || !!errorEl;
 
   let lastBlocking: boolean | null = null;
   const sync = () => {
     const blocking = isBlocking();
     root.classList.toggle("in-game", inGame && !ending);
-    root.classList.toggle("modal-open", prompt.open || years.open || menu.open || !!card || ending || !!hud.drawer);
+    root.classList.toggle("modal-open", prompt.open || years.open || menu.open || !!card || !!ending || !!hud.drawer);
     root.classList.toggle("card-open", !!card);
+    // Toasts wait while a full-screen document would sit under them.
+    toasts.hold(!!card || years.open || !!ending);
     root.dataset.drawer = hud.drawer ?? "";
     if (blocking !== lastBlocking) {
       lastBlocking = blocking;
@@ -338,15 +341,18 @@ export function createUi(deps: UiDeps): Ui {
         case "roster":
           hud.chat.setRoster(msg.players);
           break;
-        case "ending":
-          ending = true;
+        case "ending": {
           card?.dismiss();
           prompt.close();
           years.close();
           menu.close();
-          screens.appendChild(endingScreen(msg.ending));
+          const next = endingScreen(msg.ending);
+          if (ending) ending.replaceWith(next);
+          else screens.appendChild(next);
+          ending = next;
           sync();
           break;
+        }
         case "error":
           if (inGame) toasts.show(msg.message, "bad");
           else ui.showError(msg.message);

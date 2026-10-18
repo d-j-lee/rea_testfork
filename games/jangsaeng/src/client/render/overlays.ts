@@ -14,6 +14,8 @@ export interface NamePlateOptions {
   title?: string;
   level?: number;
   small?: boolean;
+  /** Border colour around the name band (the player's own plate). */
+  frame?: string | undefined;
   /**
    * Canvas pixels per CSS pixel. When given, text is sized for CSS-pixel
    * legibility (phones render the canvas below devicePixelRatio).
@@ -29,6 +31,7 @@ interface Plate {
   color: string;
   level: number | undefined;
   title: string | undefined;
+  frame: string | undefined;
   surface: Surface;
 }
 
@@ -140,11 +143,19 @@ function buildPlate(
   ctx.textBaseline = "top";
   // Backing: a dark rounded band behind the name row only.
   const by = titleH;
-  ctx.fillStyle = "rgba(16, 12, 16, 0.55)";
+  ctx.fillStyle = opts.frame ? "rgba(16, 12, 16, 0.78)" : "rgba(16, 12, 16, 0.55)";
   const bx = Math.floor((w - nameRowW) / 2) - pad;
   const bw = nameRowW + pad * 2;
   ctx.fillRect(bx + mult, by, bw - 2 * mult, nameH);
   ctx.fillRect(bx, by + mult, bw, nameH - 2 * mult);
+  if (opts.frame) {
+    // A one-pixel frame that follows the band's clipped corners.
+    ctx.fillStyle = opts.frame;
+    ctx.fillRect(bx + mult, by, bw - 2 * mult, mult);
+    ctx.fillRect(bx + mult, by + nameH - mult, bw - 2 * mult, mult);
+    ctx.fillRect(bx, by + mult, mult, nameH - 2 * mult);
+    ctx.fillRect(bx + bw - mult, by + mult, mult, nameH - 2 * mult);
+  }
   const outlined = (s: string, x: number, y: number, color: string) => {
     ctx.fillStyle = OUTLINE;
     for (const [dx, dy] of [
@@ -197,7 +208,14 @@ export function drawNamePlate(
   let plate: Surface | undefined;
   if (list)
     for (const p of list)
-      if (p.mult === mult && p.small === small && p.color === opts.color && p.level === opts.level && p.title === opts.title) {
+      if (
+        p.mult === mult &&
+        p.small === small &&
+        p.color === opts.color &&
+        p.level === opts.level &&
+        p.title === opts.title &&
+        p.frame === opts.frame
+      ) {
         plate = p.surface;
         break;
       }
@@ -212,7 +230,7 @@ export function drawNamePlate(
       plates.set(text, list);
     }
     if (list.length >= 8) list.shift();
-    list.push({ mult, small, color: opts.color, level: opts.level, title: opts.title, surface: plate });
+    list.push({ mult, small, color: opts.color, level: opts.level, title: opts.title, frame: opts.frame, surface: plate });
   }
   const dx = Math.round(d.m.a * x + d.m.c * y + d.x - plate.width / 2);
   const dy = Math.round(d.m.b * x + d.m.d * y + d.y - plate.height);

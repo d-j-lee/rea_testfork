@@ -1,5 +1,6 @@
 // 게임 소개: concept, pillars, how the MMO works, prototype scope. Honest copy:
 // no metrics, no claims beyond what the prototype and its roadmap state.
+import { greatBattleTitles, PITCH_BATTLES } from "./chapters.ts";
 import { button, h } from "./dom.ts";
 import { paperPanel } from "./panel.ts";
 
@@ -7,7 +8,7 @@ const PILLARS: readonly { glyph: string; title: string; text: string }[] = [
   {
     glyph: "壽",
     title: "500년 생존",
-    text: "천수(수명)는 쓰고 버는 자원이다. 대첩과 공덕으로 늘리고, 위기에는 노인성 일섬과 자력 소생에 쓴다. 타고난 천수만으로는 1910년에 닿지 못한다.",
+    text: "천수(수명)는 쓰고 버는 자원이다. 대전과 공덕으로 늘리고, 위기에는 노인성 일섬과 자력 소생에 쓴다. 타고난 천수만으로는 1910년에 닿지 못한다.",
   },
   {
     glyph: "官",
@@ -16,8 +17,8 @@ const PILLARS: readonly { glyph: string; title: string; text: string }[] = [
   },
   {
     glyph: "戰",
-    title: "역사 속 대첩",
-    text: "황산, 행주, 명량, 남한산성, 정족산성. 실시간 액션 전투로 역사의 현장에 선다. 실존 인물의 결정적 행위는 플레이어가 대신하지 않는다.",
+    title: "역사 속 대전",
+    text: `${greatBattleTitles(PITCH_BATTLES).join(" · ")}. 실시간 액션 전투로 역사의 현장에 선다. 실존 인물의 결정적 행위는 플레이어가 대신하지 않는다.`,
   },
   {
     glyph: "記",
@@ -84,7 +85,7 @@ export function pitchPanel(handlers: { onBack(): void; onNew(): void; onDemo(): 
           h("h3", { class: "sub-title" }, "로드맵 (아직 없음)"),
           h("ul", { class: "plan-list" }, ...ROADMAP.map((t) => h("li", null, t))))),
       h("p", { class: "pitch-note" },
-        "역사의 기둥(조선 개국, 이순신의 전사, 삼전도 등)은 바꾸지 않는다. 바꿀 수 있는 것은 19세기 분기점들의 누적뿐이다. 장마다 실제 역사 노트에서 사실과 해석, 창작을 구분한다. 시제품이므로 일부 장의 분량과 연출은 계속 다듬고 있다."),
+        "역사의 기둥(조선 개국, 이순신의 전사, 삼전도 등)은 바꾸지 않는다. 바꿀 수 있는 것은 1802~1907년 분기점(B1–B12)의 누적뿐이다. 장마다 실제 역사 노트에서 사실과 해석, 창작을 구분한다. 시제품이므로 일부 장의 분량과 연출은 계속 다듬고 있다."),
     ),
   );
 }

@@ -1,5 +1,7 @@
 // UI preview entry: builds one screen state (from location.hash) over a real
 // world render, driven by mock protocol data. Used by tools/preview/ui-page.mjs.
+import { CameraRig } from "../../src/client/game/camera.ts";
+import { drawObjectiveArrow } from "../../src/client/game/markers.ts";
 import { Input } from "../../src/client/input.ts";
 import { drawCharacter } from "../../src/client/render/characters.ts";
 import { WorldRenderer } from "../../src/client/render/world.ts";
@@ -12,6 +14,11 @@ import { CARD_PROMPT, CHAPTER, DEATH_PROMPT, ENDING, mockAudio, mockSelf, RESULT
 declare global {
   interface Window {
     __ready?: boolean;
+    /** Hooks for tools/preview/ui-check.mjs. */
+    __ui?: Ui;
+    __input?: Input;
+    __mock?: { ENDING: typeof ENDING; YEARS_PROMPT: typeof YEARS_PROMPT };
+    __arrowLabel?: (inherited: CanvasTextAlign) => { label: [number, number]; arrow: [number, number]; width: number };
   }
 }
 
@@ -51,6 +58,44 @@ function drawWorld(): { x: number; y: number } {
 const send = (m: unknown) => console.log("send", JSON.stringify(m));
 const input = new Input(canvas);
 const ui: Ui = createUi({ root, send, audio: mockAudio(), input, map });
+window.__ui = ui;
+window.__input = input;
+window.__mock = { ENDING, YEARS_PROMPT };
+
+/**
+ * Draws an off-screen objective's edge arrow (target far to the left) on a
+ * scratch canvas whose text state was left as `inherited` by an earlier
+ * drawer, and returns the x extents of the label and the arrow (canvas px).
+ */
+window.__arrowLabel = (inherited) => {
+  const c = document.createElement("canvas");
+  c.width = 480;
+  c.height = 200;
+  const ctx = c.getContext("2d") as CanvasRenderingContext2D;
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, c.width, c.height);
+  const rig = new CameraRig();
+  rig.resize(c.width, c.height, 3);
+  rig.snapTo(0, 0);
+  ctx.textAlign = inherited;
+  ctx.textBaseline = "alphabetic";
+  drawObjectiveArrow(ctx, rig, { id: "o", text: "", done: false, optional: false, x: -60, y: 0, siteName: "명량(울돌목)" }, 1, 0);
+  const d = ctx.getImageData(0, 0, c.width, c.height).data;
+  const label: [number, number] = [Infinity, -Infinity];
+  const arrow: [number, number] = [Infinity, -Infinity];
+  for (let y = 0; y < c.height; y++)
+    for (let x = 0; x < c.width; x++) {
+      const i = (y * c.width + x) * 4;
+      const r = d[i] as number;
+      const g = d[i + 1] as number;
+      const b = d[i + 2] as number;
+      const box = r > 170 && g > 170 && b > 150 ? label : r > 170 && g > 120 && b < 110 ? arrow : null;
+      if (!box) continue;
+      box[0] = Math.min(box[0], x);
+      box[1] = Math.max(box[1], x);
+    }
+  return { label, arrow, width: c.width };
+};
 
 const click = (sel: string) => (document.querySelector(sel) as HTMLElement | null)?.click();
 const key = (code: string, k = "") => window.dispatchEvent(new KeyboardEvent("keydown", { code, key: k, bubbles: true }));
@@ -114,7 +159,7 @@ async function run(): Promise<void> {
     case "hud":
       startGame();
       ui.handle({ t: "toast", text: "강가의 척후를 물리쳤다 (3/5)", tone: "good" });
-      ui.handle({ t: "toast", text: "대첩의 공으로 천수 +2년", tone: "epic" });
+      ui.handle({ t: "toast", text: "대전 — 황산대첩 · 천수 +2년", tone: "epic" });
       break;
     case "drawer-status":
     case "drawer-obj":

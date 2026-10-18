@@ -3,6 +3,13 @@
 import type { IdentityKind, WashMethod } from "../../shared/content/schema.ts";
 import type { SelfView } from "../../shared/types.ts";
 
+/** Marks simulated companions wherever a name is shown (chat, roster, plates). */
+export const SIM_MARK = "◇";
+
+export function botName(name: string): string {
+  return name.startsWith(SIM_MARK) ? name : `${SIM_MARK}${name}`;
+}
+
 export const IDENTITY_LABELS: Readonly<Record<IdentityKind, string>> = {
   birth: "본래 이름",
   descendant: "후손 행세",

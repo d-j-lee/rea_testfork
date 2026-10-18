@@ -84,3 +84,8 @@ export const TEAM_COLORS = {
   enemy: "#ff8a7a",
   boss: "#ff5e5e",
 } as const;
+
+/** Name tint of simulated companions (◇): the UI's sim blue, apart from real players. */
+export const COMPANION_COLOR = "#93b8cf";
+/** Frame around the player's own name plate (dancheong gold). */
+export const SELF_FRAME = "#e2b23a";

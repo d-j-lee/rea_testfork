@@ -1,7 +1,8 @@
-// Namespaced key/value persistence over localStorage that never throws.
-// Sandboxed frames, private windows and full quotas make every storage
-// access fallible; each failing key falls back to an in-memory copy so the
-// session keeps working (it just will not survive a reload).
+// The client's one owner of browser persistence (profiles, summaries,
+// settings): namespaced key/value storage over localStorage that never
+// throws. Sandboxed frames, private windows and full quotas make every
+// storage access fallible; each failing key falls back to an in-memory copy
+// so the session keeps working (it just will not survive a reload).
 
 const PREFIX = "jangsaeng:v1:";
 
@@ -64,6 +65,10 @@ export function removeKey(key: string): void {
     // Nothing to do: the key is unreachable either way.
   }
 }
+
+/** Guard for JSON objects (not arrays or null). */
+export const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
 
 export function readJson<T>(key: string, guard: (value: unknown) => value is T): T | null {
   const raw = readKey(key);

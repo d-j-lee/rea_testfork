@@ -37,30 +37,44 @@ export function radarChart(values: Partial<Record<NationMeter, number>>, cls = "
   );
 }
 
-/** Lifespan graph: natural span, years gained and spent, against 1910. */
+/**
+ * Lifespan graph: natural span, years gained and spent, against 1910. The
+ * three values are a legend under the bars (HTML), not labels at the bar
+ * ends: those ran off the SVG when the span ends near the axis end, and an
+ * SVG scaled down to a phone shrinks its text with it.
+ */
 export function lifeGraph(lifeEnd: number, gained: number, spent: number): HTMLElement {
   const base = lifeEnd - gained + spent;
   const end = Math.max(FINAL_YEAR + 20, lifeEnd + 10, base + gained + 10);
   const W = 640;
   const x = (y: number) => 24 + ((y - AWAKENING_YEAR) / (end - AWAKENING_YEAR)) * (W - 48);
-  const row = (y: number, from: number, to: number, cls: string, label: string) =>
-    s("g", { class: `lg-row ${cls}` },
-      s("rect", { x: x(Math.min(from, to)).toFixed(1), y: String(y), width: Math.max(2, Math.abs(x(to) - x(from))).toFixed(1), height: "14", rx: "2" }),
-      s("text", { x: (x(Math.max(from, to)) + 6).toFixed(1), y: String(y + 11) }, label));
-  const ticks = [AWAKENING_YEAR, 1392, 1592, 1800, FINAL_YEAR];
+  const bar = (y: number, from: number, to: number, cls: string) =>
+    s("rect", { class: cls, x: x(Math.min(from, to)).toFixed(1), y: String(y), width: Math.max(2, Math.abs(x(to) - x(from))).toFixed(1), height: "14", rx: "2" });
+  // 1392 sits a few pixels from 1361; it is the first label to go when small.
+  const ticks: readonly [number, string][] = [[AWAKENING_YEAR, ""], [1392, " minor"], [1592, ""], [1800, ""], [FINAL_YEAR, ""]];
+  // The end label sits on the inner side of its line, so it never leaves the SVG.
+  const endX = x(lifeEnd);
+  const endRight = endX > W / 2;
   const svg = s(
     "svg",
     { class: "life-graph", viewBox: `0 0 ${W} 132`, role: "img", "aria-label": `천수 그래프: 타고난 천수 ${base}년, 얻은 세월 ${gained}년, 쓴 세월 ${spent}년, 최종 ${lifeEnd}년` },
     s("line", { class: "lg-axis", x1: "24", y1: "100", x2: String(W - 24), y2: "100" }),
-    ...ticks.map((t) => s("g", { class: "lg-tick" },
+    ...ticks.map(([t, minor]) => s("g", { class: `lg-tick${minor}` },
       s("line", { x1: x(t).toFixed(1), y1: "96", x2: x(t).toFixed(1), y2: "104" }),
       s("text", { x: x(t).toFixed(1), y: "122", "text-anchor": "middle" }, String(t)))),
-    row(14, AWAKENING_YEAR, base, "lg-base", `타고난 천수 ${base}`),
-    row(36, base, base + gained, "lg-gain", `얻은 세월 +${gained}`),
-    row(58, base + gained, lifeEnd, "lg-spent", `쓴 세월 −${spent}`),
+    bar(14, AWAKENING_YEAR, base, "lg-base"),
+    bar(36, base, base + gained, "lg-gain"),
+    bar(58, base + gained, lifeEnd, "lg-spent"),
     s("line", { class: "lg-goal", x1: x(FINAL_YEAR).toFixed(1), y1: "6", x2: x(FINAL_YEAR).toFixed(1), y2: "100" }),
-    s("line", { class: `lg-end${lifeEnd < FINAL_YEAR ? " short" : ""}`, x1: x(lifeEnd).toFixed(1), y1: "6", x2: x(lifeEnd).toFixed(1), y2: "100" }),
-    s("text", { class: "lg-endlabel", x: x(lifeEnd).toFixed(1), y: "88", "text-anchor": "middle" }, `천수 ${lifeEnd}`),
+    s("line", { class: `lg-end${lifeEnd < FINAL_YEAR ? " short" : ""}`, x1: endX.toFixed(1), y1: "6", x2: endX.toFixed(1), y2: "100" }),
+    s("text", { class: "lg-endlabel", x: (endRight ? endX - 6 : endX + 6).toFixed(1), y: "90", "text-anchor": endRight ? "end" : "start" }, `천수 ${lifeEnd}`),
   );
-  return h("figure", { class: "life-figure" }, svg);
+  const item = (cls: string, label: string, value: string) =>
+    h("li", { class: cls }, h("span", { class: "lg-swatch", "aria-hidden": "true" }), label, " ", h("b", null, value));
+  return h("figure", { class: "life-figure" },
+    svg,
+    h("ul", { class: "lg-legend", "aria-hidden": "true" },
+      item("lg-base", "타고난 천수", `${base}년`),
+      item("lg-gain", "얻은 세월", `+${gained}년`),
+      item("lg-spent", "쓴 세월", `−${spent}년`)));
 }

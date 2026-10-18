@@ -3,15 +3,11 @@
 import type { RosterEntry } from "../../shared/types.ts";
 import type { AudioEngine } from "../audio/types.ts";
 import { button, h, setText, toggle } from "./dom.ts";
+import { botName, SIM_MARK } from "./labels.ts";
 
 const MAX_LINES = 80;
-export const SIM_MARK = "◇";
 
 export type ChatKind = "player" | "bot" | "system" | "npc";
-
-export function botName(name: string): string {
-  return name.startsWith(SIM_MARK) ? name : `${SIM_MARK}${name}`;
-}
 
 export class ChatPanel {
   readonly el: HTMLElement;
