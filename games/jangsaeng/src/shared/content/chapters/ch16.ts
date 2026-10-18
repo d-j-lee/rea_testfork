@@ -577,6 +577,8 @@ export const ch16: ChapterDef = {
       radius: 8,
       kind: "survive",
       timeLimit: 80,
+      // The campaign failed: holding out covers the vanguard's retreat, it wins nothing.
+      victoryLabel: "선발대가 고개를 넘었다",
       music: "resistance",
       weather: "snow",
       intro: [

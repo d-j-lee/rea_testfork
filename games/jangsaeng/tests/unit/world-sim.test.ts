@@ -38,15 +38,17 @@ test("snapshots cover 24 tiles, keep corpses 1.2 s and report gone ids once", ()
   assert.deepEqual(moved.ents.map((e) => e.id), [p.id]);
 });
 
-test("the active boss is always in the snapshot", () => {
+test("the active boss is always in the snapshot, also for someone far from it", () => {
   const { world } = makeWorld("boss-snap");
   const c = arena();
   const p = spec(c.x, c.y, { derived: { ...DERIVED, maxHp: 100_000 } });
+  const far = spec(c.x - 40, c.y);
   world.addPlayer(p);
+  world.addPlayer(far);
   world.startBattle("boss", p.id);
-  world.teleport(p.id, c.x - 40, c.y);
   run(world, 0.1);
-  assert.ok(world.snapshotFor(p.id).ents.some((e) => e.tm === "boss"));
+  assert.ok(world.battleView(), "the battle runs on for its fighter");
+  assert.ok(world.snapshotFor(far.id).ents.some((e) => e.tm === "boss"));
 });
 
 test("drops become props that players collect by walking over them", () => {

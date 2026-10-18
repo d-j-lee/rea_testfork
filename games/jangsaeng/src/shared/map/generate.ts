@@ -154,11 +154,16 @@ const FOOTPRINT: Readonly<Record<SiteKind, readonly [number, number]>> = {
   frontier: [7, 5],
 };
 
-/** Per-site footprint overrides where geography is tight. */
+/**
+ * Per-site footprint overrides where geography is tight, or for 명량 a fleet
+ * of 9 × 4 deck: with the fleet on open water its battle ring is mostly deck
+ * (sim/arena.ts DECK_SHARE), not the strait's shore.
+ */
 const FOOTPRINT_OVERRIDE: Readonly<Record<string, readonly [number, number]>> = {
   wihwado: [5, 3],
   haengju: [5, 5],
   jemulpo: [5, 5],
+  myeongnyang: [9, 7],
 };
 
 /** Placement priority: earlier kinds keep their true position on overlap. */
@@ -541,24 +546,69 @@ export function generateMap(seed = "jangsaeng"): GameMap {
     }
   }
 
+  /**
+   * Where a sea battlefield's fleet lies: its footprint's deck rows (in
+   * even-aligned pairs, so each hull renders two rows tall), moved to the
+   * nearest offset within one footprint where they are all open water, or
+   * the wettest offset when none is. A site off a strait's shore (울돌목)
+   * thus gets a whole fleet, not a sliver of deck between the rocks.
+   */
+  function fleetAt(rect: Site["rect"]): { rect: Site["rect"]; top: number; rows: number } {
+    const rows = Math.max(2, Math.floor((rect.h - 2) / 2) * 2);
+    const top = (rect.y + 1) % 2 === 0 ? rect.y + 1 : rect.y + 2;
+    const water = (dx: number, dy: number) => {
+      let n = 0;
+      for (let y = top + dy; y < top + dy + rows; y++)
+        for (let x = rect.x + dx; x < rect.x + dx + rect.w; x++) if (x >= 0 && y >= 0 && x < W && y < H && !land[index(x, y)]) n++;
+      return n;
+    };
+    const offsets: (readonly [number, number])[] = [];
+    for (let dy = -rect.h + (rect.h % 2); dy <= rect.h; dy += 2) for (let dx = -rect.w; dx <= rect.w; dx++) offsets.push([dx, dy]);
+    offsets.sort((m, n) => Math.abs(m[0]) + Math.abs(m[1]) - Math.abs(n[0]) - Math.abs(n[1]) || m[1] - n[1] || m[0] - n[0]);
+    let best: readonly [number, number] = [0, 0];
+    let most = -1;
+    for (const offset of offsets) {
+      const n = water(offset[0], offset[1]);
+      if (n > most) {
+        most = n;
+        best = offset;
+      }
+      if (n === rows * rect.w) break;
+    }
+    const [dx, dy] = best;
+    return { rect: { ...rect, x: rect.x + dx, y: rect.y + dy }, top: top + dy, rows };
+  }
+
   function stampSite(site: Site) {
     const { rect } = site;
     const naval = site.kind === "battlefield" && !land[index(site.x, site.y)];
     if (naval) {
-      // Sea battles are fought on a moored fleet's decks. Rows are stamped
-      // in even-aligned pairs so each hull renders two rows tall.
-      const top = (rect.y + 1) % 2 === 0 ? rect.y + 1 : rect.y + 2;
-      const rows = Math.max(2, Math.floor((rect.h - 2) / 2) * 2);
+      // Sea battles are fought on a moored fleet's decks; the site is its fleet.
+      const fleet = fleetAt(rect);
+      site.rect = fleet.rect;
       const decks: number[] = [];
-      for (let y = top; y < top + rows; y++)
-        for (let x = rect.x; x < rect.x + rect.w; x++)
+      for (let y = fleet.top; y < fleet.top + fleet.rows; y++)
+        for (let x = fleet.rect.x; x < fleet.rect.x + fleet.rect.w; x++)
           if (x >= 0 && y >= 0 && x < W && y < H && !land[index(x, y)]) {
             tiles[index(x, y)] = Tile.Deck;
             decks.push(index(x, y));
           }
       moor(decks);
-      if (!land[index(site.x, site.y)] && tiles[index(site.x, site.y)] !== Tile.Deck)
-        site.y = top;
+      // The site stands on its fleet: the deck tile nearest its true position.
+      if (tiles[index(site.x, site.y)] !== Tile.Deck) {
+        const { x: sx, y: sy } = site;
+        let nearest = Infinity;
+        for (const i of decks) {
+          const x = i % W;
+          const y = (i - x) / W;
+          const d = Math.hypot(x - sx, y - sy);
+          if (d < nearest) {
+            nearest = d;
+            site.x = x;
+            site.y = y;
+          }
+        }
+      }
       return;
     }
     const ground = site.kind === "battlefield" ? Tile.Grass : Tile.TownGround;

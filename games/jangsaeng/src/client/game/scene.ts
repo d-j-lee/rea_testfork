@@ -13,7 +13,7 @@ import {
 import type { ChapterView, SelfView } from "../../shared/types.ts";
 import { characterHeight, drawCharacter, type DrawCharacterOptions } from "../render/characters.ts";
 import { EffectSystem } from "../render/effects.ts";
-import { drawAtmosphere, type AtmosphereOptions } from "../render/lighting.ts";
+import { drawAtmosphere, type AtmosphereOptions, type Weather } from "../render/lighting.ts";
 import { drawSelectionRing } from "../render/overlays.ts";
 import { TEAM_COLORS } from "../render/palette.ts";
 import { drawProp } from "../render/props.ts";
@@ -38,8 +38,57 @@ const HIT_FLASH = "rgba(255,255,255,0.72)";
 /** Precomputed ink tints (avoid building colour strings per frame). */
 const INK_TINTS: readonly string[] = Array.from({ length: 11 }, (_, i) => `rgba(29,26,25,${(i / 10).toFixed(2)})`);
 const VIEW_MARGIN = 40;
-/** A battle's sky reaches this many tiles beyond its ring (about half a screen). */
+/** A battle's sky reaches this many tiles beyond its ring (about half a screen)… */
 const BATTLE_SKY = 12;
+/** …thinning out over the last this many tiles of that reach… */
+const SKY_EDGE = 6;
+/** …and it takes this long (ms) to turn the sky in or out, as a battle starts or ends. */
+const SKY_FADE_MS = 1500;
+
+/** What the atmosphere pass draws: an hour of the day and a weather. */
+interface Sky {
+  hour: number;
+  weather: Weather;
+}
+
+/**
+ * The hour `k` of the way from `from` to `to`, the short way round the clock;
+ * half a day apart, the way through the night (a dusk chapter darkens into a
+ * dawn battle, and brightens back the same way).
+ */
+function mixHour(from: number, to: number, k: number): number {
+  let d = (((to - from) % 24) + 24) % 24;
+  if (d > 12 || (d === 12 && (from + 6) % 24 >= 6 && (from + 6) % 24 < 18)) d -= 24;
+  return (((from + d * k) % 24) + 24) % 24;
+}
+
+/**
+ * Draws the sky `mix` (0–1) of the way from `base` (the chapter's) to
+ * `battle` (a battle's own) into `atmo`'s pass: the hour mixes the short way
+ * round, and two weathers cross-fade — the light of the mixed hour once,
+ * then each weather's layers at its share (drawn at noon, whose grade is
+ * close to neutral).
+ */
+function drawSky(ctx: CanvasRenderingContext2D, width: number, height: number, atmo: AtmosphereOptions, base: Sky, battle: Sky | null, mix: number): void {
+  const k = battle ? Math.max(0, Math.min(1, mix)) : 0;
+  const sky = battle && k >= 1 ? battle : base;
+  atmo.intensity = 1;
+  atmo.hour = battle && k > 0 && k < 1 ? mixHour(base.hour, battle.hour, k) : sky.hour;
+  if (!battle || k <= 0 || k >= 1 || battle.weather === base.weather) {
+    atmo.weather = sky.weather;
+    drawAtmosphere(ctx, width, height, atmo);
+    return;
+  }
+  atmo.weather = "clear";
+  drawAtmosphere(ctx, width, height, atmo);
+  atmo.hour = 12;
+  for (const [weather, share] of [[base.weather, 1 - k], [battle.weather, k]] as const) {
+    atmo.weather = weather;
+    atmo.intensity = share;
+    drawAtmosphere(ctx, width, height, atmo);
+  }
+  atmo.intensity = 1;
+}
 
 export interface SceneFrame {
   /** Real client time (ms). */
@@ -129,6 +178,9 @@ export class Scene {
   readonly #visible: EntityView[] = [];
   readonly #plates = new PlateLayer();
   readonly #atmosphere: AtmosphereOptions = { hour: 12, weather: "clear", timeMs: 0, pixelScale: 1 };
+  /** The last battle's own sky (kept while it fades out after the battle ends) and how much of it shows, 0–1. */
+  #battleSky: Sky | null = null;
+  #skyMix = 0;
   #byDepth = (a: Drawable, b: Drawable) => a.sortY - b.sortY;
 
   constructor(map: GameMap) {
@@ -174,17 +226,7 @@ export class Scene {
     this.ink.draw(ctx, t);
 
     // ── Atmosphere (screen space) ───────────────────────────────────────
-    // A running battle's own sky (칠천량's burning night) covers its arena
-    // and the view around it; elsewhere the chapter's.
-    const chapter = f.chapter;
-    const ring = f.self?.battle;
-    const sky = ring && Math.hypot(cam.x - ring.x * TILE_PX, cam.y - ring.y * TILE_PX) <= (ring.radius + BATTLE_SKY) * TILE_PX ? ring : undefined;
-    const atmo = this.#atmosphere;
-    atmo.hour = sky?.hour ?? chapter?.hour ?? 12;
-    atmo.weather = sky?.weather ?? chapter?.weather ?? "clear";
-    atmo.timeMs = t;
-    atmo.pixelScale = cam.scale;
-    drawAtmosphere(ctx, cam.width, cam.height, atmo);
+    this.#drawSky(ctx, f, t);
 
     // ── Readable layer (world space, above the grade) ───────────────────
     applyCamera(ctx, cam);
@@ -207,6 +249,31 @@ export class Scene {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     if (objectives) for (const o of objectives) if (objectiveVisible(o)) drawObjectiveArrow(ctx, f.rig, o, f.unit, f.now);
     this.vignette.draw(ctx, cam.width, cam.height, f.now);
+  }
+
+  /**
+   * The chapter's sky, or a running battle's own (칠천량's burning dawn) over
+   * its arena and the view around it. The battle's sky thins out over the
+   * last SKY_EDGE tiles of its reach and turns in and out over SKY_FADE_MS,
+   * so neither walking off nor a battle starting or ending switches it at once.
+   */
+  #drawSky(ctx: CanvasRenderingContext2D, f: SceneFrame, timeMs: number): void {
+    const cam = f.rig.camera;
+    const base: Sky = { hour: f.chapter?.hour ?? 12, weather: f.chapter?.weather ?? "clear" };
+    const ring = f.self?.battle;
+    let reach = 0;
+    if (ring) {
+      this.#battleSky = { hour: ring.hour ?? base.hour, weather: ring.weather ?? base.weather };
+      const tiles = Math.hypot(cam.x - ring.x * TILE_PX, cam.y - ring.y * TILE_PX) / TILE_PX;
+      reach = Math.max(0, Math.min(1, (ring.radius + BATTLE_SKY - tiles) / SKY_EDGE));
+    }
+    const step = f.visualDt / SKY_FADE_MS;
+    this.#skyMix += Math.max(-step, Math.min(step, reach - this.#skyMix));
+    if (this.#skyMix <= 0) this.#battleSky = null;
+    const atmo = this.#atmosphere;
+    atmo.timeMs = timeMs;
+    atmo.pixelScale = cam.scale;
+    drawSky(ctx, cam.width, cam.height, atmo, base, this.#battleSky, this.#skyMix);
   }
 
   /** True when a structure drawn after `v` overlaps its sprite box. */

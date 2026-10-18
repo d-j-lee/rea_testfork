@@ -62,6 +62,7 @@ export class Channel {
       hooks: {
         onKill: (enemy, level, boss, killers) => this.#onKill(enemy, level, boss, killers),
         onBattleEnd: (battleId, result, participants) => this.#onBattleEnd(battleId, result, participants),
+        fights: (playerId, battleId) => this.#fights(playerId, battleId),
         onTalk: (playerId, npcId) => this.sessions.get(playerId)?.onTalk(npcId),
         onPickup: (playerId, item) => this.sessions.get(playerId)?.onPickup(item),
         onDowned: (playerId) => {
@@ -164,22 +165,24 @@ export class Channel {
   // ── Battles ────────────────────────────────────────────────────────────
 
   /**
-   * Starts a chapter battle for `session`. A battle the story starts
-   * (`fromStory`) carries a far-off starter and the companions into its
-   * arena first; one started on foot begins where the trigger caught them.
+   * Starts a chapter battle for `session`, unless the world refuses it
+   * (World.battleRefusal: a story start says so only when another battle is
+   * on). A battle the story starts (`fromStory`) carries a starter who is not
+   * at it, and the companions, onto its ground first (World.arrivalSpot); one
+   * started on foot begins where the trigger caught them.
    */
   startBattle(battleId: string, session: Session, fromStory: boolean): boolean {
     const def = this.chapter.battles.find((candidate) => candidate.id === battleId);
     if (!def) return false;
-    if (this.world.battleView()) {
-      if (fromStory) session.send({ t: "toast", text: "다른 전투가 이미 벌어지고 있다.", tone: "warn" });
+    const refusal = this.world.battleRefusal(def.id, session.id);
+    if (refusal) {
+      if (fromStory && refusal === "busy") session.send({ t: "toast", text: "다른 전투가 이미 벌어지고 있다.", tone: "warn" });
       return false;
     }
-    const ring = this.world.arenaOf(def.id);
-    const status = this.world.playerStatus(session.id);
-    if (fromStory && ring && status && Math.hypot(ring.x - status.x, ring.y - status.y) > ring.radius) {
-      this.world.teleport(session.id, ring.x, ring.y + Math.min(3, ring.radius / 2));
-      this.catchUpCompanions(ring.x, ring.y);
+    const spot = fromStory && !this.world.atBattle(def.id, session.id) ? this.world.arrivalSpot(def.id, session.id) : null;
+    if (spot) {
+      this.world.teleport(session.id, spot.x, spot.y);
+      this.catchUpCompanions(spot.x, spot.y);
     }
     const started = this.world.startBattle(battleId, session.id);
     if (started) {
@@ -190,6 +193,17 @@ export class Channel {
         for (const line of def.intro) this.#broadcast({ t: "chat", from: def.title, text: line, kind: "system" });
     }
     return started;
+  }
+
+  /**
+   * Who a running battle takes in besides its starter (WorldHooks.fights):
+   * companions always; a person while it is theirs to fight
+   * (Session.needsBattle), so nobody who won it is pulled into its replay
+   * and nobody passing by is pulled into another step's battle.
+   */
+  #fights(playerId: number, battleId: string): boolean {
+    const session = this.sessions.get(playerId);
+    return session ? session.needsBattle(battleId) : this.bots.has(playerId);
   }
 
   /** Resolves a finished world battle for the sessions that fought it (the world's participants). */

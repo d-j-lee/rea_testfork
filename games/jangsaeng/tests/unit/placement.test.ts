@@ -17,14 +17,6 @@ import { World, type PlayerSpec, type WorldHooks } from "../../src/shared/sim/wo
 
 const map = generateMap("jangsaeng");
 const siteById = new Map(map.sites.map((site) => [site.id, site]));
-/**
- * Deck battles whose fleet is too small for DECK_SHARE, with the reason. 울돌목's
- * moored fleet (map/generate.ts) is 16 deck tiles, and a ring of radius 8 that
- * keeps its ground connected holds at least 71 tiles there, so at best 23% of
- * the arena is deck. The fight still opens on the deck (starter and boarders);
- * a larger fleet at myeongnyang would let it meet the share.
- */
-const LAND_HEAVY_DECKS: Record<string, string> = { b_myeongnyang: "울돌목's fleet is 16 deck tiles" };
 
 function* walk(list: readonly Effect[] | undefined): Generator<Effect> {
   for (const effect of list ?? []) {
@@ -131,8 +123,7 @@ for (const id of CHAPTER_IDS) {
         const shown = `${arena.deck.size} deck of ${arena.tiles.size} tiles`;
         if (!arena.naval || !onDeck(arena, arena.x, arena.y)) problems.push(`battle ${battle.id}: not centred on a deck (${shown})`);
         if (arena.deck.size < DECK_MIN) problems.push(`battle ${battle.id}: ${shown}`);
-        if (LAND_HEAVY_DECKS[battle.id] && share >= DECK_SHARE) problems.push(`battle ${battle.id}: meets the deck share now (${shown}); drop it from LAND_HEAVY_DECKS`);
-        if (!LAND_HEAVY_DECKS[battle.id] && !arenaFits(arena)) problems.push(`battle ${battle.id}: deck share ${share.toFixed(2)} (${shown})`);
+        if (share < DECK_SHARE || !arenaFits(arena)) problems.push(`battle ${battle.id}: deck share ${share.toFixed(2)} (${shown})`);
       } else if (!arenaFits(arena)) problems.push(`battle ${battle.id}: broken ground, main ${arena.tiles.size} of ${arena.walkable} walkable tiles`);
       if (arena && !at.reachable.has(at.label(arena))) problems.push(`battle ${battle.id}: arena unreachable at ${battle.site} ${JSON.stringify(battle.offset ?? [0, 0])}`);
     }
@@ -143,6 +134,7 @@ for (const id of CHAPTER_IDS) {
 const QUIET: WorldHooks = {
   onKill: () => {},
   onBattleEnd: () => {},
+  fights: () => true,
   onTalk: () => {},
   onPickup: () => {},
   onDowned: () => {},
