@@ -52,6 +52,22 @@ test("the rows are settled to 0.1 and the score is their sum, so they agree as s
   assert.ok(checked > 100, `checked ${checked} settlements`);
 });
 
+test("each meter row is its exact product rounded half up to 0.1 (재정 57 × 0.15 = 8.55 → 8.6)", () => {
+  const rowOf = (save: PlayerSave, prefix: string) => computeEnding(FIXTURE, save).breakdown.find((row) => row.label.startsWith(prefix))?.value;
+  assert.equal(rowOf(finalSave([50, 50, 57, 50, 50], []), "재정 57"), 8.6);
+  assert.equal(rowOf(finalSave([50, 50, 55, 50, 50], []), "재정 55"), 8.3);
+  // Every meter value under every weight, against decimal arithmetic on the product's digits.
+  const weights: [string, number][] = [["국방", 25], ["외교", 20], ["재정", 15], ["민심", 20], ["개혁", 20]];
+  for (let value = 0; value <= 100; value++) {
+    const ending = computeEnding(FIXTURE, finalSave([value, value, value, value, value], []));
+    for (const [index, [name, hundredths]] of weights.entries()) {
+      const digits = String(value * hundredths).padStart(3, "0");
+      const settled = Number(`${digits.slice(0, -2)}.${digits.slice(-2, -1)}`) + (Number(digits.slice(-1)) >= 5 ? 0.1 : 0);
+      assert.equal(ending.breakdown[index]?.value, Math.round(settled * 10) / 10, `${name} ${value}`);
+    }
+  }
+});
+
 test("§8.3 N1 boundary: 60/60/45/58/55, 10 branches, infiltration 20, P 2 → S ≈ 82.4, N1", () => {
   // Failed: B1, B2, B3 (no weight) and B8 (+20).
   const save = finalSave([60, 60, 45, 58, 55], ["B4", "B5", "B6", "B7", "B9", "B10", "B11", "B12a", "B12b", "B12c"], 2);

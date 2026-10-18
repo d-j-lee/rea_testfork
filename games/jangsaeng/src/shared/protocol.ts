@@ -70,6 +70,8 @@ export type ClientMsg =
       wash?: WashMethod;
       name?: string;
       offer: boolean;
+      /** 노인성의 마지막 은혜: taken only when the player turned it on in the planner. */
+      grace?: boolean;
     }
   | { t: "chat"; text: string }
   | { t: "action"; action: PlayerAction }

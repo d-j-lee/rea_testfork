@@ -36,6 +36,7 @@ export interface YearsChoice {
   /** One activity id per token of the era. */
   activities: string[];
   wash?: WashMethod;
+  /** The wash's new name; without one the wash takes the plan's suggestedName. */
   newName?: string;
   /** 노인성 봉헌: 100 공덕 a year, up to this chapter's allowance. */
   offer: boolean;
@@ -62,6 +63,15 @@ function eraOf(content: ContentIndex, save: PlayerSave, next: ChapterId): { from
 function tokensFor(content: ContentIndex, save: PlayerSave, next: ChapterId): number {
   const era = eraOf(content, save, next);
   return tokensBetween(era.from, era.to);
+}
+
+/**
+ * The name a wash between chapters takes unless the player writes another: the
+ * planner's name field starts with it (YearsPlanView.suggestedName), and
+ * advanceYears falls back to it when the plan names none.
+ */
+function plannedName(save: PlayerSave, next: ChapterId): string {
+  return suggestName(save, next);
 }
 
 /** Splits the era into `tokens` consecutive spans (one per 세월 token). */
@@ -304,7 +314,8 @@ function projectedSuspicion(save: PlayerSave, toYear: number): number {
  * view carries those spans and the copy; fromYear → toYear is only what the
  * year counter still has to move. `suggested` is the plan a plain confirm or a
  * demo skip submits: the first open activity, and the offering whenever it adds
- * years. The last grace is offered (`graceYears`) but never suggested.
+ * years. The last grace is offered (`graceYears`) but never suggested; this and
+ * advanceYears decide it on the same save, before the passage moves lifeEnd.
  */
 export function yearsPlan(content: ContentIndex, save: PlayerSave, next: ChapterId): YearsPlanView {
   const toYear = Math.max(save.year, content.chapters[next]?.years[0] ?? save.year);
@@ -340,6 +351,7 @@ export function yearsPlan(content: ContentIndex, save: PlayerSave, next: Chapter
     virtue: save.points.virtue,
     canOffer,
     suggested: { activities: Array.from({ length: tokens }, () => firstOpen), offer: canOffer > 0 },
+    suggestedName: plannedName(save, next),
   };
   if (graceAvailable(content, save, next)) plan.graceYears = GRACE_YEARS;
   return plan;
@@ -367,6 +379,10 @@ function inheritFactions(content: ContentIndex, save: PlayerSave, next: ChapterI
 export function advanceYears(content: ContentIndex, save: PlayerSave, next: ChapterId, choice: YearsChoice): ResultView["lines"] {
   const target = content.chapters[next];
   if (!target) return [line("다음 시대를 찾을 수 없다", "bad")];
+  // Decided once, on the save the plan was made from (yearsPlan's graceYears):
+  // the tokens, the 감응 and the offering below move lifeEnd, and must not take
+  // back a grace the planner offered.
+  const graceOpen = graceAvailable(content, save, next);
   const leaving = save.chapter;
   const fromYear = save.year;
   const toYear = Math.max(fromYear, target.years[0]);
@@ -399,7 +415,7 @@ export function advanceYears(content: ContentIndex, save: PlayerSave, next: Chap
     const blocked = washBlocker(save, choice.wash);
     if (blocked) lines.push(line(`신분 세탁 불가 — ${blocked}`, "bad"));
     else {
-      const name = choice.newName?.trim() || suggestName(save, `wash:${choice.wash}:${save.year}:${save.record.washes}`);
+      const name = choice.newName?.trim() || plannedName(save, next);
       lines.push(...washIdentity(content, save, choice.wash, name));
     }
   }
@@ -419,9 +435,7 @@ export function advanceYears(content: ContentIndex, save: PlayerSave, next: Chap
       : line("바칠 공덕이 모자라다", "info"));
   }
   if (choice.grace === true) {
-    lines.push(...(graceAvailable(content, save, next)
-      ? applyGrace(save)
-      : [line("노인성의 마지막 은혜는 지금 받을 수 없다", "info")]));
+    lines.push(...(graceOpen ? applyGrace(save) : [line("노인성의 마지막 은혜는 지금 받을 수 없다", "info")]));
   }
 
   // 6. Years pass one by one.

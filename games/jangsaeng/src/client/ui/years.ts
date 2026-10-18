@@ -2,8 +2,9 @@
 // (spans and heading come from the host's plan), optional identity wash with a
 // new name, the 노인성 offering, the once-in-a-run 마지막 은혜 (its own switch,
 // off unless the player turns it on) and a lifespan projection. The planner
-// starts from the plan's suggestion. Confirming sends { t: "years" }; the
-// passage then rolls the year counter when the host answers.
+// starts from the plan's suggestion and suggested name. Confirming starts the
+// year-counter roll here and hands the plan, with the roll's promise, to the
+// owner, which sends { t: "years" } and re-syncs when the roll has ended.
 import type { WashMethod } from "../../shared/content/schema.ts";
 import type { PromptView, YearsPlanView } from "../../shared/types.ts";
 import { AWAKENING_YEAR, FINAL_YEAR } from "../../shared/types.ts";
@@ -12,7 +13,7 @@ import { button, h, ratio, wait } from "./dom.ts";
 import { suggestName, validateName, WASH_GLYPH } from "./labels.ts";
 import { paperPanel } from "./panel.ts";
 
-export interface YearsSubmit {
+interface YearsSubmit {
   prompt: string;
   activities: string[];
   wash?: WashMethod;
@@ -23,26 +24,26 @@ export interface YearsSubmit {
 
 const WASH_IDS: readonly string[] = ["descendant", "fakeDeath", "monk", "merchant", "exam"];
 const isWash = (id: string): id is WashMethod => WASH_IDS.includes(id);
+/** How far the year counter moves: the panel's kicker and the roll show the same span. */
+const rollSpan = (from: number, to: number): string => `${from} → ${to}`;
 
-/** A name the host suggested in the prompt body ("새 이름: ○○"), if any. */
-function suggestedName(body: readonly string[]): string | null {
-  for (const line of body) {
-    const m = /(?:새\s*이름|추천\s*이름|이름\s*후보)\s*[:：]?\s*[‘'"“「]?([가-힣A-Za-z0-9]{2,12})/.exec(line);
-    if (m?.[1]) return m[1];
-  }
-  return null;
-}
+/**
+ * Called once per confirmed plan. `passage` is the year-counter roll the
+ * confirm has already started; it resolves when the roll has ended and the
+ * planner is gone (or holds the next years card).
+ */
+type YearsSubmitHandler = (plan: YearsSubmit, passage: Promise<void>) => void;
 
 export class YearsPlanner {
   readonly el = h("div", { class: "years-host" });
   readonly #audio: AudioEngine;
-  readonly #submit: (plan: YearsSubmit) => void;
+  readonly #submit: YearsSubmitHandler;
   readonly #reduced: () => boolean;
   #prompt: PromptView | null = null;
-  #pending: { from: number; to: number } | null = null;
   #rolling = false;
+  #passage: Promise<void> = Promise.resolve();
 
-  constructor(audio: AudioEngine, submit: (plan: YearsSubmit) => void, reduced: () => boolean) {
+  constructor(audio: AudioEngine, submit: YearsSubmitHandler, reduced: () => boolean) {
     this.#audio = audio;
     this.#submit = submit;
     this.#reduced = reduced;
@@ -65,35 +66,43 @@ export class YearsPlanner {
     this.#audio.sfx("ui_open");
   }
 
-  /** Called when the host answers the plan (next prompt/self). */
-  async playPassage(): Promise<void> {
-    const span = this.#pending;
-    if (!span || this.#rolling) return;
-    this.#pending = null;
+  /**
+   * Transitional until index.ts awaits the `passage` its submit callback
+   * receives: the roll the last confirm started (already settled when none).
+   */
+  playPassage(): Promise<void> {
+    return this.#passage;
+  }
+
+  /** Rolls the year counter over the planner; the planner is cleared after unless a new years card came. */
+  async #roll(from: number, to: number): Promise<void> {
     this.#rolling = true;
-    const num = h("span", { class: "roll-num" }, String(span.from));
+    const num = h("span", { class: "roll-num" }, String(from));
     const overlay = h("div", { class: "years-roll", "aria-live": "polite" },
       h("p", { class: "roll-k" }, "세월이 흐른다"), num,
-      h("p", { class: "roll-span" }, `${span.from} → ${span.to}`));
+      h("p", { class: "roll-span" }, rollSpan(from, to)));
     this.el.replaceChildren(overlay);
-    this.#audio.sfx("years_pass");
-    const ms = this.#reduced() ? 600 : 2100;
-    const start = performance.now();
-    await new Promise<void>((resolve) => {
-      const step = (now: number) => {
-        const t = Math.min(1, (now - start) / ms);
-        const e = 1 - Math.pow(1 - t, 3);
-        num.textContent = String(Math.round(span.from + (span.to - span.from) * e));
-        if (t < 1) requestAnimationFrame(step);
-        else resolve();
-      };
-      requestAnimationFrame(step);
-    });
-    await wait(this.#reduced() ? 200 : 650);
-    overlay.classList.add("out");
-    await wait(this.#reduced() ? 0 : 420);
-    this.#rolling = false;
-    if (!this.#prompt) this.el.replaceChildren();
+    try {
+      this.#audio.sfx("years_pass");
+      const ms = this.#reduced() ? 600 : 2100;
+      const start = performance.now();
+      await new Promise<void>((resolve) => {
+        const step = (now: number) => {
+          const t = Math.min(1, (now - start) / ms);
+          const e = 1 - Math.pow(1 - t, 3);
+          num.textContent = String(Math.round(from + (to - from) * e));
+          if (t < 1) requestAnimationFrame(step);
+          else resolve();
+        };
+        requestAnimationFrame(step);
+      });
+      await wait(this.#reduced() ? 200 : 650);
+      overlay.classList.add("out");
+      await wait(this.#reduced() ? 0 : 420);
+    } finally {
+      this.#rolling = false;
+      if (!this.#prompt) this.el.replaceChildren();
+    }
   }
 
   #build(p: PromptView, plan: YearsPlanView, variant: "m" | "f"): HTMLElement {
@@ -104,11 +113,12 @@ export class YearsPlanner {
     let offer = plan.suggested.offer && plan.canOffer > 0;
     const graceYears = plan.graceYears ?? 0;
     let grace = false;
+    // The host's suggestion is the name a wash takes when the field is left as it is.
     const nameInput = h("input", {
       class: "text-input",
       type: "text",
       maxlength: "12",
-      value: suggestedName(p.body) ?? suggestName(variant),
+      value: plan.suggestedName ?? suggestName(variant),
       "aria-label": "새 이름",
     });
     const nameHint = h("p", { class: "field-hint" }, "새 신분으로 쓸 이름 (2–12자)");
@@ -281,17 +291,18 @@ export class YearsPlanner {
         return;
       }
       const name = wash ? nameInput.value.trim() : undefined;
-      this.#pending = { from: plan.fromYear, to: plan.toYear };
       this.#prompt = null;
       confirm.disabled = true;
       this.#audio.sfx("choice");
-      this.#submit({ prompt: p.id, activities: [...chosen], wash: wash ?? undefined, name, offer, grace });
-      // Fallback if the host answers without a follow-up message.
-      window.setTimeout(() => void this.playPassage(), 1200);
+      // The roll starts here, before the plan leaves, so the host's answer finds it running.
+      this.#passage = this.#roll(plan.fromYear, plan.toYear);
+      this.#submit({ prompt: p.id, activities: [...chosen], wash: wash ?? undefined, name, offer, grace }, this.#passage);
     }, { class: "btn btn-primary btn-wide", "data-action": "years-confirm" });
 
+    // Title: the host's card title. Kicker: how far the counter moves (the roll's span).
+    // The era the tokens stand for is the plan's summary, under the next era's line.
     return paperPanel(
-      { title: `세월이 흐른다 · ${plan.fromYear} → ${plan.toYear}`, kicker: p.title || "세월 흐르기", glyph: "年", class: "years-panel", footer: h("div", { class: "yr-foot" }, summary, confirm) },
+      { title: p.title, kicker: rollSpan(plan.fromYear, plan.toYear), glyph: "年", class: "years-panel", footer: h("div", { class: "yr-foot" }, summary, confirm) },
       h("div", { class: "yr-grid" },
       h("div", { class: "yr-main" },
       p.body.length ? h("div", { class: "yr-body" }, ...p.body.map((t) => h("p", null, t))) : null,

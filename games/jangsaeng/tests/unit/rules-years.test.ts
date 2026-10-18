@@ -329,6 +329,26 @@ test("offering and the last grace (next chapter from 1776), each on its own word
   assert.equal(before.graceUsed, false, "asking early takes nothing");
 });
 
+test("the last grace is decided on the save the plan was made from: what the passage adds first never takes it back", () => {
+  // The offering alone carries lifeEnd past 1910.
+  const offered = ending("ch12");
+  offered.lifeEnd = 1907;
+  offered.points.virtue = 500;
+  const plan = yearsPlan(FIXTURE, offered, "ch13");
+  assert.deepEqual([plan.canOffer, plan.graceYears], [5, 10], "the planner offers both");
+  const lines = go(offered, "ch13", { activities: ["train"], offer: true, grace: true });
+  assert.equal(offered.graceUsed, true, "the grace the player turned on is taken");
+  assert.equal(offered.lifeEnd, 1907 + 5 + 10, "as the planner projected it");
+  assert.ok(lines.some((text) => text.startsWith("노인성의 마지막 은혜 —")), lines.join(" / "));
+
+  // Leaving ch13: 노인성 감응 (+4) and 산중 수행 (+1 a token) come before it too.
+  const resonant = ending("ch13");
+  resonant.lifeEnd = 1906;
+  assert.equal(yearsPlan(FIXTURE, resonant, "ch14").graceYears, 10);
+  go(resonant, "ch14", { activities: ["seclusion", "seclusion", "seclusion", "seclusion", "seclusion"], grace: true });
+  assert.equal(resonant.graceUsed, true);
+});
+
 test("the suggested plan into a chapter from 1776 offers virtue but never spends the last grace", () => {
   const save = ending("ch12");
   save.lifeEnd = 1850;

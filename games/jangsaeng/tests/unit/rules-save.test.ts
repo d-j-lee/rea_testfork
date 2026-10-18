@@ -268,6 +268,49 @@ test("migrateSave keeps the pending story in order and drops what the chapter do
   assert.deepEqual(migrateSave(CONTENT, raw)?.pending, [], "an older save owes nothing");
 });
 
+test("a v0.1/v0.2 save: its pending:* flags become save.pending, escapes first, and are removed", () => {
+  const save = createSave(CONTENT, { token: "t", name: "강휘", variant: "m", origin: "northeast", seed: 5, demoChapter: "ch04" });
+  const [first, second] = CONTENT.chapters.ch04.prompts.map((prompt) => prompt.id);
+  const battle = CONTENT.chapters.ch04.battles[0]?.id;
+  assert.ok(first && second && battle);
+  const raw = JSON.parse(JSON.stringify(save));
+  delete raw.pending;
+  // As those builds wrote them: one flag per owed card, in the order raised.
+  raw.flags = {
+    ...raw.flags,
+    [`pending:def:${first}`]: true,
+    [`pending:battle:${battle}`]: true,
+    "pending:escape:ch04:1398": true,
+    [`pending:def:${second}`]: true,
+    "pending:def:ch09_elsewhere": true,
+    "pending:def:answered": false,
+    "pending:card:x": true,
+    "pending:": true,
+    keep: 3,
+  };
+  const migrated = migrateSave(CONTENT, raw);
+  assert.ok(migrated);
+  assert.deepEqual(migrated.pending, [
+    { kind: "escape", id: "ch04:1398" },
+    { kind: "prompt", id: first },
+    { kind: "battle", id: battle },
+    { kind: "prompt", id: second },
+  ]);
+  assert.deepEqual(Object.keys(migrated.flags).filter((flag) => flag.startsWith("pending:")), [], "no legacy flag is left behind");
+  assert.equal(migrated.flags["keep"], 3, "other flags stay");
+  assert.deepEqual(migrateSave(CONTENT, JSON.parse(JSON.stringify(migrated))), migrated, "converted once: the result round-trips");
+});
+
+test("a v0.1/v0.2 save: the old item id 'letter' is 송상현's fan (song_fan)", () => {
+  const save = createSave(CONTENT, { token: "t", name: "강휘", variant: "m", origin: "northeast", seed: 5, demoChapter: "ch09" });
+  const raw = JSON.parse(JSON.stringify(save));
+  raw.inventory = { ...raw.inventory, letter: 1 };
+  const migrated = migrateSave(CONTENT, raw);
+  assert.equal(migrated?.inventory["song_fan"], 1);
+  assert.equal(migrated?.inventory["letter"], undefined);
+  assert.ok(evalCond(CONTENT, migrated as PlayerSave, { k: "item", item: "song_fan" }), "o_fan can be reached again");
+});
+
 test("demo presets give a sane save for every chapter", () => {
   let previousSkills = 0;
   for (const id of CHAPTER_IDS) {

@@ -1,6 +1,8 @@
 // Validates untrusted stored JSON into a PlayerSave. Core identity fields
 // must be valid (else null); every other field is type-checked, clamped to
-// its range and defaulted when missing or malformed. Never throws.
+// its range and defaulted when missing or malformed. Saves from the published
+// v0.1/v0.2 builds are converted once: their `pending:*` flags become
+// save.pending and renamed item ids take their new ids. Never throws.
 import type { ContentIndex } from "../content/index.ts";
 import type { BranchId, ChapterDef, ChapterId, FlagValue, IdentityKind, NationKey, StatKey } from "../content/schema.ts";
 import { BRANCH_IDS, CHAPTER_IDS, NATION_KEYS, POINT_KEYS, STAT_KEYS } from "../content/schema.ts";
@@ -132,6 +134,42 @@ function parsePending(value: unknown, chapter: ChapterDef): PendingStory[] {
   return out;
 }
 
+// ── One-time conversions of saves from the published v0.1/v0.2 builds ──────
+
+/** Those builds kept each owed card as a flag `pending:<kind>:<ref>`; their kinds map to PendingStory's. */
+const LEGACY_PENDING = "pending:";
+const LEGACY_PENDING_KINDS: ReadonlyMap<string, PendingStory["kind"]> = new Map([
+  ["def", "prompt"],
+  ["escape", "escape"],
+  ["battle", "battle"],
+]);
+
+/**
+ * Removes every legacy `pending:*` flag and returns what the owed ones (value
+ * true) meant, in the order they were raised: the 사사 escape cards apart,
+ * because they come before everything else. parsePending then checks them
+ * against the chapter like any entry.
+ */
+function takeLegacyPending(flags: Record<string, FlagValue>): { escapes: PendingStory[]; rest: PendingStory[] } {
+  const escapes: PendingStory[] = [];
+  const rest: PendingStory[] = [];
+  for (const key of Object.keys(flags)) {
+    if (!key.startsWith(LEGACY_PENDING)) continue;
+    const owed = flags[key] === true;
+    delete flags[key];
+    const body = key.slice(LEGACY_PENDING.length);
+    const cut = body.indexOf(":");
+    const kind = cut > 0 ? LEGACY_PENDING_KINDS.get(body.slice(0, cut)) : undefined;
+    const id = body.slice(cut + 1);
+    if (!owed || !kind || !id) continue;
+    (kind === "escape" ? escapes : rest).push({ kind, id });
+  }
+  return { escapes, rest };
+}
+
+/** Item ids those builds stored that have been renamed since. */
+const RENAMED_ITEMS: ReadonlyMap<string, string> = new Map([["letter", "song_fan"]]);
+
 function parseFlags(value: unknown): Record<string, FlagValue> {
   const out: Record<string, FlagValue> = {};
   for (const [key, entry] of safeEntries(value)) {
@@ -215,12 +253,14 @@ function parse(content: ContentIndex, raw: unknown): PlayerSave | null {
     if (typeof value === "boolean") save.branches[id as BranchId] = value;
   }
   save.flags = parseFlags(raw.flags);
+  const legacyPending = takeLegacyPending(save.flags);
   save.bonds = numberRecord(raw.bonds, 0, 100);
 
   if (raw.inventory !== undefined) {
     save.inventory = {};
-    for (const [id, count] of Object.entries(numberRecord(raw.inventory, 0, 9999))) {
-      if (content.items[id] && count > 0) save.inventory[id] = count;
+    for (const [stored, count] of Object.entries(numberRecord(raw.inventory, 0, 9999))) {
+      const id = RENAMED_ITEMS.get(stored) ?? stored;
+      if (content.items[id] && count > 0) save.inventory[id] = Math.min(9999, (save.inventory[id] ?? 0) + count);
     }
   }
   const equipment = isRecord(raw.equipment) ? raw.equipment : {};
@@ -239,7 +279,8 @@ function parse(content: ContentIndex, raw: unknown): PlayerSave | null {
   save.step = num(raw.step, 0, 0, chapterDef.steps.length);
   save.year = num(raw.year, chapterDef.years[0], 1361, 3000);
   save.objectives = numberRecord(raw.objectives, 0, BIG);
-  save.pending = parsePending(raw.pending, chapterDef);
+  const owed = Array.isArray(raw.pending) ? raw.pending : [];
+  save.pending = parsePending([...legacyPending.escapes, ...owed, ...legacyPending.rest], chapterDef);
   const demoEntry = text(raw.demoEntry, 64);
   if (save.demo && demoEntry && chapterDef.steps.some((step, index) => index > 0 && step.id === demoEntry)) save.demoEntry = demoEntry;
   save.promptsDone = stringList(raw.promptsDone, 96);
