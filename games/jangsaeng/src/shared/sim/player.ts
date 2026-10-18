@@ -305,6 +305,12 @@ function tickBow(sim: Sim, a: Actor, p: PlayerData, aim: Aim | null): void {
 
 function tickDowned(sim: Sim, a: Actor, p: PlayerData, dt: number): void {
   a.moving = false;
+  // Presses made while downed must not fire after the revive.
+  p.pendingSkill = 0;
+  p.pendingDodge = false;
+  p.pendingInteract = false;
+  p.tapAttack = false;
+  p.tapShot = false;
   if (sim.time >= p.downEnd) return;
   let helper: Actor | null = null;
   let best: number = C.REVIVE_RANGE;

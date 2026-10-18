@@ -1,6 +1,7 @@
 // Projectiles (arrows, fire rockets), hitscan lines (muskets, rifles),
 // scheduled area strikes (bombs, barrages, cannon, fire zones) and lingering
 // hazards. Every hit goes through combat.hit so the formula has one owner.
+import { TILE_INFO, type TileId } from "../map/tiles.ts";
 import { isBlocked } from "./physics.ts";
 import { hit, sourceOf } from "./combat.ts";
 import {
@@ -100,8 +101,17 @@ export function fireProjectile(sim: Sim, src: HitSource, x: number, y: number, d
   emit(sim, { k: "arrow", x, y, tx: end.x, ty: end.y, angle: Math.atan2(uy, ux), color: p.kind === "rocket" ? COLOR.burn : undefined });
 }
 
+function waterAt(sim: Sim, x: number, y: number): boolean {
+  const g = sim.grid;
+  const tx = Math.floor(x);
+  const ty = Math.floor(y);
+  if (tx < 0 || ty < 0 || tx >= g.width || ty >= g.height) return false;
+  return TILE_INFO[g.tiles[ty * g.width + tx] as TileId]?.water ?? false;
+}
+
 function endProjectile(sim: Sim, p: Projectile): void {
-  if (p.kind === "rocket") {
+  if (waterAt(sim, p.x, p.y)) emit(sim, { k: "splash", x: p.x, y: p.y });
+  else if (p.kind === "rocket") {
     emit(sim, { k: "fire", x: p.x, y: p.y });
     if (p.blast > 0) blast(sim, p.src, p.x, p.y, p.blast, p.coef * 0.5, false);
   } else emit(sim, { k: "dust", x: p.x, y: p.y });

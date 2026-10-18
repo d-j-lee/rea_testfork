@@ -147,3 +147,31 @@ test("poise breaks stun enemies, who then take 30% more damage", () => {
   });
   assert.ok(texts.includes("경직"), "the bear's balance broke");
 });
+
+test("shield bearers take −70% from the front; their flank is open", () => {
+  const { world } = makeWorld("shield");
+  const c = arena();
+  const p = spec(c.x, c.y, { derived: { ...DERIVED, critChance: 0, maxHp: 100_000 } });
+  world.addPlayer(p);
+  const shield = world.spawnEnemy("rebel_shield", c.x + 1.2, c.y, 1);
+  assert.ok(shield !== null);
+  run(world, 1.5);
+  const swing = (ax: number): number => {
+    world.drainFx();
+    world.setInput(p.id, input({ attack: true, ax, ay: 0 }));
+    world.tick(DT);
+    world.setInput(p.id, input({ ax, ay: 0 }));
+    let dealt = 0;
+    run(world, 0.2, () => {
+      for (const f of world.drainFx()) if (f.k === "text" && f.color === "#ffffff" && /^\d+$/.test(f.text ?? "")) dealt += Number(f.text);
+    });
+    run(world, 0.4);
+    return dealt;
+  };
+  const front = swing(1);
+  const e = world.inspect(shield);
+  assert.ok(e);
+  world.teleport(p.id, e.x + 1.1, e.y);
+  const back = swing(-1);
+  assert.ok(front > 0 && back > front * 2.5, `front ${front}, back ${back}`);
+});

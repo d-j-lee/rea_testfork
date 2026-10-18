@@ -146,6 +146,12 @@ export function createUi(deps: UiDeps): Ui {
     }
     if (!inGame || ending || card || title || loading) return;
     if (prompt.open || years.open) return;
+    if (hud.drawer && (cmd === "menu" || cmd === "chat")) {
+      if (cmd === "menu" || hud.drawer !== "chat") hud.closeDrawer();
+      if (cmd === "chat") hud.chat.open();
+      return;
+    }
+    if (hud.drawer) hud.closeDrawer();
     if (cmd === "chat") {
       if (!menu.open) hud.chat.open();
       return;
@@ -171,8 +177,20 @@ export function createUi(deps: UiDeps): Ui {
       command(cmd);
     },
     onTyping: () => sync(),
-    compactChat: window.matchMedia("(max-width: 640px)").matches,
+    onDrawer: () => sync(),
+    openMenu: () => {
+      audio.sfx("ui_click");
+      if (!prompt.open && !years.open) menu.showLast();
+    },
+    compactChat: false,
   });
+  const compactQuery = window.matchMedia("(max-width: 640px), (max-height: 500px)");
+  const applyLayout = () => {
+    document.documentElement.dataset.layout = compactQuery.matches ? "compact" : "full";
+    if (!compactQuery.matches) hud.closeDrawer();
+  };
+  compactQuery.addEventListener?.("change", applyLayout);
+  applyLayout();
   root.replaceChildren(
     h("div", { class: "layer layer-hud" }, hud.el),
     h("div", { class: "layer layer-downed" }, hud.downedEl),
@@ -184,13 +202,13 @@ export function createUi(deps: UiDeps): Ui {
   modals.append(menu.el, prompt.el, years.el);
 
   const isBlocking = () =>
-    !inGame || ending || !!title || !!loading || !!card || prompt.open || years.open || menu.open || hud.chat.typing || !!errorEl;
+    !inGame || ending || !!title || !!loading || !!card || prompt.open || years.open || menu.open || hud.chat.typing || !!hud.drawer || !!errorEl;
 
   let lastBlocking: boolean | null = null;
   const sync = () => {
     const blocking = isBlocking();
     root.classList.toggle("in-game", inGame && !ending);
-    root.classList.toggle("modal-open", prompt.open || years.open || menu.open || !!card || ending);
+    root.classList.toggle("modal-open", prompt.open || years.open || menu.open || !!card || ending || !!hud.drawer);
     root.classList.toggle("card-open", !!card);
     if (blocking !== lastBlocking) {
       lastBlocking = blocking;
@@ -222,6 +240,7 @@ export function createUi(deps: UiDeps): Ui {
       prompt.show(p);
     }
     if (menu.open) menu.close();
+    hud.closeDrawer();
     if (hud.chat.typing) hud.chat.close();
     sync();
   };
@@ -280,8 +299,8 @@ export function createUi(deps: UiDeps): Ui {
       switch (msg.t) {
         case "welcome":
           offline = msg.mode === "offline";
-          hud.map.setMode(offline ? "오프라인 · ◇ 시뮬 동료" : "온라인");
-          if (msg.motd) hud.chat.add("", msg.motd, "system");
+          hud.setMode(offline ? "오프라인 · ◇ 시뮬 동료" : "온라인", offline ? "◇ 오프라인" : "온라인");
+          if (msg.motd) hud.addChat("", msg.motd, "system");
           if (msg.resumed) toasts.show("지난 기록에서 이어갑니다", "info");
           break;
         case "enter":
@@ -290,6 +309,7 @@ export function createUi(deps: UiDeps): Ui {
           break;
         case "self":
           hud.update(msg.self, offline);
+          root.classList.toggle("battle-on", !!msg.self.battle);
           void years.playPassage();
           menu.refresh();
           break;
@@ -304,7 +324,7 @@ export function createUi(deps: UiDeps): Ui {
           sync();
           break;
         case "chat":
-          hud.chat.add(msg.from, msg.text, msg.kind);
+          hud.addChat(msg.from, msg.text, msg.kind);
           break;
         case "toast":
           toasts.show(msg.text, msg.tone);

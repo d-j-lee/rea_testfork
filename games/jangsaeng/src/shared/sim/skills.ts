@@ -171,7 +171,7 @@ export function useSkill(sim: Sim, a: Actor, slot: number, aim: Aim | null): voi
         const launch = t + i * 0.07;
         const land = launch + Math.max(0.2, Math.hypot(rx - a.x, ry - a.y) / 15);
         delayFx(sim, launch, { k: "arrow", x: a.x, y: a.y, tx: rx, ty: ry, color: COLOR.burn });
-        schedule(sim, { at: land, src, x: rx, y: ry, r: 0.9, coef: def.coef, fx: "rocket", burn: 2 });
+        schedule(sim, { at: land, src, x: rx, y: ry, r: 0.9, coef: def.coef, fx: "rocket", burn: 2, heavy: true });
       }
       emit(sim, { k: "smoke", x: a.x, y: a.y, power: 2 });
       playAnim(sim, a, "cast", t + 0.6);
@@ -205,8 +205,8 @@ export function useSkill(sim: Sim, a: Actor, slot: number, aim: Aim | null): voi
       const range = def.range ?? 14;
       const d = aimDir(sim, a, aim, range);
       face(a, d.x, d.y);
-      hitscan(sim, src, a.x, a.y, d.x, d.y, range, { coef: def.coef, width: 0.35, pierce: true, heavy: false, dkind: "skill" });
-      feel(sim, a.id, a.x, a.y, 0, 1);
+      hitscan(sim, src, a.x, a.y, d.x, d.y, range, { coef: def.coef, width: 0.35, pierce: true, heavy: true, dkind: "skill" });
+      feel(sim, a.id, a.x, a.y, 0, 2);
       playAnim(sim, a, "shoot", t + 0.2);
       return;
     }

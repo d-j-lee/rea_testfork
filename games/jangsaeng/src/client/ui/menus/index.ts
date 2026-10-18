@@ -59,6 +59,7 @@ export class MenuBook {
   readonly el = h("div", { class: "menu-host" });
   readonly #deps: MenuDeps;
   #tab: MenuTab | null = null;
+  #last: MenuTab = "character";
   #body: HTMLElement | null = null;
   #tabs: HTMLElement | null = null;
 
@@ -80,9 +81,16 @@ export class MenuBook {
     else this.show(tab);
   }
 
+  /** Opens the book on the last tab used (compact ≡ button). */
+  showLast(): void {
+    if (this.#tab) this.close();
+    else this.show(this.#last);
+  }
+
   show(tab: MenuTab): void {
     const wasOpen = this.#tab !== null;
     this.#tab = tab;
+    this.#last = tab;
     if (!wasOpen) {
       this.#deps.audio.sfx("ui_open");
       this.#build();

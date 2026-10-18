@@ -10,19 +10,13 @@ import {
   type CharacterSprite,
   type PropSprite,
 } from "../../shared/sprites.ts";
-import type { ChapterView, SelfView, Team } from "../../shared/types.ts";
+import type { ChapterView, SelfView } from "../../shared/types.ts";
 import { characterHeight, drawCharacter, type DrawCharacterOptions } from "../render/characters.ts";
 import { EffectSystem } from "../render/effects.ts";
 import { drawAtmosphere, type AtmosphereOptions } from "../render/lighting.ts";
-import {
-  drawEmote,
-  drawHpBar,
-  drawNamePlate,
-  drawSelectionRing,
-  type NamePlateOptions,
-} from "../render/overlays.ts";
+import { drawSelectionRing } from "../render/overlays.ts";
 import { TEAM_COLORS } from "../render/palette.ts";
-import { drawProp, propHeight } from "../render/props.ts";
+import { drawProp } from "../render/props.ts";
 import type { Drawable } from "../render/types.ts";
 import { applyCamera, worldViewOf, WorldRenderer } from "../render/world.ts";
 import type { CameraRig } from "./camera.ts";
@@ -35,6 +29,7 @@ import {
   drawObjectiveMarker,
   objectiveVisible,
 } from "./markers.ts";
+import { PlateLayer, type PlateSubject } from "./plates.ts";
 import type { EntityStore, EntityTrack } from "./snapshots.ts";
 
 const DISSOLVE_MS = 450;
@@ -59,7 +54,7 @@ export interface SceneFrame {
   unit: number;
 }
 
-class EntityView implements Drawable {
+class EntityView implements Drawable, PlateSubject {
   sortY = 0;
   readonly track: EntityTrack;
   #spriteOf = "";
@@ -121,8 +116,6 @@ class EntityView implements Drawable {
   }
 }
 
-const teamColor = (tm: Team): string => TEAM_COLORS[tm] ?? TEAM_COLORS.npc;
-
 export class Scene {
   readonly world: WorldRenderer;
   readonly effects = new EffectSystem();
@@ -132,8 +125,7 @@ export class Scene {
   readonly #views = new Map<number, EntityView>();
   readonly #drawables: Drawable[] = [];
   readonly #visible: EntityView[] = [];
-  /** Reused plate options; `pixelRatio` sizes plate text for the display. */
-  readonly #plate: NamePlateOptions = { color: TEAM_COLORS.npc };
+  readonly #plates = new PlateLayer();
   readonly #atmosphere: AtmosphereOptions = { hour: 12, weather: "clear", timeMs: 0, pixelScale: 1 };
   #byDepth = (a: Drawable, b: Drawable) => a.sortY - b.sortY;
 
@@ -196,7 +188,8 @@ export class Scene {
     for (const v of this.#visible) if (v.track.down && v.character) drawDownedRing(ctx, v.wx, v.wy, f.now, f.unit);
     this.effects.update(f.visualDt);
     this.effects.draw(ctx, t);
-    this.#drawPlates(ctx, f, t);
+    const self = f.store.self;
+    this.#plates.draw(ctx, this.#visible, f.store.selfId, self ?? null, cam.scale, f.unit, t);
     this.seals.update(f.visualDt);
     this.seals.draw(ctx);
     const objectives = f.self?.objectives;
@@ -275,53 +268,6 @@ export class Scene {
       for (const [id, v] of this.#views) if (f.store.tracks.get(id) !== v.track) this.#views.delete(id);
   }
 
-  #drawPlates(ctx: CanvasRenderingContext2D, f: SceneFrame, t: number): void {
-    const s = f.rig.camera.scale;
-    // Plate text scale as overlays picks it from `pixelRatio`.
-    const mult = Math.max(1, Math.round(f.unit));
-    const selfId = f.store.selfId;
-    for (const v of this.#visible) {
-      const track = v.track;
-      const snap = track.snap;
-      if (v.dissolve > 0.15 || v.alpha < 0.5) continue;
-      if (v.prop) {
-        if (track.mk) drawEmote(ctx, track.mk, v.wx, v.wy - propHeight(v.prop) - 2, t);
-        continue;
-      }
-      if (!v.character) continue;
-      const lying = v.lying;
-      const tm = snap.tm;
-      const isSelf = track.id === selfId;
-      const boss = tm === "boss";
-      let y = v.wy - (lying ? 10 : characterHeight(v.character)) - 1;
-      v.top = y;
-      if (track.down) y -= 18 / s; // above the 사경 label
-      const hp = Math.max(0, Math.min(100, track.hp));
-      const showHp = !isSelf && !lying && (boss || tm === "enemy" || hp < 100);
-      if (showHp) {
-        drawHpBar(ctx, v.wx, y - 3, hp / 100, { width: boss ? 26 : 14, color: boss ? "#e0503a" : undefined });
-        y -= 5;
-      }
-      if (snap.n) {
-        const small = !boss && tm !== "self" && tm !== "player";
-        const title = snap.title ?? (snap.hist ? "역사 인물" : undefined);
-        const o = this.#plate;
-        o.color = teamColor(tm);
-        o.title = title;
-        o.level = snap.lvl;
-        o.small = small;
-        o.pixelRatio = f.unit;
-        drawNamePlate(ctx, snap.n, v.wx, y, o);
-        y -= (((small ? 11 : 12) + 6 + (title ? 13 : 0)) * mult) / s;
-      }
-      if (track.mk) {
-        drawEmote(ctx, track.mk, v.wx, y - 1, t);
-        y -= 14;
-      }
-      v.top = y;
-    }
-  }
-
   /** Overlay top of the visible character standing on a tile point, if any. */
   #anchorTop(x: number, y: number): number | null {
     let best: EntityView | null = null;
@@ -337,12 +283,5 @@ export class Scene {
       }
     }
     return best ? best.top : null;
-  }
-
-  /** Canvas position of an entity (for the player-screen contract). */
-  screenOf(id: number, rig: CameraRig): { x: number; y: number } | null {
-    const v = this.#views.get(id);
-    if (!v) return null;
-    return { x: rig.screenX(v.wx), y: rig.screenY(v.wy - 12) };
   }
 }

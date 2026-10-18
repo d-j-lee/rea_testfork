@@ -249,7 +249,7 @@ function engage(sim: Sim, a: Actor, e: EnemyData, dt: number): void {
 function melee(sim: Sim, a: Actor, e: EnemyData, tgt: Actor, d: number, speed: number, dt: number, ready: boolean): void {
   const t = sim.time;
   const b = e.def.behavior;
-  if (b === "shield") turnToward(a, tgt.x, tgt.y, 5 * dt);
+  if (b === "shield") turnToward(a, tgt.x, tgt.y, 2.5 * dt);
   else face(a, tgt.x - a.x, tgt.y - a.y);
   if (e.token === 0) {
     // No token: circle to a flanking spot around the target.

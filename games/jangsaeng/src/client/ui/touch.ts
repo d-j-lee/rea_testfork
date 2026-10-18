@@ -49,7 +49,7 @@ export class TouchControls {
   #stickId: number | null = null;
   #origin = { x: 0, y: 0 };
 
-  constructor(input: Input, skills: SkillState, onMenu: () => void, onItem: () => void) {
+  constructor(input: Input, skills: SkillState, onItem: () => void) {
     this.#input = input;
     const zone = h("div", { class: "stick-zone", "aria-hidden": "true" }, this.#base);
     zone.addEventListener("pointerdown", (e) => this.#stickDown(e, zone));
@@ -84,13 +84,11 @@ export class TouchControls {
       onItem();
     });
     skills.registerItem(item, itemGlyph, itemCount);
-    const menu = h("button", { type: "button", class: "tc-menu", "aria-label": "메뉴", onclick: onMenu }, "≡");
     this.el = h(
       "div",
       { class: "touch-layer" },
       zone,
       h("div", { class: "tc-cluster" }, attack, shoot, dodge, interact, ...slots, item),
-      menu,
     );
   }
 

@@ -56,7 +56,8 @@ type Queued =
   | { type: "notice"; id: string; title: string; body: string[]; onDone?: () => void }
   | { type: "result"; id: string; title: string; lines: ResultView["lines"]; onDone?: () => void }
   | { type: "years"; id: string; next: ChapterId }
-  | { type: "escape"; id: string };
+  | { type: "escape"; id: string }
+  | { type: "inquiry"; id: string };
 
 type Active = Queued & { view: PromptView };
 
@@ -147,6 +148,7 @@ export class Session {
         this.save.chronicle.push({ year: this.save.year, text: "유배지에서 새 시대를 맞았다.", tone: "bad" });
         this.save.exile = undefined;
       }
+      if (this.save.flags.inquiry) this.#enqueue({ type: "inquiry", id: serial("inquiry") });
       this.#enterStep(0, true);
     } else {
       this.#resumeStep();
@@ -401,8 +403,13 @@ export class Session {
     for (const objective of this.#visibleObjectives()) this.#checkCollect(objective);
   }
 
-  onBattleEnd(battle: BattleDef, result: "victory" | "defeat"): void {
+  /** `others`: other participants (humans or ◇ companions) in the battle. */
+  onBattleEnd(battle: BattleDef, result: "victory" | "defeat", others = 0): void {
     const won = result === "victory";
+    if (won && others > 0 && !this.save.flags.vouch) {
+      this.save.flags.vouch = true;
+      this.send({ t: "toast", text: "함께 싸운 이들이 새 신분을 보증해 줄 것이다 (동료 보증)", tone: "info" });
+    }
     const first = won && !this.save.battlesWon.includes(battle.id);
     // Victory rewards are granted once per battle; defeats always apply.
     if (!won || first) {
@@ -509,6 +516,27 @@ export class Session {
           data: plan,
         };
       }
+      case "inquiry":
+        return {
+          id: item.id,
+          kind: "identity",
+          title: "사헌부의 조사",
+          body: [
+            "\"저 어른은 이십 년째 얼굴이 그대로라 합니다.\" 수군거림이 사헌부까지 닿았다.",
+            "아전이 호적을 들고 찾아왔다. 어떻게 넘길 것인가.",
+          ],
+          options: [
+            { id: "talk", text: "능청스럽게 말로 넘긴다", hint: `처세 판정 (${Math.min(95, 30 + 2 * this.save.stats.tact)}%) · 성공 의심도 −20, 실패 +10` },
+            {
+              id: "bribe",
+              text: "아전에게 300전을 쥐여 준다",
+              hint: "의심도 −20",
+              ...(this.save.points.money < 300 ? { disabled: "전이 모자란다" } : {}),
+            },
+            { id: "wash", text: "고향으로 내려가 후손 행세를 한다", hint: "즉시 신분 세탁" },
+          ],
+          year: this.save.year,
+        };
       case "escape":
         return {
           id: item.id,
@@ -557,6 +585,9 @@ export class Session {
         case "escape":
           this.#resolveEscape(optionId);
           break;
+        case "inquiry":
+          this.#resolveInquiry(optionId);
+          break;
       }
     } finally {
       this.#hold--;
@@ -590,10 +621,14 @@ export class Session {
         base: flee ? 40 : 25,
         per: 1.5,
         success: flee
-          ? [{ k: "wash", method: "fakeDeath" }, { k: "chronicle", text: "사약을 피해 전사로 위장하고 새 이름을 얻었다." }]
+          ? [
+              { k: "flag", flag: "escaped" },
+              { k: "wash", method: "fakeDeath" },
+              { k: "chronicle", text: "사약을 피해 전사로 위장하고 새 이름을 얻었다." },
+            ]
           : [{ k: "rank", add: -2 }, { k: "chronicle", text: "결백을 끝내 인정받아 목숨을 건졌다." }],
         failure: [
-          { k: "life", add: -5 },
+          { k: "life", add: -3 },
           { k: "exile", site: "jeju" },
           { k: "chronicle", text: "옥고 끝에 제주로 유배되었다." },
         ],
@@ -601,6 +636,30 @@ export class Session {
     ];
     const outcome = this.#apply(effects, true);
     this.#enqueue({ type: "result", id: serial("result"), title: "사사의 밤", lines: outcome.lines }, true);
+  }
+
+  #resolveInquiry(optionId: string): void {
+    const effects: Effect[] =
+      optionId === "bribe"
+        ? [{ k: "point", point: "money", add: -300 }, { k: "suspicion", add: -20 }]
+        : optionId === "wash"
+          ? [{ k: "wash", method: "descendant" }]
+          : [
+              {
+                k: "check",
+                id: `inquiry:${this.save.chapter}:${this.save.identities.length}`,
+                label: "사헌부 조사",
+                stat: "tact",
+                base: 30,
+                per: 2,
+                success: [{ k: "suspicion", add: -20 }],
+                failure: [{ k: "suspicion", add: 10 }],
+              },
+            ];
+    this.save.flags.inquiry = false;
+    const outcome = this.#apply(effects, true);
+    if (outcome.lines.length)
+      this.#enqueue({ type: "result", id: serial("result"), title: "사헌부의 조사", lines: outcome.lines }, true);
   }
 
   #years(message: Extract<ClientMsg, { t: "years" }>, fallback?: Active): void {

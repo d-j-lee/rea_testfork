@@ -186,7 +186,11 @@ export class Channel {
       const status = this.world.playerStatus(session.id);
       const near =
         centre && status ? Math.hypot(centre.x - status.x, centre.y - status.y) <= def.radius + 12 : false;
-      if (participants?.includes(session.id) || near || !participants) session.onBattleEnd(def, result);
+      const others = participants
+        ? participants.filter((id) => id !== session.id).length
+        : this.bots.size + this.sessions.size - 1;
+      if (participants?.includes(session.id) || near || !participants)
+        session.onBattleEnd(def, result, others);
     }
     if (result === "victory") {
       this.addWorldEvent(def.great ? 3 : 1);

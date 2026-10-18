@@ -14,6 +14,7 @@ import {
   sound,
   targetable,
   telegraph,
+  turnToward,
   type Actor,
   type EnemyAction,
   type Sim,
@@ -30,7 +31,12 @@ function begin(sim: Sim, a: Actor, act: EnemyAction, anim: "attack" | "shoot" | 
   playAnim(sim, a, anim, act.end);
 }
 
+/** Faces the target; shield bearers and guarding bosses only turn a little so flanks stay open. */
 function aimAt(a: Actor, tgt: Actor): { x: number; y: number } {
+  if (a.en?.boss?.guard || a.en?.def.behavior === "shield") {
+    turnToward(a, tgt.x, tgt.y, 0.5);
+    return { x: a.fx, y: a.fy };
+  }
   const dx = tgt.x - a.x;
   const dy = tgt.y - a.y;
   const l = Math.hypot(dx, dy) || 1;
