@@ -11,7 +11,7 @@
 //   nation       nation meters, infiltration, carry-over, ending
 //   save/migrate new characters, demo presets, untrusted-save parsing
 export type { CreateOptions } from "./save.ts";
-export { createSave, skillsUnlockedBy } from "./save.ts";
+export { createSave, REFORM_DRIFT, skillsUnlockedBy } from "./save.ts";
 export { migrateSave } from "./migrate.ts";
 
 export type { Derived } from "./progression.ts";
@@ -78,6 +78,7 @@ export {
   computeEnding,
   finalInfiltration,
   INFILTRATION_WEIGHTS,
+  longFlagSum,
   nationValue,
   setBranch,
   setLongFlag,

@@ -6,7 +6,7 @@ import { ENEMIES } from "../../src/shared/content/enemies.ts";
 import type { ChapterDef } from "../../src/shared/content/schema.ts";
 import { Tile } from "../../src/shared/map/tiles.ts";
 import type { FxEvent } from "../../src/shared/types.ts";
-import { CHAPTER, DERIVED, arena, fightNearest, input, makeWorld, map, run, siteCentre, spec } from "./world-fixture.ts";
+import { BOSS, CHAPTER, DERIVED, arena, fightNearest, input, makeWorld, map, run, siteCentre, spec } from "./world-fixture.ts";
 
 const STRONG = { ...DERIVED, weaponAtk: 120, maxHp: 5000 };
 
@@ -230,6 +230,33 @@ test("deck battles board from the hull edges", () => {
 function withBattles(battles: ChapterDef["battles"]): ChapterDef {
   return { ...CHAPTER, npcs: [], spawns: [], battles };
 }
+
+test("wave battles with a boss bring it with the last wave", () => {
+  const waves = [
+    { enemies: [{ enemy: "bandit", count: 2, level: 1 }], from: "east" as const },
+    { enemies: [{ enemy: "bandit", count: 1, level: 1 }], from: "east" as const, line: "적장이 나섰다!" },
+  ];
+  const chapter = withBattles([{
+    id: "commander", title: "적장", site: "hwangsan", offset: [4, 0], radius: 9, kind: "waves",
+    waves, boss: BOSS, victory: [], defeat: [],
+  }]);
+  const { world, log } = makeWorld("commander", chapter);
+  const c = arena();
+  const p = spec(c.x - 2, c.y, { derived: STRONG });
+  world.addPlayer(p);
+  assert.ok(world.startBattle("commander", p.id));
+  run(world, 0.1);
+  assert.equal(world.battleView()?.boss, undefined, "no boss with the first wave");
+  let bossSeen = false;
+  for (let i = 0; i < 2400 && log.battles.length === 0; i++) {
+    fightNearest(world, p.id);
+    world.tick(0.05);
+    if (world.battleView()?.boss?.name === BOSS.name) bossSeen = true;
+  }
+  assert.ok(bossSeen, "the boss bar appears with the last wave");
+  assert.deepEqual(log.battles.map((b) => b.result), ["victory"]);
+  assert.equal(log.kills.filter((k) => k.boss).length, 1, "the boss had to fall (or rout) for victory");
+});
 
 test("morale: 40% of each wave falling routs the rest, which counts as cleared", () => {
   const wave = { at: 0, enemies: [{ enemy: "bandit", count: 2, level: 1 }], from: "east" as const };

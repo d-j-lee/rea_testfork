@@ -353,7 +353,7 @@ export function battleResult(content: ContentIndex, save: PlayerSave, battle: Ba
     if (first && battle.great) {
       changeLife(save, 2);
       save.flags["renowned"] = true;
-      out.lines.push(line(`대첩 — ${battle.title}`, "epic"), lifeLine(2));
+      out.lines.push(line(`대전 — ${battle.title}`, "epic"), lifeLine(2));
       chronicle(save, `${battle.title}에서 이기다.`, "epic");
     }
   }

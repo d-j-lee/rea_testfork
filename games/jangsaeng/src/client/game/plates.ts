@@ -1,8 +1,9 @@
 // Overhead overlays with declutter: HP bars, name plates and emotes. Plates
 // are placed by priority (self, players, bosses, story NPCs, allies, NPCs,
 // enemies); a plate that would overlap one already placed is nudged up (at
-// most twice), and enemy plates that still collide are dropped (their HP
-// bars stay). Enemy plates also hide when far away or in a crowd.
+// most twice), and ally, NPC and enemy plates that still collide are dropped
+// (their HP bars stay). Enemy plates also hide when far away or in a crowd;
+// companion titles hide when the party is large.
 
 import type { CharacterSprite, PropSprite } from "../../shared/sprites.ts";
 import type { Team } from "../../shared/types.ts";
@@ -36,6 +37,8 @@ export interface PlateSubject {
 const ENEMY_PLATE_TILES = 10;
 /** …or when more living enemies than this are on screen. */
 const ENEMY_CROWD = 8;
+/** Companion titles show only while at most this many allies are on screen. */
+const ALLY_TITLES_MAX = 3;
 const MAX_NUDGES = 2;
 const HP_BOSS = { width: 26, color: "#e0503a" } as const;
 const HP_NORMAL = { width: 14 } as const;
@@ -101,9 +104,14 @@ export class PlateLayer {
   ): void {
     const mult = Math.max(1, Math.round(unit));
     let enemies = 0;
-    for (const v of views)
-      if (v.character && !v.lying && v.track.snap.tm === "enemy" && v.dissolve < 0) enemies++;
+    let allies = 0;
+    for (const v of views) {
+      if (!v.character || v.lying || v.dissolve >= 0) continue;
+      if (v.track.snap.tm === "enemy") enemies++;
+      else if (v.track.snap.tm === "ally") allies++;
+    }
     const crowded = enemies > ENEMY_CROWD;
+    const allyTitles = allies <= ALLY_TITLES_MAX;
     const order = this.#order;
     order.length = 0;
     let n = 0;
@@ -139,7 +147,7 @@ export class PlateLayer {
       s.plate = !!snap.n && !(tm === "enemy" && (crowded || s.dist > ENEMY_PLATE_TILES));
       if (s.plate) {
         s.name = snap.n ?? "";
-        s.title = snap.title ?? (snap.hist ? "역사 인물" : undefined);
+        s.title = tm === "ally" && !allyTitles ? undefined : (snap.title ?? (snap.hist ? "역사 인물" : undefined));
         s.small = !boss && tm !== "self" && tm !== "player";
         const size = plateSize(s, snap.lvl, mult);
         const w = size.w / scale;
@@ -160,7 +168,7 @@ export class PlateLayer {
         const hit = this.#overlap(s, i);
         if (!hit) break;
         if (nudge >= MAX_NUDGES) {
-          if (s.prio >= PRIORITY.enemy) s.plate = false;
+          if (s.prio >= PRIORITY.ally) s.plate = false;
           break;
         }
         const dy = s.y1 - hit.y0 + 0.5;

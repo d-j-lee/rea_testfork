@@ -161,3 +161,40 @@ test("the full 500-year arc reaches an ending", () => {
   assert.ok(save?.ending);
   assert.ok(save.year >= 1896, `final year ${save.year}`);
 });
+
+test("a choice's result card keeps the year the choice was made", () => {
+  const { connect, advance } = setup();
+  const client = connect();
+  hello(client, { demo: "ch15" });
+  advance(500);
+  autoplay(client, advance, 400);
+  // Results follow the card they resolve, even when the choice moved the story on.
+  const prompts = client.messages.flatMap((message) => (message.t === "prompt" && message.prompt ? [message.prompt] : []));
+  let checked = 0;
+  prompts.forEach((prompt, index) => {
+    const before = prompts[index - 1];
+    if (prompt.kind !== "result" || !before || before.title !== prompt.title) return;
+    assert.equal(prompt.year, before.year, `${prompt.title}: result year`);
+    checked++;
+  });
+  assert.ok(checked > 5, `checked ${checked} result cards`);
+});
+
+test("the demo path decides where CH16 can lead", () => {
+  const endings: Record<string, string> = {};
+  for (const demoPath of ["history", "reform"] as const) {
+    const { connect, advance } = setup();
+    const client = connect();
+    let nation = "";
+    const receive = client.receive.bind(client);
+    client.receive = (message) => {
+      if (message.t === "ending") nation = message.ending.nation.id;
+      receive(message);
+    };
+    hello(client, { demo: "ch16", demoPath });
+    advance(500);
+    autoplay(client, advance, 400);
+    endings[demoPath] = nation;
+  }
+  assert.deepEqual(endings, { history: "N3", reform: "N1" });
+});

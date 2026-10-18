@@ -197,8 +197,20 @@ export const ch10: ChapterDef = {
         { from: "sea", enemies: [{ enemy: "japanese_musket", count: 4, level: 31 }, { enemy: "japanese_marine", count: 2, level: 31 }], line: "조총 연기가 해협을 덮는다. 뒤쪽 배들이 머뭇거린다." },
         { from: "sea", enemies: [{ enemy: "japanese_marine", count: 6, level: 32 }], line: "통제사가 초요기를 올렸다. 안위의 배가 앞으로 나온다!" },
         { from: "sea", enemies: [{ enemy: "japanese_marine", count: 4, level: 32 }, { enemy: "japanese_musket", count: 3, level: 32 }], line: "물이 돈다! 조류가 몸을 뒤집었다 — 적선끼리 부딪힌다!" },
-        { from: "sea", enemies: [{ enemy: "boss_japanese_general", count: 1, level: 32 }, { enemy: "japanese_marine", count: 2, level: 32 }], line: "적 선봉선의 장수가 대장선에 뛰어오른다!" },
+        { from: "sea", enemies: [{ enemy: "japanese_marine", count: 2, level: 32 }], line: "적 선봉선의 장수가 대장선에 뛰어오른다!" },
       ],
+      boss: {
+        enemy: "boss_japanese_general",
+        name: "왜 수군 선봉장",
+        title: "(가상)",
+        level: 32,
+        hpScale: 1.2,
+        phases: [
+          { at: 1, mechanic: "charge", line: "대장선을 빼앗아라!" },
+          { at: 0.55, mechanic: "summon", summon: { enemy: "japanese_marine", count: 2 }, line: "갈고리를 더 걸어라!" },
+          { at: 0.25, mechanic: "frenzy", line: "물러설 배가 없다!" },
+        ],
+      },
       allies: [
         { sprite: "navy_joseon", name: "대장선 격군", count: 6 },
         { sprite: "archer_joseon", name: "사부", count: 4 },
@@ -390,7 +402,7 @@ export const ch10: ChapterDef = {
         {
           id: "board",
           text: "격군들 곁에서 방패를 들겠습니다.",
-          hint: "명예 ▲ · 대첩 시작",
+          hint: "명예 ▲ · 대전 시작",
           effects: [
             { k: "point", point: "honor", add: 8 },
             { k: "toast", text: "안위의 배가 앞으로 나간다. 지휘는 대장선의 깃발이 한다.", tone: "info" },

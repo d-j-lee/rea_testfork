@@ -235,7 +235,7 @@ test("nested if/check effects apply in order and merge their outcomes", () => {
   assert.deepEqual(out.objectives, ["else_branch"]);
 });
 
-test("battleResult records wins and grants +2 years once for a 대첩", () => {
+test("battleResult records wins and grants +2 years once for a 대전", () => {
   const save = newSave();
   const first = battleResult(FIXTURE, save, HWANGSAN, true);
   assert.equal(save.lifeEnd, 1863);

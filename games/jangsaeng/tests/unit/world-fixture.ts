@@ -34,7 +34,7 @@ export const DERIVED: Derived = {
   downSeconds: 10.5,
 };
 
-const BOSS = {
+export const BOSS = {
   enemy: "boss_wokou_captain",
   name: "아지발도",
   title: "왜구 소년 장수",

@@ -9,6 +9,7 @@ import {
   type WashMethod,
 } from "../content/schema.ts";
 import type { ClientMsg, PlayerAction } from "../protocol.ts";
+import { DEMO_PATHS } from "../types.ts";
 
 const ORIGIN_IDS: readonly OriginId[] = ["northeast", "kaesong", "southcoast"];
 const WASH_METHODS: readonly WashMethod[] = ["descendant", "fakeDeath", "monk", "merchant", "exam"];
@@ -94,6 +95,8 @@ export function parseClientMsg(raw: unknown): ClientMsg | null {
       if (typeof raw.token === "string" && TOKEN.test(raw.token)) message.token = raw.token;
       if ((CHAPTER_IDS as readonly string[]).includes(String(raw.demo)))
         message.demo = raw.demo as ChapterId;
+      const demoPath = DEMO_PATHS.find((candidate) => candidate === raw.demoPath);
+      if (message.demo && demoPath) message.demoPath = demoPath;
       return message;
     }
     case "input": {

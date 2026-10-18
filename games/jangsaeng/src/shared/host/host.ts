@@ -120,6 +120,7 @@ class Host implements GameHost {
         seed: hashString(token),
       };
       if (message.demo) options.demoChapter = message.demo;
+      if (message.demoPath) options.demoPath = message.demoPath;
       save = createSave(this.#content, options);
     }
     const previous = this.#sessionsByToken.get(token);

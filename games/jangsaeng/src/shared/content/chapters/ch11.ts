@@ -1,5 +1,5 @@
 // CH11 · 1608~1658 · 두 번의 호란 — 대동법, 인조반정(숙청 판정), 이괄의 난 안현 전투,
-// 남한산성 겨울 농성(혹한·화톳불 방어 대첩), 척화와 주화(김상헌·최명길 모두 존중),
+// 남한산성 겨울 농성(혹한·화톳불 방어 대전), 척화와 주화(김상헌·최명길 모두 존중),
 // 삼전도(절제된 서사, 보상 없음), 속환. 사실 기준: E058~E067, E116.
 import type { ChapterDef } from "../schema.ts";
 
@@ -214,8 +214,20 @@ export const ch11: ChapterDef = {
         { at: 30, from: "east", enemies: [{ enemy: "qing_archer", count: 4, level: 33 }, { enemy: "qing_rider", count: 2, level: 33 }], line: "화살이 화톳불을 노린다! 방패를 세워라." },
         { at: 65, from: "south", enemies: [{ enemy: "qing_armored", count: 3, level: 34 }], line: "철갑병이다. 느리지만 쓰러지지 않는다 — 다리를 노려라." },
         { at: 100, from: "around", enemies: [{ enemy: "qing_rider", count: 4, level: 34 }, { enemy: "qing_archer", count: 3, level: 34 }], line: "사방에서 온다. 불을 지켜라!" },
-        { at: 120, from: "north", enemies: [{ enemy: "boss_qing_general", count: 1, level: 34 }, { enemy: "qing_rider", count: 2, level: 34 }], line: "기병대장이 직접 돌진한다 — 붉은 선을 피하라!" },
+        { at: 120, from: "north", enemies: [{ enemy: "qing_rider", count: 2, level: 34 }], line: "기병대장이 직접 돌진한다 — 붉은 선을 피하라!" },
       ],
+      boss: {
+        enemy: "boss_qing_general",
+        name: "청 기병대장",
+        title: "(가상)",
+        level: 34,
+        hpScale: 1.1,
+        phases: [
+          { at: 1, mechanic: "charge", line: "화톳불을 짓밟아라!" },
+          { at: 0.5, mechanic: "summon", summon: { enemy: "qing_rider", count: 2 }, line: "기병, 다시 돌아라!" },
+          { at: 0.25, mechanic: "frenzy", line: "성문은 곧 열린다!" },
+        ],
+      },
       allies: [
         { sprite: "soldier_joseon", name: "수어청 군사", count: 6 },
         { sprite: "archer_joseon", name: "성첩 사수", count: 3 },

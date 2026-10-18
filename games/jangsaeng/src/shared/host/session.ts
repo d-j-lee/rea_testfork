@@ -51,13 +51,15 @@ export interface SessionServices {
   log(line: string): void;
 }
 
-type Queued =
+/** `year`: the story year when the card was raised (shown on it even if the step moves on first). */
+type Queued = (
   | { type: "def"; id: string; onDone?: () => void }
   | { type: "notice"; id: string; title: string; body: string[]; onDone?: () => void }
   | { type: "result"; id: string; title: string; lines: ResultView["lines"]; onDone?: () => void }
   | { type: "years"; id: string; next: ChapterId }
   | { type: "escape"; id: string }
-  | { type: "inquiry"; id: string };
+  | { type: "inquiry"; id: string }
+) & { year?: number };
 
 type Active = Queued & { view: PromptView };
 
@@ -473,6 +475,7 @@ export class Session {
   // ── Prompts ────────────────────────────────────────────────────────────
 
   #enqueue(item: Queued, front = false): void {
+    item.year ??= this.save.year;
     if (front) this.#queue.unshift(item);
     else this.#queue.push(item);
     this.#showNext();
@@ -484,6 +487,7 @@ export class Session {
       const item = this.#queue.shift() as Queued;
       const view = this.#viewFor(item);
       if (!view) continue;
+      view.year = item.year ?? this.save.year;
       this.#active = { ...item, view };
       this.send({ t: "prompt", prompt: view });
       return;

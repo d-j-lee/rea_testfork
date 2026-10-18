@@ -319,7 +319,7 @@ export interface BattleDef {
   /** defend: the protected object. */
   defend?: { name: string; sprite: CharacterSprite | PropSprite; hp: number };
   allies?: readonly { sprite: CharacterSprite; name: string; count: number }[];
-  /** A 대첩: first victory grants +2 lifespan years and appears in 연대기. */
+  /** A 대전(大戰): first victory grants +2 lifespan years and appears in 연대기. */
   great?: boolean;
   /** Enemy HP/count scale with participants (MMO world-event scaling). */
   scaled?: boolean;

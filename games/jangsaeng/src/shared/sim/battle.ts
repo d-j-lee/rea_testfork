@@ -116,22 +116,26 @@ export function startBattle(sim: Sim, battleId: string, starterId: number): Batt
       const npcDef = npc?.npcId ? sim.chapter.npcs.find((d) => d.id === npc.npcId) : undefined;
       if (npc?.fi && npcDef?.site === def.site) npc.fi.active = true;
     }
-  if ((def.kind === "boss" || duel) && def.boss) {
-    const bossDef = def.boss;
-    const body = sim.content.enemies[bossDef.enemy];
-    if (body) {
-      const r = b.radius * 0.4;
-      const boss = spawnEnemy(sim, body, b.cx + Math.cos(foeAngle) * r, b.cy + Math.sin(foeAngle) * r, {
-        level: bossDef.level, hpMul: bossDef.hpScale * b.hpScale, battle: true, boss: makeBossState(bossDef),
-      });
-      b.bossId = boss.id;
-      b.enemies.push(boss.id);
-      if (boss.en) boss.en.target = starterId;
-    }
+  // Boss and duel fights open with the boss; other kinds bring it with the last wave.
+  if (def.boss && (def.kind === "boss" || duel || b.waves.length === 0)) {
+    const r = b.radius * 0.4;
+    spawnBoss(sim, b, b.cx + Math.cos(foeAngle) * r, b.cy + Math.sin(foeAngle) * r, starterId);
   }
   emit(sim, { k: "shout", x: b.cx, y: b.cy, power: b.radius });
   floatText(sim, b.cx, b.cy, def.title, COLOR.phase, true);
   return b;
+}
+
+function spawnBoss(sim: Sim, b: BattleRuntime, x: number, y: number, targetId: number): void {
+  const bossDef = b.def.boss;
+  const body = bossDef ? sim.content.enemies[bossDef.enemy] : undefined;
+  if (!bossDef || !body || b.bossId >= 0) return;
+  const boss = spawnEnemy(sim, body, x, y, {
+    level: bossDef.level, hpMul: bossDef.hpScale * b.hpScale, battle: true, boss: makeBossState(bossDef),
+  });
+  b.bossId = boss.id;
+  b.enemies.push(boss.id);
+  if (boss.en) boss.en.target = targetId;
 }
 
 function battleLevel(sim: Sim, def: BattleDef): number {
@@ -235,6 +239,11 @@ function spawnWave(sim: Sim, b: BattleRuntime, index: number): void {
       w.ids.push(a.id);
       b.enemies.push(a.id);
     }
+  }
+  if (index === b.waves.length - 1 && b.def.boss && b.bossId < 0) {
+    const p = wavePoint(sim, b, w.def.from, 0, 1);
+    const target = b.defendId >= 0 ? b.defendId : b.starter;
+    spawnBoss(sim, b, p.x, p.y, target);
   }
   if (w.def.line) floatText(sim, b.cx, b.cy, w.def.line, COLOR.phase, true);
   sound(sim, "skill", b.cx, b.cy);

@@ -4,6 +4,7 @@
 import type { ChapterId, OriginId, StatKey, WashMethod } from "./content/schema.ts";
 import type {
   ChapterView,
+  DemoPath,
   EndingView,
   EntitySnap,
   FxEvent,
@@ -40,6 +41,8 @@ export type ClientMsg =
       origin: OriginId;
       /** Demo mode: start at this chapter with a preset build. */
       demo?: ChapterId;
+      /** Demo mode: the history the preset assumes (default history). */
+      demoPath?: DemoPath;
     }
   | {
       t: "input";

@@ -2,8 +2,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { CONTENT } from "../../src/shared/content/index.ts";
-import { CHAPTER_IDS, STAT_KEYS } from "../../src/shared/content/schema.ts";
-import { createSave, heroSprite, migrateSave, skillsUnlockedBy } from "../../src/shared/rules/index.ts";
+import { CHAPTER_IDS, NATION_KEYS, STAT_KEYS } from "../../src/shared/content/schema.ts";
+import { createSave, heroSprite, longFlagSum, migrateSave, REFORM_DRIFT, skillsUnlockedBy } from "../../src/shared/rules/index.ts";
 import { SAVE_VERSION, type PlayerSave } from "../../src/shared/types.ts";
 import { FIXTURE, newSave } from "./rules-fixture.ts";
 
@@ -36,6 +36,26 @@ test("createSave builds a fresh 1361 hero", () => {
   assert.equal(save.record.washes, 0);
   assert.deepEqual(newSave({ origin: "northeast" }).favor, { yi: 10 });
   assert.deepEqual(newSave({ origin: "kaesong" }).favor, { choe: 10 });
+});
+
+test("the reform demo path starts from a well-played history", () => {
+  const history = newSave({ demoChapter: "ch16" });
+  assert.deepEqual(history.branches, {});
+  assert.deepEqual(history.nation, FIXTURE.chapters.ch16.hist);
+
+  const reform = newSave({ demoChapter: "ch16", demoPath: "reform" });
+  assert.deepEqual(Object.keys(reform.branches).sort(), ["B1", "B2", "B3", "B4", "B5", "B6", "B7", "B8"]);
+  assert.ok(Object.values(reform.branches).every(Boolean));
+  assert.equal(reform.infiltration, 0, "won branches add no infiltration");
+  assert.equal(reform.flags["ch15_geojung"], true);
+  for (const key of NATION_KEYS)
+    assert.equal(reform.nation[key], FIXTURE.chapters.ch16.hist[key] + REFORM_DRIFT + longFlagSum(reform, key), key);
+  assert.equal(longFlagSum(reform, "defense"), 11, "훈련도감 +3, 장용영 +8");
+  assert.match(reform.chronicle.at(-1)?.text ?? "", /개혁 누적/);
+
+  // Only what earlier chapters could have won.
+  const ch14 = newSave({ demoChapter: "ch14", demoPath: "reform" });
+  assert.deepEqual(Object.keys(ch14.branches).sort(), ["B1", "B2"]);
 });
 
 test("demo presets give a sane save for every chapter", () => {

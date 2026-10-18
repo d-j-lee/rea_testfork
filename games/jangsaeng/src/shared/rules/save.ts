@@ -1,13 +1,14 @@
 // New characters and demo-mode chapter presets.
 import type { ContentIndex } from "../content/index.ts";
-import type { ChapterDef, ChapterId, OriginDef, OriginId, StatKey, WashMethod } from "../content/schema.ts";
-import { CHAPTER_IDS, POINT_KEYS, STAT_KEYS } from "../content/schema.ts";
+import type { BranchId, ChapterDef, ChapterId, NationKey, OriginDef, OriginId, StatKey, WashMethod } from "../content/schema.ts";
+import { CHAPTER_IDS, NATION_KEYS, POINT_KEYS, STAT_KEYS } from "../content/schema.ts";
 import type { BodyVariant } from "../sprites.ts";
-import { AWAKENING_AGE, AWAKENING_YEAR, BASE_LIFESPAN, SAVE_VERSION, type PlayerSave } from "../types.ts";
+import { AWAKENING_AGE, AWAKENING_YEAR, BASE_LIFESPAN, SAVE_VERSION, type DemoPath, type PlayerSave } from "../types.ts";
 import { apparentAge, suggestName } from "./identity.ts";
 import { meritSubjectTitle } from "./effects.ts";
+import { setBranch, setLongFlag } from "./nation.ts";
 import { DEFAULT_ARMOR, DEFAULT_WEAPON, eraGear, LEVEL_CAP, SKILL_SLOTS } from "./progression.ts";
-import { FAMILY_BONDS } from "./util.ts";
+import { clamp, FAMILY_BONDS } from "./util.ts";
 
 export interface CreateOptions {
   token: string;
@@ -17,6 +18,8 @@ export interface CreateOptions {
   seed: number;
   /** Demo mode: start at this chapter with a balanced preset build. */
   demoChapter?: ChapterId;
+  /** Demo mode: the history the preset assumes (default history). */
+  demoPath?: DemoPath;
 }
 
 export const BASE_STAT = 5;
@@ -24,6 +27,26 @@ export const START_MONEY = 50;
 export const START_LIFE_END = AWAKENING_YEAR + BASE_LIFESPAN;
 export const DEMO_SUSPICION = 15;
 export const DEMO_LIFE_AHEAD = 60;
+/** Reform path: the largest carry-over a chapter can pass on (0.8 × the ±20 drift cap, §5.6.2). */
+export const REFORM_DRIFT = 16;
+
+/**
+ * What a well-played run has won by the end of each chapter (reform demo
+ * path): branches, long flags (§5.6.3) and story flags later chapters read.
+ */
+const REFORM_GAINS: readonly {
+  chapter: ChapterId;
+  branches?: readonly BranchId[];
+  longFlags?: readonly (readonly [flag: string, key: NationKey, add: number])[];
+  flags?: readonly string[];
+}[] = [
+  { chapter: "ch09", longFlags: [["hullyeon_dogam", "defense", 3]] },
+  { chapter: "ch11", longFlags: [["sokhwan", "people", 2]] },
+  { chapter: "ch12", longFlags: [["jeonggye_record", "diplomacy", 1]] },
+  { chapter: "ch13", branches: ["B1", "B2"], longFlags: [["jangyongyeong", "defense", 8], ["samjeong", "finance", 3]] },
+  { chapter: "ch14", branches: ["B3", "B4"], longFlags: [["b4_clauses", "finance", 3]] },
+  { chapter: "ch15", branches: ["B5", "B6", "B7", "B8"], longFlags: [["neutral_policy", "diplomacy", 3]], flags: ["ch15_geojung"] },
+];
 /** Demo preset rank by chapter order (ch04 = 정3품 당상 2등 공신). */
 const DEMO_RANK: readonly number[] = [0, 2, 5, 14, 12, 13, 10, 11, 12, 13, 12, 11, 12, 13, 14, 15];
 /** Demo stat spread: a front-line officer who can still argue at court. */
@@ -116,7 +139,7 @@ export function createSave(content: ContentIndex, options: CreateOptions): Playe
   };
   if (!content.items.rice_ball) delete save.inventory["rice_ball"];
   const demo = options.demoChapter ? content.chapters[options.demoChapter] : undefined;
-  if (demo) applyDemoPreset(content, save, demo);
+  if (demo) applyDemoPreset(content, save, demo, options.demoPath ?? "history");
   return save;
 }
 
@@ -127,7 +150,7 @@ function demoWashYears(startYear: number): number[] {
   return years;
 }
 
-function applyDemoPreset(content: ContentIndex, save: PlayerSave, chapter: ChapterDef): void {
+function applyDemoPreset(content: ContentIndex, save: PlayerSave, chapter: ChapterDef, path: DemoPath): void {
   const order = chapter.order;
   const level = Math.max(1, Math.min(LEVEL_CAP, chapter.level[0]));
   save.demo = true;
@@ -171,6 +194,7 @@ function applyDemoPreset(content: ContentIndex, save: PlayerSave, chapter: Chapt
   save.skillSlots = save.skills.slice(-SKILL_SLOTS);
   save.nation = { ...chapter.hist };
   save.infiltration = 0;
+  if (path === "reform") applyReformHistory(save, chapter);
   if (chapter.ruling) save.favor[chapter.ruling] = Math.max(save.favor[chapter.ruling] ?? 0, 20);
   if (order >= 3) for (const family of FAMILY_BONDS) save.bonds[family] = Math.min(48, 4 * order);
 
@@ -195,5 +219,18 @@ function applyDemoPreset(content: ContentIndex, save: PlayerSave, chapter: Chapt
     save.record.washes = washYears.length;
   }
   save.suspicion = DEMO_SUSPICION;
-  save.chronicle.push({ year: save.year, text: `시연 모드로 「${chapter.title}」에서 시작하다 (${save.year}년).`, tone: "info" });
+  const pathNote = path === "reform" ? ", 개혁 누적 경로" : "";
+  save.chronicle.push({ year: save.year, text: `시연 모드로 「${chapter.title}」에서 시작하다 (${save.year}년${pathNote}).`, tone: "info" });
+}
+
+/** Reform path: every earlier chapter won its branches and passed on the best carry-over. */
+function applyReformHistory(save: PlayerSave, chapter: ChapterDef): void {
+  for (const key of NATION_KEYS) save.nation[key] = clamp(chapter.hist[key] + REFORM_DRIFT, 0, 100);
+  const order = CHAPTER_IDS.indexOf(chapter.id);
+  for (const gain of REFORM_GAINS) {
+    if (CHAPTER_IDS.indexOf(gain.chapter) >= order) continue;
+    for (const branch of gain.branches ?? []) setBranch(save, branch, true);
+    for (const [flag, key, add] of gain.longFlags ?? []) setLongFlag(save, flag, key, add);
+    for (const flag of gain.flags ?? []) save.flags[flag] = true;
+  }
 }

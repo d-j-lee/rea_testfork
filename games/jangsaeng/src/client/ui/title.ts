@@ -88,8 +88,8 @@ export function createTitle(
     openSub(
       demoPanel(audio, {
         onBack: back,
-        onPick: (chapter, variant) =>
-          finish({ mode, resume: false, name: DEMO_PRESET_NAME, variant, origin: "northeast", demo: chapter }),
+        onPick: (chapter, variant, demoPath) =>
+          finish({ mode, resume: false, name: DEMO_PRESET_NAME, variant, origin: "northeast", demo: chapter, demoPath }),
       }),
     );
   const openPitch = () => openSub(pitchPanel({ onBack: back, onNew: openCreation, onDemo: openDemo }));

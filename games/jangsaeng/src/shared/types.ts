@@ -23,6 +23,13 @@ export const AWAKENING_AGE = 16;
 export const BASE_LIFESPAN = 500;
 export const FINAL_YEAR = 1910;
 
+/**
+ * Demo-mode starting histories: `history` keeps the historical baselines;
+ * `reform` assumes the earlier chapters went well (branches won, best carry-over).
+ */
+export const DEMO_PATHS = ["history", "reform"] as const;
+export type DemoPath = (typeof DEMO_PATHS)[number];
+
 export interface IdentityRecord {
   name: string;
   kind: IdentityKind;

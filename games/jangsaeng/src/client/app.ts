@@ -203,6 +203,7 @@ async function beginSession(choice: TitleChoice, game: GameClient, ui: Ui): Prom
   };
   if (token) hello.token = token;
   if (choice.demo) hello.demo = choice.demo;
+  if (choice.demo && choice.demoPath) hello.demoPath = choice.demoPath;
   hook.state = "connecting";
 
   // Demo characters never replace the stored profile used for 이어하기.

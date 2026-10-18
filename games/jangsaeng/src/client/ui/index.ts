@@ -5,7 +5,7 @@
 import type { ChapterId, OriginId } from "../../shared/content/schema.ts";
 import type { GameMap } from "../../shared/map/generate.ts";
 import type { ClientMsg, PlayerAction, ServerMsg } from "../../shared/protocol.ts";
-import type { ChapterView, EntitySnap, PromptView } from "../../shared/types.ts";
+import type { ChapterView, DemoPath, EntitySnap, PromptView } from "../../shared/types.ts";
 import type { AudioEngine } from "../audio/types.ts";
 import type { Input, UiCommand } from "../input.ts";
 import { chapterCard } from "./chapter-card.ts";
@@ -30,6 +30,8 @@ export interface TitleChoice {
   origin: OriginId;
   /** Demo mode start chapter. */
   demo?: ChapterId;
+  /** Demo mode: the history the preset assumes. */
+  demoPath?: DemoPath;
 }
 
 export interface TitleOptions {
@@ -56,7 +58,7 @@ export interface FrameInfo {
   self: { x: number; y: number } | null;
   /** Entities currently known (for minimap dots). */
   ents: readonly EntitySnap[];
-  /** Device-pixel position of the player on screen (touch aim, bubbles). */
+  /** CSS-pixel position of the player on screen (touch aim, bubbles). */
   playerScreen: { x: number; y: number };
 }
 
