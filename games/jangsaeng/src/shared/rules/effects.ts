@@ -4,9 +4,10 @@
 import type { ContentIndex } from "../content/index.ts";
 import type { BattleDef, Cond, Effect, PurgeSpec } from "../content/schema.ts";
 import type { PlayerSave, ResultView } from "../types.ts";
-import { changeLife, changeSuspicion, lifeLine, suggestName, washIdentity } from "./life.ts";
-import { BRANCH_LABELS, changeNation, nationValue, setBranch } from "./nation.ts";
-import { computePurgeRisk, resolvePurge } from "./politics.ts";
+import { changeSuspicion, suggestName, washIdentity } from "./identity.ts";
+import { changeLife, lifeLine } from "./lifespan.ts";
+import { BRANCH_LABELS, changeNation, nationValue, setBranch, setLongFlag } from "./nation.ts";
+import { computePurgeRisk, resolvePurge, shownRisk } from "./politics.ts";
 import { changeItem, grantExp, learnSkill, rankLabel, setRank, STAT_CAP } from "./progression.ts";
 import {
   bondName,
@@ -15,6 +16,7 @@ import {
   cloneSave,
   factionName,
   flagTruthy,
+  gainVirtue,
   hashRoll,
   line,
   nationName,
@@ -129,17 +131,13 @@ export function meritSubjectTitle(grade: 1 | 2 | 3 | 4): string {
   return grade === 4 ? "원종공신" : `개국공신 ${grade}등`;
 }
 
-/** Honor may go negative (betrayal); other points floor at 0. */
+/** Honor may go negative (betrayal); other points floor at 0. Virtue gains are cumulative. */
 function changePoint(save: PlayerSave, point: keyof PlayerSave["points"], add: number): number {
+  if (point === "virtue" && add > 0) return gainVirtue(save, add);
   const before = save.points[point];
   const after = Math.round(before + add);
   save.points[point] = point === "honor" ? after : Math.max(0, after);
-  const delta = save.points[point] - before;
-  if (point === "virtue" && delta > 0) {
-    const earned = save.flags["virtueEarned"];
-    save.flags["virtueEarned"] = (typeof earned === "number" ? earned : 0) + delta;
-  }
-  return delta;
+  return save.points[point] - before;
 }
 
 function applyOne(content: ContentIndex, save: PlayerSave, effect: Effect, out: EffectOutcome, depth: number): void {
@@ -174,8 +172,8 @@ function applyOne(content: ContentIndex, save: PlayerSave, effect: Effect, out: 
       return;
     }
     case "longFlag": {
-      save.longFlags[effect.flag] = { key: effect.key, add: effect.add };
-      lines.push(line(`장기 국운 — ${nationName(effect.key)} ${signed(effect.add)} (다음 시대부터 매번)`, "epic"));
+      setLongFlag(save, effect.flag, effect.key, effect.add);
+      lines.push(line(`장기 국운 — ${nationName(effect.key)} ${signed(effect.add)} (1910년까지 유지)`, "epic"));
       return;
     }
     case "favor": {
@@ -247,6 +245,7 @@ function applyOne(content: ContentIndex, save: PlayerSave, effect: Effect, out: 
       return;
     case "meritSubject": {
       save.meritSubject = effect.grade;
+      save.flags["renowned"] = true;
       setRank(save, Math.max(save.rank, MERIT_SUBJECT_RANK[effect.grade]));
       const title = meritSubjectTitle(effect.grade);
       if (!save.titles.includes(title)) save.titles.push(title);
@@ -332,9 +331,19 @@ export function purgeRisk(content: ContentIndex, save: PlayerSave, spec: PurgeSp
   return computePurgeRisk(hypothetical, spec);
 }
 
+/** 풍향계 value for an option: exact with 지략 ≥ 30, otherwise a stable ±10 blur. */
+export function purgeRiskShown(
+  content: ContentIndex,
+  save: PlayerSave,
+  spec: PurgeSpec,
+  preview?: readonly Effect[],
+): { value: number; exact: boolean } {
+  return shownRisk(save, spec, purgeRisk(content, save, spec, preview));
+}
+
 /**
- * Records a battle outcome: victory/defeat effects, battlesWon, and the 대첩
- * first-victory reward (+2 lifespan years and a chronicle line).
+ * Records a battle outcome: victory/defeat effects, battlesWon, and the 대전
+ * first-victory reward (+2 lifespan years, a chronicle line, renown for this identity).
  */
 export function battleResult(content: ContentIndex, save: PlayerSave, battle: BattleDef, won: boolean): EffectOutcome {
   const out = emptyOutcome();
@@ -343,6 +352,7 @@ export function battleResult(content: ContentIndex, save: PlayerSave, battle: Ba
     if (first) save.battlesWon.push(battle.id);
     if (first && battle.great) {
       changeLife(save, 2);
+      save.flags["renowned"] = true;
       out.lines.push(line(`대첩 — ${battle.title}`, "epic"), lifeLine(2));
       chronicle(save, `${battle.title}에서 이기다.`, "epic");
     }

@@ -345,7 +345,7 @@ export const ch07: ChapterDef = {
       style: "card",
       body: [
         "실록청 시절의 동료가 손자를 데리고 찾아왔다. 백발의 그가 한참 너를 보다가 말했다.",
-        "\"그대는… 그대의 아들인가? 꼭 그때 그 얼굴이로군.\"",
+        "\"그대는… 그대의 자식인가? 꼭 그때 그 얼굴이로군.\"",
       ],
       options: [
         {
@@ -362,7 +362,7 @@ export const ch07: ChapterDef = {
         },
         {
           id: "endure",
-          text: "\"아들이라오.\" 웃어넘기고 버틴다",
+          text: "\"제 자식이라오.\" 웃어넘기고 버틴다",
           hint: "의심도 +10",
           effects: [{ k: "suspicion", add: 10 }],
         },

@@ -4,9 +4,9 @@ import type { ChapterDef, ChapterId, OriginDef, OriginId, StatKey, WashMethod } 
 import { CHAPTER_IDS, POINT_KEYS, STAT_KEYS } from "../content/schema.ts";
 import type { BodyVariant } from "../sprites.ts";
 import { AWAKENING_AGE, AWAKENING_YEAR, BASE_LIFESPAN, SAVE_VERSION, type PlayerSave } from "../types.ts";
-import { apparentAge, suggestName } from "./life.ts";
+import { apparentAge, suggestName } from "./identity.ts";
 import { meritSubjectTitle } from "./effects.ts";
-import { DEFAULT_ARMOR, DEFAULT_WEAPON, LEVEL_CAP, SKILL_SLOTS } from "./progression.ts";
+import { DEFAULT_ARMOR, DEFAULT_WEAPON, eraGear, LEVEL_CAP, SKILL_SLOTS } from "./progression.ts";
 import { FAMILY_BONDS } from "./util.ts";
 
 export interface CreateOptions {
@@ -23,6 +23,7 @@ export const BASE_STAT = 5;
 export const START_MONEY = 50;
 export const START_LIFE_END = AWAKENING_YEAR + BASE_LIFESPAN;
 export const DEMO_SUSPICION = 15;
+export const DEMO_LIFE_AHEAD = 60;
 /** Demo preset rank by chapter order (ch04 = 정3품 당상 2등 공신). */
 const DEMO_RANK: readonly number[] = [0, 2, 5, 14, 12, 13, 10, 11, 12, 13, 12, 11, 12, 13, 14, 15];
 /** Demo stat spread: a front-line officer who can still argue at court. */
@@ -55,12 +56,6 @@ export function skillsUnlockedBy(content: ContentIndex, chapter: ChapterId): str
     for (const skill of Object.values(content.skills)) if (skill.unlock === id) add(skill.id);
   }
   return ids;
-}
-
-export function eraGear(content: ContentIndex, year: number): { weapon: string; armor: string } {
-  let gear = { weapon: DEFAULT_WEAPON, armor: DEFAULT_ARMOR };
-  for (const entry of content.eraGear) if (year >= entry.from) gear = { weapon: entry.weapon, armor: entry.armor };
-  return gear;
 }
 
 export function createSave(content: ContentIndex, options: CreateOptions): PlayerSave {
@@ -151,8 +146,16 @@ function applyDemoPreset(content: ContentIndex, save: PlayerSave, chapter: Chapt
   if (chapter.id === "ch04") {
     save.meritSubject = 2;
     save.titles.push(meritSubjectTitle(2));
+    save.flags["renowned"] = true;
   }
-  save.lifeEnd = Math.max(START_LIFE_END + 4 * (order - 1), chapter.years[0] + 30);
+  // 역사 순응 defaults: the ch04 tutorial wash and school are behind a later preset.
+  if (order > 4) {
+    save.flags["tutorialWashUsed"] = true;
+    save.flags["school"] = true;
+    save.flags["discipleXp"] = Math.floor((order - 4) / 3);
+  }
+  // §3.5: lifespan = chapter start + 60 (never below the natural 1861 track).
+  save.lifeEnd = Math.max(START_LIFE_END + 4 * (order - 1), chapter.years[0] + DEMO_LIFE_AHEAD);
   save.record.lifeGained = save.lifeEnd - START_LIFE_END;
   save.year = chapter.years[0];
   save.chapter = chapter.id;

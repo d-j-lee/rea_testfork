@@ -523,6 +523,12 @@ export function generateMap(seed = "jangsaeng"): GameMap {
         if (land[i] && tiles[i] !== Tile.River) tiles[i] = ground;
       }
     }
+    // Main streets cross the town through its centre; where they meet a
+    // river they become bridges so every quarter stays reachable on foot.
+    for (let y = rect.y; y < rect.y + rect.h; y++)
+      if (tiles[index(site.x, y)] === Tile.River) tiles[index(site.x, y)] = Tile.Bridge;
+    for (let x = rect.x; x < rect.x + rect.w; x++)
+      if (tiles[index(x, site.y)] === Tile.River) tiles[index(x, site.y)] = Tile.Bridge;
     if (site.kind !== "battlefield") tiles[index(site.x, site.y)] = Tile.Plaza;
   }
 
@@ -550,6 +556,9 @@ export function generateMap(seed = "jangsaeng"): GameMap {
         return 1.6;
       case Tile.Marsh:
         return 2.5;
+      case Tile.Shallow:
+        // Ferry causeways (나루 잔교) reach near-shore islands such as 강화.
+        return 9;
       default:
         return TILE_INFO[tile].water ? Infinity : 1;
     }
@@ -562,7 +571,7 @@ export function generateMap(seed = "jangsaeng"): GameMap {
     for (const step of path) {
       const i = index(step.x, step.y);
       const tile = tiles[i] as TileId;
-      if (tile === Tile.River) tiles[i] = Tile.Bridge;
+      if (tile === Tile.River || tile === Tile.Shallow) tiles[i] = Tile.Bridge;
       else if (
         tile !== Tile.TownGround &&
         tile !== Tile.Plaza &&

@@ -42,11 +42,12 @@ export class CompactBar {
     setMeter(this.#en, ratio(self.energy, self.maxEnergy));
     setMeter(this.#st, ratio(self.stamina, 100));
     const short = self.lifeShortfall > 0;
-    setText(this.#life, short ? `천수 ${self.lifeEnd} · −${self.lifeShortfall}년` : `천수 ${self.lifeEnd} · ${Math.max(0, self.lifeEnd - self.year)}년`);
+    setText(this.#life, short ? `천수 ${self.lifeEnd} −${self.lifeShortfall}` : `천수 ${Math.max(0, self.lifeEnd - self.year)}년`);
     toggle(this.#life, "short", short);
     this.#life.title = short ? `이대로면 ${self.lifeEnd}년에 천수가 다한다 · ${FINAL_YEAR}년까지 ${self.lifeShortfall}년 부족` : "";
     const band = SUSPICION_BANDS[self.suspicionBand];
-    setText(this.#susp, `의심 ${band.label}`);
+    setText(this.#susp, band.label);
+    this.#susp.title = `의심도 ${Math.round(self.suspicion)} · ${band.label}`;
     this.#susp.dataset.tone = band.tone;
     this.el.setAttribute("aria-label", `${self.name} Lv ${self.level}, 체력 ${Math.ceil(self.hp)}/${self.maxHp} — 상태 펼치기`);
   }

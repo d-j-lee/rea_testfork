@@ -84,9 +84,9 @@ export class StatusCard {
     this.#lifeTrack.title = `${AWAKENING_YEAR} 각성 · 지금 ${self.year} · 천수 ${self.lifeEnd} · 목표 ${FINAL_YEAR}`;
     const short = self.lifeShortfall > 0;
     toggle(this.el, "life-short", short);
-    setText(this.#warn, short ? `이대로면 ${self.lifeEnd}년에 천수가 다한다 · ${FINAL_YEAR}년까지 ${self.lifeShortfall}년 부족` : "");
+    setText(this.#warn, short ? `이대로면 ${self.lifeEnd}년에 천수가 다한다` : "");
     setText(this.#short, short ? `−${self.lifeShortfall}년` : "");
-    this.#short.title = this.#warn.textContent ?? "";
+    this.#short.title = short ? `${FINAL_YEAR}년까지 ${self.lifeShortfall}년 부족` : "";
 
     const band = SUSPICION_BANDS[self.suspicionBand];
     setMeter(this.#susp, ratio(self.suspicion, 100));

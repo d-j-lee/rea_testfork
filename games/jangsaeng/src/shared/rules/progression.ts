@@ -220,3 +220,27 @@ export function slotSkill(save: PlayerSave, skill: string, slot: number): boolea
   save.skillSlots = slots;
   return true;
 }
+
+/** Weapon and armor a character of this year should carry (ERA_GEAR). */
+export function eraGear(content: ContentIndex, year: number): { weapon: string; armor: string } {
+  let gear = { weapon: DEFAULT_WEAPON, armor: DEFAULT_ARMOR };
+  for (const entry of content.eraGear) if (year >= entry.from) gear = { weapon: entry.weapon, armor: entry.armor };
+  return gear;
+}
+
+/** §5.9 시대 지급품: at a chapter start, era gear better than what is equipped is granted. */
+export function refreshEraGear(content: ContentIndex, save: PlayerSave): Line[] {
+  const gear = eraGear(content, save.year);
+  const lines: Line[] = [];
+  for (const slot of ["weapon", "armor"] as const) {
+    const offered = content.items[gear[slot]];
+    const current = content.items[save.equipment[slot]];
+    const value = (slot === "weapon" ? offered?.atk : offered?.def) ?? 0;
+    const currentValue = (slot === "weapon" ? current?.atk : current?.def) ?? 0;
+    if (!offered || value <= currentValue) continue;
+    save.inventory[gear[slot]] = Math.max(1, save.inventory[gear[slot]] ?? 0);
+    save.equipment[slot] = gear[slot];
+    lines.push(line(`시대 지급품 — ${offered.name}`, "good"));
+  }
+  return lines;
+}

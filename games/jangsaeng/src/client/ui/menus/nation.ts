@@ -60,12 +60,12 @@ export function nationTab(self: SelfView): HTMLElement {
     h("section", { class: "nation-chart" },
       h("h3", { class: "sub-title" }, "국운"),
       radarChart(self.nation),
-      self.showInfiltration ? infiltrationBar(self.nation.infiltration ?? 0) : null),
-    h("section", { class: "nation-side" },
-      h("h3", { class: "sub-title" }, "역사의 분기점"),
-      branchList((id) => ({ label: BRANCH_LABELS[id], ok: self.branches[id] ?? null })),
+      self.showInfiltration ? infiltrationBar(self.nation.infiltration ?? 0) : null,
       h("h3", { class: "sub-title" }, "조정"),
       factions,
       world),
+    h("section", { class: "nation-side" },
+      h("h3", { class: "sub-title" }, "역사의 분기점"),
+      branchList((id) => ({ label: BRANCH_LABELS[id], ok: self.branches[id] ?? null }))),
   );
 }

@@ -155,10 +155,9 @@ export class MenuBook {
   #content(tab: MenuTab): HTMLElement {
     const d = this.#deps;
     const self = d.self();
-    if (tab === "help") return h("div", null, h("h2", { class: "book-title" }, "도움말"), helpTab());
+    if (tab === "help") return helpTab();
     if (tab === "system") {
       return h("div", { class: "tab-system" },
-        h("h2", { class: "book-title" }, "설정"),
         settingsControls(d.settings, d.audio),
         h("h3", { class: "sub-title" }, "게임"),
         h("div", { class: "foot-actions left" },
@@ -173,19 +172,11 @@ export class MenuBook {
           }, { class: "btn" })));
     }
     if (!self) return h("p", { class: "muted" }, "인물 정보를 불러오는 중…");
-    const titles: Record<Exclude<MenuTab, "help" | "system">, string> = {
-      character: "인물",
-      inventory: "소지품",
-      nation: "국운",
-      chronicle: "연대기",
-      map: `지도 · ${self.year}년`,
-    };
-    const body =
+    return (
       tab === "character" ? characterTab(self, d.act)
       : tab === "inventory" ? inventoryTab(self, d.act)
       : tab === "nation" ? nationTab(self)
       : tab === "chronicle" ? chronicleTab(self.chronicle, d.chapter())
-      : mapTab(d.map, self, d.pos(), d.act);
-    return h("div", null, h("h2", { class: "book-title" }, titles[tab]), body);
+      : mapTab(d.map, self, d.pos(), d.act));
   }
 }

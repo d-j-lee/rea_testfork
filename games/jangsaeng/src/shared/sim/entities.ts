@@ -3,7 +3,7 @@
 import type { EnemyDef } from "../content/schema.ts";
 import type { CharacterSprite, PropSprite, SpriteKey } from "../sprites.ts";
 import type { EntityKind } from "../types.ts";
-import { isBlocked, nearestFree } from "./physics.ts";
+import { isBlocked, nearestFree, regionSize } from "./physics.ts";
 import { C, emit, type Actor, type BossState, type EnemyData, type FighterData, type Side, type Sim } from "./state.ts";
 
 export function allocId(sim: Sim): number {
@@ -106,9 +106,15 @@ export function bodyFree(sim: Sim, x: number, y: number, r: number = C.BODY): bo
 }
 
 /** Walkable point near (x, y); falls back to the input when nothing is free. */
+/** Smallest walkable region a placement may use (excludes river pockets). */
+export const MIN_REGION = 40;
+
 export function freePoint(sim: Sim, x: number, y: number, radius = 12): { x: number; y: number } {
-  if (bodyFree(sim, x, y)) return { x, y };
-  return nearestFree(sim.grid, x, y, radius) ?? { x, y };
+  if (bodyFree(sim, x, y) && regionSize(sim.grid, Math.floor(x), Math.floor(y)) >= MIN_REGION) return { x, y };
+  return (
+    nearestFree(sim.grid, x, y, radius, MIN_REGION) ??
+    nearestFree(sim.grid, x, y, radius) ?? { x, y }
+  );
 }
 
 export const hpScale = (level: number): number => 1 + 0.1 * (level - 1);

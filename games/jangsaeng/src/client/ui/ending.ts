@@ -7,6 +7,7 @@ import { button, h } from "./dom.ts";
 import { identityTimeline } from "./menus/character.ts";
 import { chronicleList, historyNotes } from "./menus/chronicle.ts";
 import { branchList, infiltrationBar } from "./menus/nation.ts";
+import { seal } from "./panel.ts";
 import { DISCLAIMER } from "./title.ts";
 
 const RECORD_LABELS: readonly [keyof EndingView["record"], string][] = [
@@ -39,6 +40,7 @@ export function endingScreen(e: EndingView): HTMLElement {
     h(
       "article",
       { class: "ending paper" },
+      seal("長生", "end-seal"),
       h("header", { class: "end-head" },
         h("p", { class: "end-kicker" }, `${FINAL_YEAR}년 8월 · 정산`),
         h("h1", { class: "end-title" }, e.nation.title),

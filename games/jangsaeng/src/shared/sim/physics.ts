@@ -104,21 +104,75 @@ export function moveBody(
   return hit;
 }
 
-/** Nearest unblocked tile centre to (x, y), searching outward in rings. */
+interface Components {
+  /** Component id per tile (−1 when blocked). */
+  readonly labels: Int32Array;
+  /** Tile count per component id. */
+  readonly sizes: readonly number[];
+}
+
+const componentCache = new WeakMap<Uint8Array, Components>();
+
+/** Walkable connected components (4-neighbour), cached per blocked grid. */
+export function components(grid: CollisionGrid): Components {
+  const cached = componentCache.get(grid.blocked);
+  if (cached) return cached;
+  const { width, height, blocked } = grid;
+  const labels = new Int32Array(width * height).fill(-1);
+  const sizes: number[] = [];
+  const queue = new Int32Array(width * height);
+  for (let start = 0; start < labels.length; start++) {
+    if (blocked[start] || labels[start] !== -1) continue;
+    const id = sizes.length;
+    let head = 0;
+    let tail = 0;
+    queue[tail++] = start;
+    labels[start] = id;
+    while (head < tail) {
+      const i = queue[head++] as number;
+      const x = i % width;
+      const neighbours = [x > 0 ? i - 1 : -1, x < width - 1 ? i + 1 : -1, i - width, i + width];
+      for (const j of neighbours) {
+        if (j < 0 || j >= labels.length || blocked[j] || labels[j] !== -1) continue;
+        labels[j] = id;
+        queue[tail++] = j;
+      }
+    }
+    sizes.push(tail);
+  }
+  const result = { labels, sizes };
+  componentCache.set(grid.blocked, result);
+  return result;
+}
+
+/** Size of the walkable region containing tile (tx, ty); 0 when blocked. */
+export function regionSize(grid: CollisionGrid, tx: number, ty: number): number {
+  if (isBlocked(grid, tx, ty)) return 0;
+  const { labels, sizes } = components(grid);
+  return sizes[labels[ty * grid.width + tx] as number] ?? 0;
+}
+
+/**
+ * Nearest unblocked tile centre to (x, y), searching outward in rings. With
+ * `minRegion`, tiles in walkable pockets smaller than that are skipped, so
+ * placements never land on an unreachable scrap of land between rivers.
+ */
 export function nearestFree(
   grid: CollisionGrid,
   x: number,
   y: number,
   maxRadius = 12,
+  minRegion = 0,
 ): { x: number; y: number } | null {
   const cx = Math.floor(x);
   const cy = Math.floor(y);
+  const ok = (tx: number, ty: number) =>
+    !isBlocked(grid, tx, ty) && (minRegion <= 0 || regionSize(grid, tx, ty) >= minRegion);
   for (let r = 0; r <= maxRadius; r++) {
     for (let dy = -r; dy <= r; dy++)
       for (let dx = -r; dx <= r; dx++) {
         if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
-        if (!isBlocked(grid, cx + dx, cy + dy))
-          return { x: cx + dx + 0.5, y: cy + dy + 0.5 };
+        if (ok(cx + dx, cy + dy)) return { x: cx + dx + 0.5, y: cy + dy + 0.5 };
       }
   }
   return null;

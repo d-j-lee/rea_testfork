@@ -45,7 +45,7 @@ export const ch13: ChapterDef = {
     "1811년 홍경래의 난, 1862년 진주에서 시작된 임술 농민 봉기가 일어났다. 삼정이정청이 설치되었으나 몇 달 만에 폐지되었다.",
     "[해석] 세도 정치 아래 국가 재정과 군사 역량이 크게 약해졌다는 것이 통설적 평가다.",
   ],
-  hist: { defense: 35, finance: 35, people: 40, diplomacy: 30, reform: 40 },
+  hist: { defense: 38, finance: 38, people: 42, diplomacy: 32, reform: 42 },
   factions: [
     { id: "jeongjo", name: "정조 친위 (장용영·시파)", power: 55, lineage: "tangpyeong", desc: "국왕의 개혁을 떠받치는 군영과 신료." },
     { id: "byeokpa", name: "벽파", power: 45, lineage: "noron", desc: "사도세자 문제에서 정조와 다른 입장에 섰던 무리. 1800년 뒤 정순왕후 아래 힘을 쥔다." },
@@ -687,7 +687,6 @@ export const ch13: ChapterDef = {
     {
       id: "s3",
       year: 1785,
-      onEnter: [{ k: "prompt", prompt: "p_jonhyeon_after" }],
       objectives: [{ id: "o_jonhyeon_after", text: "그 밤의 뒷이야기", kind: "prompt", target: "p_jonhyeon_after" }],
     },
     {
@@ -720,7 +719,6 @@ export const ch13: ChapterDef = {
       id: "s7",
       year: 1800,
       narration: ["1795년 봄, 왕은 혜경궁의 회갑을 맞아 화성으로 큰 행차를 했다. 1796년 가을, 화성이 완성되었다."],
-      onEnter: [{ k: "prompt", prompt: "p_jeongjo_dies" }],
       objectives: [{ id: "o_jeongjo_dies", text: "1800년 여름", kind: "prompt", target: "p_jeongjo_dies" }],
     },
     {
@@ -753,7 +751,6 @@ export const ch13: ChapterDef = {
         "정주성은 1812년 4월에 떨어졌다. 그 뒤 쉰 해, 몇몇 가문이 나라를 움켜쥐었다.",
         "1862년 2월, 진주에서 나무꾼들이 일어났다. 봉기는 삼남의 일흔여 고을로 번졌다.",
       ],
-      onEnter: [{ k: "prompt", prompt: "p_hong_end" }],
       objectives: [
         { id: "o_hong_end", text: "정주성의 끝을 듣는다", kind: "prompt", target: "p_hong_end" },
         { id: "o_evidence", text: "진주의 초군을 만난다", kind: "talk", target: "chogun", site: "jinju", offset: [-2, 2], prompt: "p_evidence" },
@@ -772,9 +769,6 @@ export const ch13: ChapterDef = {
       objectives: [
         { id: "o_end_ok", text: "고쳐 쓴 장부", kind: "prompt", target: "p_end_ok", requires: { k: "branch", id: "B2", ok: true } },
         { id: "o_end_fail", text: "닫힌 이정청", kind: "prompt", target: "p_end_fail", requires: { k: "not", of: { k: "branch", id: "B2", ok: true } } },
-      ],
-      onEnter: [
-        { k: "if", cond: { k: "branch", id: "B2", ok: true }, then: [{ k: "prompt", prompt: "p_end_ok" }], else: [{ k: "prompt", prompt: "p_end_fail" }] },
       ],
     },
   ],

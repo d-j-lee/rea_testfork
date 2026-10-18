@@ -83,7 +83,7 @@ export const ch12: ChapterDef = {
     "1712년 청과 조선은 백두산에 정계비를 세웠다. 1728년 이인좌의 난이 진압되었고, 영조는 탕평책을 펴고 1750년 균역법을 시행했다.",
     "1762년 영조는 세자를 뒤주에 가두었고 세자는 8일 만에 숨졌다(임오화변). [해석] 원인은 세자의 병을 강조하는 시각과 당쟁의 희생으로 보는 시각이 엇갈린다.",
   ],
-  hist: { defense: 30, finance: 30, people: 35, diplomacy: 30, reform: 30 },
+  hist: { defense: 32, finance: 32, people: 35, diplomacy: 30, reform: 33 },
   factions: [
     { id: "seoin", name: "서인", power: 55, lineage: "seoin", desc: "송시열을 중심으로 한 무리. 뒤에 노론과 소론으로 갈라진다." },
     { id: "namin", name: "남인", power: 40, lineage: "namin", desc: "허목·윤휴 등의 무리. 환국 때마다 부침을 겪는다." },
@@ -139,7 +139,7 @@ export const ch12: ChapterDef = {
       site: "chungju",
       offset: [-3, 3],
       radius: 7,
-      kind: "waves",
+      kind: "boss",
       music: "war",
       weather: "rain",
       intro: [
@@ -386,13 +386,13 @@ export const ch12: ChapterDef = {
     },
   ],
   steps: [
-    { id: "s1", year: 1659, onEnter: [{ k: "prompt", prompt: "p_yesong" }], objectives: [{ id: "o_yesong", text: "예송", kind: "prompt", target: "p_yesong" }] },
-    { id: "s2", year: 1680, onEnter: [{ k: "prompt", prompt: "p_gyeongsin" }], objectives: [{ id: "o_gyeongsin", text: "경신환국", kind: "prompt", target: "p_gyeongsin" }] },
-    { id: "s3", year: 1683, onEnter: [{ k: "prompt", prompt: "p_tangpyeong" }], objectives: [{ id: "o_tangpyeong", text: "탕평의 말", kind: "prompt", target: "p_tangpyeong" }] },
-    { id: "s4", year: 1689, onEnter: [{ k: "prompt", prompt: "p_gisa" }], objectives: [{ id: "o_gisa", text: "기사환국", kind: "prompt", target: "p_gisa" }] },
-    { id: "s5", year: 1694, onEnter: [{ k: "prompt", prompt: "p_gapsul" }], objectives: [{ id: "o_gapsul", text: "갑술환국", kind: "prompt", target: "p_gapsul" }] },
-    { id: "s6", year: 1696, onEnter: [{ k: "prompt", prompt: "p_anyongbok" }], objectives: [{ id: "o_anyongbok", text: "울릉도의 어부", kind: "prompt", target: "p_anyongbok" }] },
-    { id: "s7", year: 1712, onEnter: [{ k: "prompt", prompt: "p_jeonggye" }], objectives: [{ id: "o_jeonggye", text: "백두산정계비", kind: "prompt", target: "p_jeonggye" }] },
+    { id: "s1", year: 1659, objectives: [{ id: "o_yesong", text: "예송", kind: "prompt", target: "p_yesong" }] },
+    { id: "s2", year: 1680, objectives: [{ id: "o_gyeongsin", text: "경신환국", kind: "prompt", target: "p_gyeongsin" }] },
+    { id: "s3", year: 1683, objectives: [{ id: "o_tangpyeong", text: "탕평의 말", kind: "prompt", target: "p_tangpyeong" }] },
+    { id: "s4", year: 1689, objectives: [{ id: "o_gisa", text: "기사환국", kind: "prompt", target: "p_gisa" }] },
+    { id: "s5", year: 1694, objectives: [{ id: "o_gapsul", text: "갑술환국", kind: "prompt", target: "p_gapsul" }] },
+    { id: "s6", year: 1696, objectives: [{ id: "o_anyongbok", text: "울릉도의 어부", kind: "prompt", target: "p_anyongbok" }] },
+    { id: "s7", year: 1712, objectives: [{ id: "o_jeonggye", text: "백두산정계비", kind: "prompt", target: "p_jeonggye" }] },
     {
       id: "s8",
       year: 1728,
@@ -401,8 +401,14 @@ export const ch12: ChapterDef = {
         "1728년 봄, 영조가 경종의 죽음에 관련되었다며 이인좌의 무리가 군사를 일으켰다.",
       ],
       objectives: [
+        { id: "o_ohmh", text: "충청도로 내려가 도순무사 오명항을 만난다", kind: "talk", target: "oh_myeonghang", site: "chungju", offset: [-2, 1] },
+      ],
+    },
+    {
+      id: "s8b",
+      year: 1728,
+      objectives: [
         { id: "o_muxin", text: "청주 길목에서 반란군을 막는다", kind: "battle", target: "b_muxin", site: "chungju", offset: [-3, 3] },
-        { id: "o_ohmh", text: "도순무사 오명항에게 보고한다", kind: "talk", target: "oh_myeonghang", site: "chungju", offset: [-2, 1], optional: true },
       ],
     },
     {
@@ -412,9 +418,9 @@ export const ch12: ChapterDef = {
         { id: "o_muxin_after", text: "박문수와 처분을 의논한다", kind: "talk", target: "park_munsu", site: "chungju", offset: [1, 2], prompt: "p_muxin_after" },
       ],
     },
-    { id: "s10", year: 1750, onEnter: [{ k: "prompt", prompt: "p_gyunyeok" }], objectives: [{ id: "o_gyunyeok", text: "균역법", kind: "prompt", target: "p_gyunyeok" }] },
-    { id: "s11", year: 1762, onEnter: [{ k: "prompt", prompt: "p_imo" }], objectives: [{ id: "o_imo", text: "임오년 여름", kind: "prompt", target: "p_imo" }] },
-    { id: "s12", year: 1775, onEnter: [{ k: "prompt", prompt: "p_1775" }], objectives: [{ id: "o_1775", text: "세손의 곁으로", kind: "prompt", target: "p_1775" }] },
+    { id: "s10", year: 1750, objectives: [{ id: "o_gyunyeok", text: "균역법", kind: "prompt", target: "p_gyunyeok" }] },
+    { id: "s11", year: 1762, objectives: [{ id: "o_imo", text: "임오년 여름", kind: "prompt", target: "p_imo" }] },
+    { id: "s12", year: 1775, objectives: [{ id: "o_1775", text: "세손의 곁으로", kind: "prompt", target: "p_1775" }] },
   ],
   worldEvent: {
     title: "균역과 구휼",

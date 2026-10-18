@@ -55,7 +55,7 @@ export const ch15: ChapterDef = {
     "1894년 겨울 농민군은 우금치에서 근대 화력에 크게 졌다. 1895년 10월 8일 일본 공사 미우라 고로의 주도로 왕비가 시해되었다(을미사변). 이에 분노한 유생들이 을미의병을 일으켰다.",
     "[해석] 차병 요청만 없었다면 일본의 개입을 모두 막을 수 있었다고 보기는 어렵다. 일본은 공사관 보호를 명분으로 독자 출병할 수도 있었다.",
   ],
-  hist: { defense: 20, finance: 20, people: 30, diplomacy: 25, reform: 35 },
+  hist: { defense: 22, finance: 20, people: 30, diplomacy: 25, reform: 35 },
   factions: [
     { id: "minssi", name: "민씨 정권", power: 55, lineage: "minssi", desc: "왕비 집안을 중심으로 한 집권 세력. 청에 기대는 일이 잦다." },
     { id: "onkon", name: "온건 개화 (김홍집·김윤식·어윤중)", power: 25, lineage: "gaehwa", desc: "옛 제도를 바탕으로 천천히 고쳐 가자는 관료들." },
@@ -419,7 +419,6 @@ export const ch15: ChapterDef = {
             { k: "branch", id: "B5", ok: false },
             { k: "point", point: "money", add: -400 },
             { k: "point", point: "virtue", add: 40 },
-            { k: "nation", key: "infiltration", add: 10 },
             { k: "toast", text: "한 달 치로는 열세 달의 굶주림을 메울 수 없었다.", tone: "bad" },
           ],
         },
@@ -429,7 +428,6 @@ export const ch15: ChapterDef = {
           hint: "B5 실패",
           effects: [
             { k: "branch", id: "B5", ok: false },
-            { k: "nation", key: "infiltration", add: 10 },
           ],
         },
       ],
@@ -501,7 +499,6 @@ export const ch15: ChapterDef = {
             { k: "branch", id: "B6", ok: false },
             { k: "favor", faction: "geupjin", add: 25 },
             { k: "align", faction: "geupjin" },
-            { k: "nation", key: "infiltration", add: 8 },
             { k: "purge", spec: { id: "ch15_gapsin", intensity: 40, winner: "minssi", loser: "geupjin" } },
           ],
         },
@@ -524,7 +521,6 @@ export const ch15: ChapterDef = {
               ],
               else: [
                 { k: "branch", id: "B6", ok: false },
-                { k: "nation", key: "infiltration", add: 8 },
                 { k: "toast", text: "김옥균은 고개를 저었다. '그대의 연합에는 힘이 없소.'", tone: "bad" },
               ],
             },
@@ -538,8 +534,8 @@ export const ch15: ChapterDef = {
             { k: "branch", id: "B6", ok: false },
             { k: "favor", faction: "minssi", add: 20 },
             { k: "point", point: "honor", add: -20 },
-            { k: "flag", flag: "turncoat_gapsin" },
-            { k: "nation", key: "infiltration", add: 8 },
+            { k: "flag", flag: "turncoat", value: true },
+            { k: "flag", flag: "ch15_informed_gapsin" },
           ],
         },
       ],
@@ -720,11 +716,17 @@ export const ch15: ChapterDef = {
         {
           id: "neutral",
           text: "열강의 보장을 받는 중립을 국책으로 삼으십시오.",
-          hint: "B7 조건: 외교 50 · 효과는 국방이 받쳐야 산다",
+          hint: "B7 조건: 외교 50 (국방 40이면 외교 45) · 효과는 국방이 받쳐야 산다",
           effects: [
             {
               k: "if",
-              cond: { k: "nation", key: "diplomacy", min: 50 },
+              cond: {
+                k: "any",
+                of: [
+                  { k: "nation", key: "diplomacy", min: 50 },
+                  { k: "all", of: [{ k: "nation", key: "diplomacy", min: 45 }, { k: "nation", key: "defense", min: 40 }] },
+                ],
+              },
               then: [
                 { k: "branch", id: "B7", ok: true },
                 { k: "nation", key: "diplomacy", add: 3 },
@@ -831,7 +833,6 @@ export const ch15: ChapterDef = {
               ],
               else: [
                 { k: "branch", id: "B8", ok: false },
-                { k: "nation", key: "infiltration", add: 20 },
                 { k: "toast", text: "회의는 이미 청병 요청으로 기울어 있었다. 아산에 청군이, 인천에 일본군이 들어왔다.", tone: "bad" },
               ],
             },
@@ -843,7 +844,6 @@ export const ch15: ChapterDef = {
           hint: "B8 실패 · 침투도 +20",
           effects: [
             { k: "branch", id: "B8", ok: false },
-            { k: "nation", key: "infiltration", add: 20 },
             { k: "favor", faction: "minssi", add: 10 },
           ],
         },
@@ -1032,11 +1032,9 @@ export const ch15: ChapterDef = {
     {
       id: "s4",
       year: 1882,
-      onEnter: [{ k: "if", cond: B5_OK, then: [{ k: "prompt", prompt: "p_b5_ok" }] }],
       objectives: [
         { id: "o_b5_ok", text: "조용한 장마철", kind: "prompt", target: "p_b5_ok", requires: B5_OK },
         { id: "o_imo_escape", text: "궁인들을 데리고 동쪽 문으로 빠져나간다", kind: "battle", target: "b_imo_escape", site: "hanyang", offset: [5, 2], requires: not(B5_OK) },
-        { id: "o_b5_fail", text: "임오년의 결과", kind: "prompt", target: "p_b5_fail", requires: not(B5_OK) },
       ],
     },
     {
@@ -1058,7 +1056,6 @@ export const ch15: ChapterDef = {
     {
       id: "s7",
       year: 1885,
-      onEnter: [{ k: "if", cond: B6_OK, then: [{ k: "prompt", prompt: "p_gapsin_ok" }], else: [{ k: "prompt", prompt: "p_gapsin_fail" }] }],
       objectives: [
         { id: "o_gapsin_ok", text: "연회의 뒤", kind: "prompt", target: "p_gapsin_ok", requires: B6_OK },
         { id: "o_gapsin_fail", text: "사흘의 뒤", kind: "prompt", target: "p_gapsin_fail", requires: not(B6_OK) },
@@ -1117,17 +1114,14 @@ export const ch15: ChapterDef = {
     {
       id: "s13",
       year: 1894,
-      onEnter: [{ k: "if", cond: B8_OK, then: [{ k: "prompt", prompt: "p_b8_ok" }] }],
       objectives: [
         { id: "o_b8_ok", text: "고요한 7월", kind: "prompt", target: "p_b8_ok", requires: B8_OK },
         { id: "o_gyeongbok", text: "경복궁에서 궁인들이 피할 시간을 번다 (70초)", kind: "battle", target: "b_gyeongbok", site: "hanyang", offset: [0, -4], requires: not(B8_OK) },
-        { id: "o_gyeongbok_after", text: "점령된 궁궐", kind: "prompt", target: "p_gyeongbok", requires: not(B8_OK) },
       ],
     },
     {
       id: "s14",
       year: 1894,
-      onEnter: [{ k: "if", cond: B8_OK, then: [{ k: "prompt", prompt: "p_jipgangso" }], else: [{ k: "prompt", prompt: "p_ugeumchi" }] }],
       objectives: [
         { id: "o_jipgangso", text: "집강소의 가을", kind: "prompt", target: "p_jipgangso", requires: B8_OK },
         { id: "o_ugeumchi", text: "우금치", kind: "prompt", target: "p_ugeumchi", requires: not(B8_OK) },
@@ -1136,7 +1130,6 @@ export const ch15: ChapterDef = {
     {
       id: "s15",
       year: 1895,
-      onEnter: [{ k: "prompt", prompt: "p_eulmi" }],
       objectives: [{ id: "o_eulmi", text: "1895년 10월 8일", kind: "prompt", target: "p_eulmi" }],
     },
     {

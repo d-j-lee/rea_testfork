@@ -210,6 +210,7 @@ export function createUi(deps: UiDeps): Ui {
     root.classList.toggle("in-game", inGame && !ending);
     root.classList.toggle("modal-open", prompt.open || years.open || menu.open || !!card || ending || !!hud.drawer);
     root.classList.toggle("card-open", !!card);
+    root.dataset.drawer = hud.drawer ?? "";
     if (blocking !== lastBlocking) {
       lastBlocking = blocking;
       input.setEnabled(!blocking);

@@ -30,11 +30,11 @@ export const ch01: ChapterDef = {
   ],
   hist: { defense: 40, finance: 35, people: 35, diplomacy: 40, reform: 25 },
   factions: [
-    { id: "court", name: "공민왕 조정", power: 50, desc: "반원 개혁을 밀던 왕의 조정. 도읍을 잃고 남쪽으로 피했다." },
+    { id: "gongmin", name: "공민왕 조정", power: 50, desc: "반원 개혁을 밀던 왕의 조정. 도읍을 잃고 남쪽으로 피했다." },
     { id: "yi", name: "이성계파", power: 25, desc: "동북면 상만호 이성계와 그의 친병. 활과 기병에 능하다." },
     { id: "choe", name: "최영파", power: 40, desc: "개경 중앙군의 강직한 장수 최영을 따르는 무장들." },
   ],
-  ruling: "court",
+  ruling: "gongmin",
   npcs: [
     // s1 — 불타는 개경
     {
@@ -455,7 +455,7 @@ export const ch01: ChapterDef = {
         },
         {
           id: "thank",
-          text: "\"네가 끌어 주지 않았으면 죽었을 거다.\" 손을 맞잡는다",
+          text: "\"다음 국밥은 내가 산다. 꼭 살아 있어라.\" 손을 맞잡는다",
           hint: "강휘와의 인연 ▲",
           effects: [{ k: "bond", npc: "kang_hwi", add: 15 }],
         },

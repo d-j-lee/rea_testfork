@@ -29,7 +29,7 @@ export const ch10: ChapterDef = {
     "[불확실] 명량에 참가한 일본 함선 수는 『난중일기』의 133척과 후대 기록의 330척 등으로 차이가 있다.",
     "[해석] 이순신 하옥에는 일본 측 정보 공작과 조정 안의 갈등이 함께 작용했다는 해석이 일반적이다.",
   ],
-  hist: { defense: 30, finance: 20, people: 30, diplomacy: 40, reform: 30 },
+  hist: { defense: 30, finance: 26, people: 30, diplomacy: 42, reform: 36 },
   factions: [
     { id: "seonjo", name: "선조 조정", power: 60, desc: "전란 중의 조정. 장수들을 의심의 눈으로 본다." },
     { id: "namin", name: "남인 (류성룡)", power: 40, lineage: "namin", desc: "이순신을 천거한 류성룡의 무리. 이 해 말 류성룡은 파직된다." },
@@ -197,20 +197,8 @@ export const ch10: ChapterDef = {
         { from: "sea", enemies: [{ enemy: "japanese_musket", count: 4, level: 31 }, { enemy: "japanese_marine", count: 2, level: 31 }], line: "조총 연기가 해협을 덮는다. 뒤쪽 배들이 머뭇거린다." },
         { from: "sea", enemies: [{ enemy: "japanese_marine", count: 6, level: 32 }], line: "통제사가 초요기를 올렸다. 안위의 배가 앞으로 나온다!" },
         { from: "sea", enemies: [{ enemy: "japanese_marine", count: 4, level: 32 }, { enemy: "japanese_musket", count: 3, level: 32 }], line: "물이 돈다! 조류가 몸을 뒤집었다 — 적선끼리 부딪힌다!" },
+        { from: "sea", enemies: [{ enemy: "boss_japanese_general", count: 1, level: 32 }, { enemy: "japanese_marine", count: 2, level: 32 }], line: "적 선봉선의 장수가 대장선에 뛰어오른다!" },
       ],
-      boss: {
-        enemy: "boss_japanese_general",
-        name: "왜군 선봉 장수",
-        title: "(가상)",
-        level: 32,
-        hpScale: 1.2,
-        phases: [
-          { at: 1, mechanic: "charge", line: "대장선에 올라라!" },
-          { at: 0.5, mechanic: "volley", line: "쏘아라, 모두 쏘아라!" },
-          { at: 0.25, mechanic: "frenzy", line: "물러서지 마라, 물이…!" },
-        ],
-        finisher: "대장선의 포가 적 선봉선을 꿰뚫는다. 결정적 지휘는 이순신의 것이었다.",
-      },
       allies: [
         { sprite: "navy_joseon", name: "대장선 격군", count: 6 },
         { sprite: "archer_joseon", name: "사부", count: 4 },
@@ -225,6 +213,7 @@ export const ch10: ChapterDef = {
         { k: "bond", npc: "yi_sunsin", add: 20 },
         { k: "worldEvent", add: 40 },
         { k: "chronicle", text: "1597년 9월 16일, 울돌목. 물이 몸을 뒤집는 것을 보았다. 열세 척이 버텼다." },
+        { k: "toast", text: "대장선의 포가 적 선봉선을 꿰뚫었다. 결정적 지휘는 이순신의 것이었다.", tone: "epic" },
       ],
       defeat: [{ k: "toast", text: "갑판이 무너졌다. 격군이 노를 다시 잡는다 — 물때는 아직 오지 않았다.", tone: "warn" }],
     },
@@ -492,7 +481,6 @@ export const ch10: ChapterDef = {
     {
       id: "s2",
       year: 1597,
-      onEnter: [{ k: "prompt", prompt: "p_release" }],
       objectives: [{ id: "o_release", text: "이순신의 석방 소식을 듣는다", kind: "prompt", target: "p_release" }],
     },
     {
@@ -510,7 +498,6 @@ export const ch10: ChapterDef = {
         "8월, 남원성이 함락되었다. 9월 7일 직산에서 명군이 적의 북상을 막았다.",
         "통제사는 회령포에서 남은 배를 거두어 서쪽 바다로 갔다.",
       ],
-      onEnter: [{ k: "prompt", prompt: "p_after_chilcheon" }],
       objectives: [
         { id: "o_after", text: "남은 배의 소식을 듣는다", kind: "prompt", target: "p_after_chilcheon" },
         { id: "o_reach_myeongnyang", text: "울돌목으로 간다", kind: "reach", target: "myeongnyang", site: "myeongnyang" },
@@ -567,13 +554,11 @@ export const ch10: ChapterDef = {
     {
       id: "s10",
       year: 1598,
-      onEnter: [{ k: "prompt", prompt: "p_admiral_falls" }],
       objectives: [{ id: "o_falls", text: "관음포의 아침", kind: "prompt", target: "p_admiral_falls" }],
     },
     {
       id: "s11",
       year: 1598,
-      onEnter: [{ k: "prompt", prompt: "p_after_war" }],
       objectives: [{ id: "o_after_war", text: "전쟁이 끝난 땅을 본다", kind: "prompt", target: "p_after_war" }],
     },
   ],

@@ -381,7 +381,7 @@ export const ch08: ChapterDef = {
       body: [
         "백의종군했던 둔전관이 전라좌수사가 되었다. 좌수영 선소에서 낯선 배가 모습을 드러내고 있다.",
         "등에 판자를 덮은 배. 갑판 위로는 아무도 올라설 수 없게 만들었다고 한다.",
-        "\"녹둔도에서 본 얼굴이로군. 아니, 그대의 아들인가?\" 그가 드물게 웃었다. \"어느 쪽이든 좋소. 활과 화포를 아는 사람이 필요하오.\"",
+        "\"녹둔도에서 본 얼굴이로군. 사 년이 지났는데 하나도 변하지 않았소.\" 그가 드물게 웃었다. \"활과 화포를 아는 사람이 필요하오.\"",
       ],
       options: [
         {
@@ -390,6 +390,7 @@ export const ch08: ChapterDef = {
           hint: "이순신과의 인연 ▲ · 국방 ▲ · 전쟁 대비 ▲",
           effects: [
             { k: "bond", npc: "yi_sunsin", add: 20 },
+            { k: "suspicion", add: 2 },
             { k: "nation", key: "defense", add: 2 },
             { k: "flag", flag: "prep_navy", value: true },
             { k: "worldEvent", add: 40 },

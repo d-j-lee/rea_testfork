@@ -333,7 +333,7 @@ export const ch03: ChapterDef = {
         { k: "favor", faction: "yeoksung", add: 5 },
         { k: "nation", key: "reform", add: 2 },
         { k: "nation", key: "people", add: 1 },
-        { k: "chronicle", text: "1390년 9월, 개경 시가의 불길이 사흘을 탔다. 빼앗긴 땅의 문서가 재가 되었다." },
+        { k: "chronicle", text: "1390년 9월, 개경 시가의 불길이 여러 날 꺼지지 않았다. 빼앗긴 땅의 문서가 재가 되었다." },
         { k: "toast", text: "공사 전적이 모두 재가 되었다", tone: "good" },
       ],
       defeat: [{ k: "toast", text: "문서 일부를 빼앗겼다. 다시 지킨다.", tone: "warn" }],
@@ -609,7 +609,7 @@ export const ch03: ChapterDef = {
       body: [
         "1392년 7월 17일, 이성계가 수창궁에서 왕위에 올랐다. 고려 사백칠십여 년이 그날 끝났다.",
         "공신도감의 마당에 녹권이 펼쳐진다. 공을 세운 이들의 이름이 하나씩 불린다.",
-        "네 이름이 불렸다. 서른한 해 전 노인성 아래서 죽어 가던 소년의 이름이.",
+        "네 이름이 불렸다. 서른한 해 전 노인성 아래서 죽어 가던 열여섯 아이의 이름이.",
       ],
       options: [
         {

@@ -29,7 +29,7 @@ export const ch11: ChapterDef = {
     "소현세자·봉림대군과 척화파 신하들이 심양으로 끌려갔고, 많은 백성이 포로가 되었다. [불확실] 포로 수는 수만에서 수십만까지 추정이 엇갈린다.",
     "[해석] 광해군의 외교를 실리적 중립으로 볼지, 반정의 명분을 어떻게 볼지는 지금도 평가가 갈린다.",
   ],
-  hist: { defense: 30, finance: 25, people: 35, diplomacy: 35, reform: 30 },
+  hist: { defense: 30, finance: 28, people: 33, diplomacy: 36, reform: 36 },
   factions: [
     { id: "daebuk", name: "대북 (광해군 정권)", power: 55, lineage: "bugin", desc: "광해군을 받드는 북인 강경파. 명과 후금 사이에서 줄타기를 한다." },
     { id: "seoin", name: "서인 (반정 세력)", power: 45, lineage: "seoin", desc: "의리와 명분을 앞세운 무리. 1623년 반정 뒤 정권을 잡는다." },
@@ -157,7 +157,7 @@ export const ch11: ChapterDef = {
       site: "hanyang",
       offset: [-4, -3],
       radius: 7,
-      kind: "waves",
+      kind: "boss",
       music: "war",
       weather: "smoke",
       intro: [
@@ -214,19 +214,8 @@ export const ch11: ChapterDef = {
         { at: 30, from: "east", enemies: [{ enemy: "qing_archer", count: 4, level: 33 }, { enemy: "qing_rider", count: 2, level: 33 }], line: "화살이 화톳불을 노린다! 방패를 세워라." },
         { at: 65, from: "south", enemies: [{ enemy: "qing_armored", count: 3, level: 34 }], line: "철갑병이다. 느리지만 쓰러지지 않는다 — 다리를 노려라." },
         { at: 100, from: "around", enemies: [{ enemy: "qing_rider", count: 4, level: 34 }, { enemy: "qing_archer", count: 3, level: 34 }], line: "사방에서 온다. 불을 지켜라!" },
+        { at: 120, from: "north", enemies: [{ enemy: "boss_qing_general", count: 1, level: 34 }, { enemy: "qing_rider", count: 2, level: 34 }], line: "기병대장이 직접 돌진한다 — 붉은 선을 피하라!" },
       ],
-      boss: {
-        enemy: "boss_qing_general",
-        name: "청 정예 기병대장",
-        title: "(가상)",
-        level: 34,
-        hpScale: 1.2,
-        phases: [
-          { at: 1, mechanic: "charge", line: "성문을 열어라, 아니면 얼어 죽어라!" },
-          { at: 0.6, mechanic: "charge", line: "다시 — 돌진!" },
-          { at: 0.3, mechanic: "summon", summon: { enemy: "qing_rider", count: 3 }, line: "기병대, 나를 따르라!" },
-        ],
-      },
       allies: [
         { sprite: "soldier_joseon", name: "수어청 군사", count: 6 },
         { sprite: "archer_joseon", name: "성첩 사수", count: 3 },
@@ -634,7 +623,6 @@ export const ch11: ChapterDef = {
     {
       id: "s5",
       year: 1636,
-      onEnter: [{ k: "prompt", prompt: "p_two_wars" }],
       objectives: [
         { id: "o_two_wars", text: "북쪽의 소식을 듣는다", kind: "prompt", target: "p_two_wars" },
         { id: "o_reach_namhan", text: "남한산성으로 간다", kind: "reach", target: "namhansanseong", site: "namhansanseong" },
@@ -648,9 +636,16 @@ export const ch11: ChapterDef = {
         "산성은 이미 눈에 덮였다.",
       ],
       objectives: [
-        { id: "o_namhan", text: "화톳불을 지키며 성첩을 버틴다", kind: "battle", target: "b_namhan", site: "namhansanseong", offset: [0, 2] },
-        { id: "o_grain", text: "군량 담당 군관을 돕는다", kind: "talk", target: "grain_officer", site: "namhansanseong", offset: [1, 3], prompt: "p_grain", optional: true },
+        { id: "o_grain", text: "군량 담당 군관을 돕는다", kind: "talk", target: "grain_officer", site: "namhansanseong", offset: [1, 3], prompt: "p_grain" },
         { id: "o_monk", text: "성을 쌓은 승군과 이야기한다", kind: "talk", target: "mountain_monk", site: "namhansanseong", offset: [-3, 2], optional: true },
+      ],
+    },
+    {
+      id: "s6b",
+      year: 1636,
+      narration: ["밤이 깊었다. 북문 쪽 눈보라 너머로 말발굽 소리가 들린다."],
+      objectives: [
+        { id: "o_namhan", text: "화톳불을 지키며 성첩을 버틴다", kind: "battle", target: "b_namhan", site: "namhansanseong", offset: [0, 2] },
       ],
     },
     {
@@ -668,13 +663,11 @@ export const ch11: ChapterDef = {
     {
       id: "s8",
       year: 1637,
-      onEnter: [{ k: "prompt", prompt: "p_hwajeon" }],
       objectives: [{ id: "o_hwajeon", text: "어전에서 말한다", kind: "prompt", target: "p_hwajeon" }],
     },
     {
       id: "s9",
       year: 1637,
-      onEnter: [{ k: "prompt", prompt: "p_samjeondo" }],
       objectives: [{ id: "o_samjeondo", text: "삼전도", kind: "prompt", target: "p_samjeondo" }],
     },
     {
@@ -688,13 +681,11 @@ export const ch11: ChapterDef = {
     {
       id: "s11",
       year: 1645,
-      onEnter: [{ k: "prompt", prompt: "p_sohyeon" }],
       objectives: [{ id: "o_sohyeon", text: "세자의 귀국", kind: "prompt", target: "p_sohyeon" }],
     },
     {
       id: "s12",
       year: 1658,
-      onEnter: [{ k: "prompt", prompt: "p_naseon" }],
       objectives: [{ id: "o_naseon", text: "북쪽 강의 소식", kind: "prompt", target: "p_naseon" }],
     },
   ],

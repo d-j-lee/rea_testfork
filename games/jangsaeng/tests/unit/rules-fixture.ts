@@ -35,42 +35,45 @@ interface Spec {
   unlocks?: readonly string[];
 }
 
+const goryeo: FactionDef = { id: "court_goryeo", name: "고려 조정", power: 60 };
+const yi: FactionDef = { id: "yi", name: "이성계파", power: 40 };
+const choe: FactionDef = { id: "choe", name: "최영파", power: 60 };
+
+/** Years, levels and §5.6.2 baselines; courts and factions from §5.5.2. */
 const SPECS: readonly Spec[] = [
+  { id: "ch01", years: [1361, 1364], level: [1, 5], hist: hist(40, 35, 35, 40, 25), factions: [goryeo, yi, choe], ruling: "court_goryeo" },
   {
-    id: "ch01", years: [1361, 1364], level: [1, 5], hist: hist(40, 35, 35, 40, 25),
-    factions: [{ id: "yi", name: "이성계파", power: 40 }, { id: "choe", name: "최영파", power: 60 }],
-    ruling: "choe",
+    id: "ch02", years: [1365, 1387], level: [5, 10], hist: hist(42, 33, 33, 38, 30),
+    factions: [goryeo, yi, choe], ruling: "court_goryeo", battles: [HWANGSAN],
   },
   {
-    id: "ch02", years: [1365, 1387], level: [5, 10], hist: hist(38, 33, 32, 40, 26),
-    factions: [{ id: "yi", name: "이성계파", power: 50 }, { id: "choe", name: "최영파", power: 60 }],
-    ruling: "choe", battles: [HWANGSAN],
+    id: "ch03", years: [1388, 1392], level: [10, 14], hist: hist(45, 30, 30, 35, 35),
+    factions: [goryeo, yi, choe, { id: "radical", name: "역성혁명파", power: 50 }], ruling: "court_goryeo",
   },
   {
-    id: "ch03", years: [1388, 1392], level: [10, 14], hist: hist(42, 34, 36, 38, 30),
-    factions: [{ id: "founders", name: "개국 세력", power: 70, lineage: "yi" }],
-    ruling: "founders",
-  },
-  {
-    id: "ch04", years: [1393, 1418], level: [14, 16], hist: hist(45, 40, 40, 42, 32),
+    id: "ch04", years: [1393, 1418], level: [14, 16], hist: hist(50, 40, 40, 40, 45),
     factions: [
-      { id: "jeong", name: "정도전계", power: 50, lineage: "founders" },
-      { id: "bangwon", name: "이방원계", power: 50, lineage: "founders" },
+      { id: "court_ch04", name: "태조·태종 조정", power: 70, lineage: "court_goryeo" },
+      { id: "jeongdojeon", name: "정도전계", power: 50, lineage: "radical" },
+      { id: "bangwon", name: "이방원계", power: 50, lineage: "yi" },
     ],
-    ruling: "bangwon",
+    ruling: "court_ch04",
   },
-  { id: "ch05", years: [1419, 1452], level: [16, 19], hist: hist(55, 50, 50, 50, 45), ruling: "court" },
-  { id: "ch06", years: [1453, 1468], level: [19, 21], hist: hist(50, 45, 42, 45, 38) },
-  { id: "ch07", years: [1469, 1574], level: [21, 23], hist: hist(40, 40, 38, 42, 34) },
-  { id: "ch08", years: [1575, 1591], level: [23, 25], hist: hist(30, 32, 34, 38, 30) },
-  { id: "ch09", years: [1592, 1593], level: [25, 30], hist: hist(22, 25, 30, 32, 28), battles: [HWANGSAN] },
-  { id: "ch10", years: [1597, 1598], level: [30, 32], hist: hist(25, 20, 28, 30, 28) },
-  { id: "ch11", years: [1608, 1658], level: [32, 34], hist: hist(30, 30, 30, 30, 30) },
-  { id: "ch12", years: [1659, 1775], level: [34, 35], hist: hist(35, 35, 35, 32, 32) },
-  { id: "ch13", years: [1776, 1862], level: [35, 36], hist: hist(40, 38, 36, 34, 40) },
-  { id: "ch14", years: [1863, 1881], level: [36, 37], hist: hist(30, 28, 32, 28, 34) },
-  { id: "ch15", years: [1882, 1895], level: [37, 39], hist: hist(25, 24, 35, 26, 36) },
-  { id: "ch16", years: [1896, 1910], level: [39, 40], hist: hist(20, 20, 35, 25, 35) },
+  {
+    id: "ch05", years: [1419, 1452], level: [16, 19], hist: hist(55, 50, 50, 50, 55),
+    factions: [{ id: "court_ch05", name: "세종 조정", power: 80, lineage: "court_ch04" }], ruling: "court_ch05",
+  },
+  { id: "ch06", years: [1453, 1468], level: [19, 21], hist: hist(50, 50, 45, 50, 50), ruling: "court_ch06" },
+  { id: "ch07", years: [1469, 1574], level: [21, 23], hist: hist(45, 50, 45, 50, 45), ruling: "court_ch07" },
+  { id: "ch08", years: [1575, 1591], level: [23, 25], hist: hist(35, 40, 40, 45, 40), ruling: "court_seonjo" },
+  { id: "ch09", years: [1592, 1593], level: [25, 30], hist: hist(30, 35, 40, 45, 40), ruling: "court_seonjo", battles: [HWANGSAN] },
+  { id: "ch10", years: [1597, 1598], level: [30, 32], hist: hist(35, 25, 35, 45, 40), ruling: "court_seonjo" },
+  { id: "ch11", years: [1608, 1658], level: [32, 34], hist: hist(35, 30, 35, 40, 40), ruling: "court_ch11" },
+  { id: "ch12", years: [1659, 1775], level: [34, 35], hist: hist(40, 35, 40, 35, 40), ruling: "court_ch12" },
+  { id: "ch13", years: [1776, 1862], level: [35, 36], hist: hist(45, 40, 45, 35, 45), ruling: "court_ch13" },
+  { id: "ch14", years: [1863, 1881], level: [36, 37], hist: hist(30, 25, 30, 30, 30), ruling: "court_ch14" },
+  { id: "ch15", years: [1882, 1895], level: [37, 39], hist: hist(25, 20, 30, 25, 35), ruling: "court_ch15" },
+  { id: "ch16", years: [1896, 1910], level: [39, 40], hist: hist(20, 20, 35, 25, 35), ruling: "imperial" },
 ];
 
 function chapterFrom(spec: Spec, order: number): ChapterDef {

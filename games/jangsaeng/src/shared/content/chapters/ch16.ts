@@ -25,7 +25,6 @@ function speech(
   stat: "wit" | "tact" | "spirit",
   base: number,
   cheer: string,
-  next: string,
 ): Effect[] {
   const flag = `ch16_b9_speech${n}`;
   return [
@@ -46,16 +45,14 @@ function speech(
         { k: "toast", text: "군중이 웅성거린다. 말이 가슴에 닿지 않았다.", tone: "info" },
       ],
     },
-    { k: "prompt", prompt: next },
   ];
 }
 /** A wrong speech: it costs the crowd and records the speech as failed. */
-function misstep(n: 1 | 2 | 3, text: string, next: string): Effect[] {
+function misstep(n: 1 | 2 | 3, text: string): Effect[] {
   return [
     { k: "flag", flag: `ch16_b9_speech${n}`, value: false },
     { k: "nation", key: "people", add: -2 },
     { k: "toast", text, tone: "bad" },
-    { k: "prompt", prompt: next },
   ];
 }
 
@@ -243,7 +240,7 @@ export const ch16: ChapterDef = {
       fights: true,
       talk: ["양반이 아니어도 나라는 지킬 수 있소.", "태백산 골짜기는 우리 집 마당이오."],
       fromStep: "s13",
-      untilStep: "s13",
+      untilStep: "s13b",
     },
     {
       id: "seo_sangdon",
@@ -266,7 +263,7 @@ export const ch16: ChapterDef = {
       offset: [-1, 4],
       talk: ["무기고 열쇠는 내 허리에 있소.", "해산식에 맨손으로 나오라 하오."],
       fromStep: "s15",
-      untilStep: "s15",
+      untilStep: "s15b",
     },
     {
       id: "heo_wi",
@@ -346,6 +343,7 @@ export const ch16: ChapterDef = {
       allies: [{ sprite: "soldier_empire", name: "시위대", count: 6 }],
       victory: [
         { k: "nation", key: "defense", add: 3 },
+        { k: "nation", key: "diplomacy", add: 2 },
         { k: "point", point: "honor", add: 10 },
         { k: "exp", add: 2800 },
         { k: "prompt", prompt: "p_neutral_ok" },
@@ -499,7 +497,7 @@ export const ch16: ChapterDef = {
       site: "hanyang",
       offset: [6, 1],
       radius: 9,
-      kind: "waves",
+      kind: "boss",
       great: true,
       scaled: true,
       music: "resistance",
@@ -537,7 +535,7 @@ export const ch16: ChapterDef = {
       site: "hanyang",
       offset: [6, 1],
       radius: 9,
-      kind: "waves",
+      kind: "boss",
       great: true,
       scaled: true,
       music: "resistance",
@@ -655,7 +653,7 @@ export const ch16: ChapterDef = {
           id: "up",
           text: "단상에 오르겠소.",
           hint: "연설 세 번 · 둘 이상 성공하면 B9 조건",
-          effects: [{ k: "prompt", prompt: "p_b9_speech1" }],
+          effects: [{ k: "point", point: "fame", add: 2 }],
         },
       ],
     },
@@ -672,19 +670,19 @@ export const ch16: ChapterDef = {
           id: "gate",
           text: "\"절영도는 부산의 문입니다. 땅 한 뼘을 빌려주면 문을 통째로 내주는 것입니다.\"",
           hint: "지략 판정",
-          effects: speech(1, "ch16_b9_s1_wit", "wit", 35, "\"옳소!\" 함성이 종로를 덮었다.", "p_b9_speech2"),
+          effects: speech(1, "ch16_b9_s1_wit", "wit", 35, "\"옳소!\" 함성이 종로를 덮었다."),
         },
         {
           id: "fair",
           text: "\"러시아만이 아닙니다. 어느 나라에도 이 땅을 빌려주지 맙시다.\"",
           hint: "처세 판정",
-          effects: speech(1, "ch16_b9_s1_tact", "tact", 40, "어깨를 맞댄 사람들이 고개를 끄덕였다.", "p_b9_speech2"),
+          effects: speech(1, "ch16_b9_s1_tact", "tact", 40, "어깨를 맞댄 사람들이 고개를 끄덕였다."),
         },
         {
           id: "burn",
           text: "\"공사관으로 몰려갑시다!\"",
           hint: "위험",
-          effects: misstep(1, "군중이 흩어지고 순검이 몰려왔다. 폭력은 반대파에게 구실을 주었다.", "p_b9_speech2"),
+          effects: misstep(1, "군중이 흩어지고 순검이 몰려왔다. 폭력은 반대파에게 구실을 주었다."),
         },
       ],
     },
@@ -701,19 +699,19 @@ export const ch16: ChapterDef = {
           id: "list",
           text: "넘어간 광산과 철도의 이름을 하나하나 읽어 내려간다.",
           hint: "지략 판정",
-          effects: speech(2, "ch16_b9_s2_wit", "wit", 35, "이름 하나가 불릴 때마다 탄식이 터졌다.", "p_b9_speech3"),
+          effects: speech(2, "ch16_b9_s2_wit", "wit", 35, "이름 하나가 불릴 때마다 탄식이 터졌다."),
         },
         {
           id: "story",
           text: "\"임진년에 의병은 제 땅의 길을 알아서 이겼습니다. 이제 그 길을 남이 놓고 있습니다.\"",
           hint: "기백 판정",
-          effects: speech(2, "ch16_b9_s2_spirit", "spirit", 35, "늙은이들이 눈시울을 붉혔다.", "p_b9_speech3"),
+          effects: speech(2, "ch16_b9_s2_spirit", "spirit", 35, "늙은이들이 눈시울을 붉혔다."),
         },
         {
           id: "throne",
           text: "\"이권 따위는 상관없습니다. 황제만 지키면 됩니다.\"",
           hint: "위험",
-          effects: misstep(2, "군중이 등을 돌렸다. '그러면 우리는 무엇이오?'", "p_b9_speech3"),
+          effects: misstep(2, "군중이 등을 돌렸다. '그러면 우리는 무엇이오?'"),
         },
       ],
     },
@@ -730,19 +728,19 @@ export const ch16: ChapterDef = {
           id: "council",
           text: "\"중추원의 절반을 백성이 뽑게 합시다. 황제의 권한과 다투자는 것이 아닙니다.\"",
           hint: "지략 판정",
-          effects: speech(3, "ch16_b9_s3_wit", "wit", 35, "대신석에서도 고개를 끄덕이는 이가 있었다.", "p_b9_result"),
+          effects: speech(3, "ch16_b9_s3_wit", "wit", 35, "대신석에서도 고개를 끄덕이는 이가 있었다."),
         },
         {
           id: "together",
           text: "\"오백 년 동안 이 나라를 지킨 것은 이름 없는 사람들이었습니다.\"",
           hint: "기백 판정",
-          effects: speech(3, "ch16_b9_s3_spirit", "spirit", 35, "긴 침묵 뒤에 박수가 쏟아졌다.", "p_b9_result"),
+          effects: speech(3, "ch16_b9_s3_spirit", "spirit", 35, "긴 침묵 뒤에 박수가 쏟아졌다."),
         },
         {
           id: "republic",
           text: "\"황제가 없는 나라를 만듭시다.\"",
           hint: "위험",
-          effects: misstep(3, "그 말은 그대로 반대파의 무기가 되었다. '공화정을 꾀한다'는 익명서가 돌았다.", "p_b9_result"),
+          effects: misstep(3, "그 말은 그대로 반대파의 무기가 되었다. '공화정을 꾀한다'는 익명서가 돌았다."),
         },
       ],
     },
@@ -776,7 +774,6 @@ export const ch16: ChapterDef = {
               ],
               else: [
                 { k: "branch", id: "B9", ok: false },
-                { k: "nation", key: "infiltration", add: 8 },
                 { k: "toast", text: "B9 실패 — 협회는 해산되었다. 종로의 함성은 끊겼다.", tone: "bad" },
               ],
             },
@@ -788,7 +785,6 @@ export const ch16: ChapterDef = {
           hint: "B9 실패 · 황실 총애 ▲ · 명예 ▼",
           effects: [
             { k: "branch", id: "B9", ok: false },
-            { k: "nation", key: "infiltration", add: 8 },
             { k: "favor", faction: "hwangsil", add: 15 },
             { k: "point", point: "honor", add: -10 },
           ],
@@ -823,7 +819,8 @@ export const ch16: ChapterDef = {
             { k: "point", point: "money", add: 1500 },
             { k: "point", point: "honor", add: -20 },
             { k: "nation", key: "infiltration", add: 3 },
-            { k: "flag", flag: "turncoat_concession" },
+            { k: "flag", flag: "turncoat", value: true },
+            { k: "flag", flag: "ch16_sold_ledger" },
           ],
         },
       ],
@@ -860,7 +857,6 @@ export const ch16: ChapterDef = {
             { k: "branch", id: "B10", ok: false },
             { k: "nation", key: "defense", add: 3 },
             { k: "nation", key: "finance", add: -3 },
-            { k: "nation", key: "infiltration", add: 7 },
           ],
         },
         {
@@ -870,7 +866,6 @@ export const ch16: ChapterDef = {
           effects: [
             { k: "branch", id: "B10", ok: false },
             { k: "favor", faction: "hwangsil", add: 10 },
-            { k: "nation", key: "infiltration", add: 7 },
           ],
         },
       ],
@@ -900,7 +895,6 @@ export const ch16: ChapterDef = {
               ],
               else: [
                 { k: "branch", id: "B11", ok: false },
-                { k: "nation", key: "infiltration", add: 15 },
                 { k: "toast", text: "B11 실패 — 지킬 힘도 보장도 없는 중립이었다. 일본군이 서울에 들어왔다.", tone: "bad" },
               ],
             },
@@ -912,7 +906,6 @@ export const ch16: ChapterDef = {
           hint: "B11 실패 · 명예 ▼",
           effects: [
             { k: "branch", id: "B11", ok: false },
-            { k: "nation", key: "infiltration", add: 15 },
             { k: "point", point: "honor", add: -10 },
           ],
         },
@@ -958,7 +951,8 @@ export const ch16: ChapterDef = {
             { k: "point", point: "money", add: 2000 },
             { k: "point", point: "honor", add: -40 },
             { k: "favor", faction: "chinil", add: 30 },
-            { k: "flag", flag: "turncoat_eulsa" },
+            { k: "flag", flag: "turncoat", value: true },
+            { k: "flag", flag: "ch16_took_bribe" },
           ],
         },
       ],
@@ -1002,7 +996,6 @@ export const ch16: ChapterDef = {
               ],
               else: [
                 { k: "branch", id: "B12a", ok: false },
-                { k: "nation", key: "infiltration", add: 7 },
                 { k: "bond", npc: "hulbert", add: 10 },
                 { k: "toast", text: "B12a 실패 — 친서가 닿기 전에 열강은 이미 저들끼리 정했다.", tone: "bad" },
               ],
@@ -1015,7 +1008,6 @@ export const ch16: ChapterDef = {
           hint: "B12a 실패",
           effects: [
             { k: "branch", id: "B12a", ok: false },
-            { k: "nation", key: "infiltration", add: 7 },
           ],
         },
       ],
@@ -1058,7 +1050,6 @@ export const ch16: ChapterDef = {
           hint: "B12b 실패",
           effects: [
             { k: "branch", id: "B12b", ok: false },
-            { k: "nation", key: "infiltration", add: 10 },
             { k: "chronicle", text: "1905년 11월 17일, 을사늑약. 지킬 힘이 없었다." },
           ],
         },
@@ -1294,10 +1285,8 @@ export const ch16: ChapterDef = {
     {
       id: "s1",
       year: 1896,
-      onEnter: [{ k: "prompt", prompt: "p_agwan" }],
       objectives: [
-        { id: "o_agwan", text: "1896년 2월 11일 새벽", kind: "prompt", target: "p_agwan" },
-        { id: "o_gojong_1896", text: "러시아 공사관의 고종을 찾아간다", kind: "talk", target: "gojong_1896", site: "hanyang", offset: [3, -2], optional: true },
+        { id: "o_gojong_1896", text: "정동 러시아 공사관의 고종을 찾아간다", kind: "talk", target: "gojong_1896", site: "hanyang", offset: [3, -2], prompt: "p_agwan" },
       ],
     },
     {
@@ -1317,10 +1306,13 @@ export const ch16: ChapterDef = {
         { id: "o_yisangjae", text: "이상재와 이야기한다", kind: "talk", target: "yi_sangjae", site: "hanyang", offset: [-1, 3], optional: true, onComplete: [{ k: "worldEvent", add: 10 }] },
       ],
     },
+    { id: "s3b", year: 1898, objectives: [{ id: "o_b9_speech1", text: "첫 연설 · 절영도", kind: "prompt", target: "p_b9_speech1" }] },
+    { id: "s3c", year: 1898, objectives: [{ id: "o_b9_speech2", text: "둘째 연설 · 이권", kind: "prompt", target: "p_b9_speech2" }] },
+    { id: "s3d", year: 1898, objectives: [{ id: "o_b9_speech3", text: "셋째 연설 · 관민공동회", kind: "prompt", target: "p_b9_speech3" }] },
     {
       id: "s4",
       year: 1898,
-      objectives: [{ id: "o_b9_result", text: "만민공동회의 연설과 그 끝", kind: "prompt", target: "p_b9_result" }],
+      objectives: [{ id: "o_b9_result", text: "12월의 갈림길", kind: "prompt", target: "p_b9_result" }],
     },
     {
       id: "s5",
@@ -1357,10 +1349,8 @@ export const ch16: ChapterDef = {
     {
       id: "s9",
       year: 1904,
-      onEnter: [{ k: "if", cond: not(ok("B11")), then: [{ k: "prompt", prompt: "p_uijeongseo" }] }],
       objectives: [
         { id: "o_seoul_1904", text: "[대체역사] 도성 문을 지킨다 (70초)", kind: "battle", target: "b_seoul_1904", site: "hanyang", offset: [-5, 1], requires: ok("B11") },
-        { id: "o_neutral_ok", text: "멈춰 선 군대", kind: "prompt", target: "p_neutral_ok", requires: ok("B11") },
         { id: "o_uijeongseo", text: "점령된 서울", kind: "prompt", target: "p_uijeongseo", requires: not(ok("B11")) },
       ],
     },
@@ -1384,7 +1374,6 @@ export const ch16: ChapterDef = {
         "7월 가쓰라-태프트 각서, 8월 제2차 영일동맹, 9월 포츠머스 조약 — 열강이 하나씩 고개를 돌렸다.",
         "11월 17일. 일본군이 경운궁을 에워쌌다.",
       ],
-      onEnter: [{ k: "if", cond: not(minNation("defense", 60)), then: [{ k: "prompt", prompt: "p_eulsa" }] }],
       objectives: [
         { id: "o_hangyuseol", text: "중명전에서 참정대신 한규설을 만난다", kind: "talk", target: "han_gyuseol", site: "hanyang", offset: [1, -4], prompt: "p_hangyuseol", requires: minNation("defense", 60) },
         { id: "o_eulsa", text: "1905년 11월 17일", kind: "prompt", target: "p_eulsa", requires: not(minNation("defense", 60)) },
@@ -1395,16 +1384,20 @@ export const ch16: ChapterDef = {
       year: 1905,
       objectives: [
         { id: "o_jungmyeong", text: "[대체역사] 새벽까지 중명전 회랑을 지킨다", kind: "battle", target: "b_jungmyeong", site: "hanyang", offset: [1, -4], requires: { k: "flag", flag: "ch16_jungmyeong_open" } },
-        { id: "o_jungmyeong_ok", text: "도장이 찍히지 않은 새벽", kind: "prompt", target: "p_jungmyeong_ok", requires: { k: "flag", flag: "ch16_jungmyeong_open" } },
       ],
     },
     {
       id: "s13",
       year: 1906,
-      onEnter: [{ k: "if", cond: ok("B12b"), then: [{ k: "prompt", prompt: "p_after_jungmyeong" }] }],
       objectives: [
         { id: "o_after_jungmyeong", text: "1906년의 압박", kind: "prompt", target: "p_after_jungmyeong", requires: ok("B12b") },
         { id: "o_sindolseok", text: "안동 너머 골짜기에서 신돌석을 만난다", kind: "talk", target: "sin_dolseok", site: "andong", offset: [2, 1], prompt: "p_sindolseok", requires: not(ok("B12b")) },
+      ],
+    },
+    {
+      id: "s13b",
+      year: 1906,
+      objectives: [
         { id: "o_eulsa_uibyeong", text: "을사의병과 함께 수비대를 친다", kind: "battle", target: "b_eulsa_uibyeong", site: "andong", offset: [3, 3], requires: not(ok("B12b")) },
       ],
     },
@@ -1420,11 +1413,17 @@ export const ch16: ChapterDef = {
       id: "s15",
       year: 1907,
       narration: ["1907년 6월, 황제는 헤이그 만국평화회의에 이상설·이준·이위종을 특사로 보냈다. 7월, 일본이 이를 구실로 황제를 압박했다."],
-      onEnter: [{ k: "if", cond: not(ok("B12b")), then: [{ k: "prompt", prompt: "p_disband_hist" }] }],
       objectives: [
         { id: "o_disband_talk", text: "시위대 정위를 만난다", kind: "talk", target: "guard_officer", site: "hanyang", offset: [-1, 4], prompt: "p_disband_alt", requires: ok("B12b") },
-        { id: "o_disband_alt", text: "[대체역사] 무기고를 지킨다 (80초)", kind: "battle", target: "b_disband_alt", site: "hanyang", offset: [-1, 4], requires: ok("B12b") },
         { id: "o_disband_hist_card", text: "1907년 7월과 8월", kind: "prompt", target: "p_disband_hist", requires: not(ok("B12b")) },
+      ],
+    },
+    {
+      id: "s15b",
+      year: 1907,
+      narration: ["8월 1일 아침, 훈련원."],
+      objectives: [
+        { id: "o_disband_alt", text: "[대체역사] 무기고를 지킨다 (80초)", kind: "battle", target: "b_disband_alt", site: "hanyang", offset: [-1, 4], requires: ok("B12b") },
         { id: "o_disband_hist", text: "남대문 일대에서 사람들이 빠져나갈 시간을 번다 (75초)", kind: "battle", target: "b_disband_hist", site: "hanyang", offset: [0, 5], requires: not(ok("B12b")) },
       ],
     },
@@ -1449,7 +1448,6 @@ export const ch16: ChapterDef = {
     {
       id: "s18",
       year: 1909,
-      onEnter: [{ k: "if", cond: ok("B12b"), then: [{ k: "prompt", prompt: "p_1909_alt" }], else: [{ k: "prompt", prompt: "p_1909" }] }],
       objectives: [
         { id: "o_1909_alt", text: "1909년", kind: "prompt", target: "p_1909_alt", requires: ok("B12b") },
         { id: "o_1909", text: "1909년", kind: "prompt", target: "p_1909", requires: not(ok("B12b")) },
@@ -1458,7 +1456,6 @@ export const ch16: ChapterDef = {
     {
       id: "s19",
       year: 1910,
-      onEnter: [{ k: "prompt", prompt: "p_finale" }],
       objectives: [{ id: "o_finale", text: "1910년 여름", kind: "prompt", target: "p_finale" }],
     },
   ],

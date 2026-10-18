@@ -38,7 +38,7 @@ const B4_TIER: Effect = {
 };
 
 /** One clause: a wit check whose base chance rises with the preparation tier. */
-function clause(checkId: string, label: string, flag: string, reward: Effect, next: string): Effect[] {
+function clause(checkId: string, label: string, flag: string, reward: Effect): Effect[] {
   const check = (base: number): Effect => ({
     k: "check",
     id: checkId,
@@ -71,13 +71,12 @@ function clause(checkId: string, label: string, flag: string, reward: Effect, ne
         },
       ],
     },
-    { k: "prompt", prompt: next },
   ];
 }
 
-/** Conceding a clause records it as lost and moves on. */
-function concede(flag: string, next: string): Effect[] {
-  return [{ k: "flag", flag, value: false }, { k: "prompt", prompt: next }];
+/** Conceding a clause records it as lost. */
+function concede(flag: string): Effect[] {
+  return [{ k: "flag", flag, value: false }];
 }
 
 const WON = (flag: string): Cond => ({ k: "flag", flag, eq: true });
@@ -116,7 +115,7 @@ export const ch14: ChapterDef = {
     "1876년 강화도조약으로 부산 등 세 항구가 열렸고, 해안 측량권과 영사 재판권이 인정되었다. 부록·무역 규칙으로 무관세 무역 등이 허용되었다.",
     "1880년 『조선책략』이 들어왔고 1881년 별기군이 창설되었다. 영남 유생들은 만인소를 올려 개화 정책에 반대했다.",
   ],
-  hist: { defense: 25, finance: 20, people: 30, diplomacy: 20, reform: 25 },
+  hist: { defense: 25, finance: 22, people: 30, diplomacy: 22, reform: 28 },
   factions: [
     { id: "daewongun", name: "흥선대원군 정권", power: 65, desc: "왕권을 세우고 문을 닫아건 섭정의 무리." },
     { id: "minssi", name: "민씨 척족 (고종 친정)", power: 30, desc: "1873년 고종 친정 뒤 왕비 집안을 중심으로 힘을 얻는 무리." },
@@ -255,7 +254,7 @@ export const ch14: ChapterDef = {
       site: "ganghwa",
       offset: [-3, 4],
       radius: 8,
-      kind: "waves",
+      kind: "boss",
       great: true,
       scaled: true,
       music: "war",
@@ -422,11 +421,17 @@ export const ch14: ChapterDef = {
         {
           id: "agree",
           text: "문을 열 날을 미리 준비하자는 말씀이군요.",
-          hint: "박규수 인연 ▲ · 개혁 ▲",
+          hint: "박규수 인연 ▲ · 개혁 ▲ · 훗날 B3 조건",
           effects: [
             { k: "bond", npc: "park_gyusu", add: 20 },
             { k: "nation", key: "reform", add: 1 },
           ],
+        },
+        {
+          id: "burn",
+          text: "또 오면 또 불태우면 됩니다.",
+          hint: "국방 ▲",
+          effects: [{ k: "nation", key: "defense", add: 1 }],
         },
       ],
     },
@@ -629,7 +634,7 @@ export const ch14: ChapterDef = {
           id: "begin",
           text: "조항마다 따지겠습니다.",
           hint: "협상 세 판 · 2조항 이상 확보하면 B4 성공",
-          effects: [B4_TIER, { k: "prompt", prompt: "p_b4_tariff" }],
+          effects: [B4_TIER],
         },
       ],
     },
@@ -646,13 +651,13 @@ export const ch14: ChapterDef = {
           id: "press",
           text: "관세는 조선이 스스로 정한다는 조문을 넣읍시다.",
           hint: "지략 판정 (사전 준비에 따라 보정) · 성공 시 재정 ▲",
-          effects: clause("ch14_b4_tariff", "관세 자주권", "ch14_b4_tariff", { k: "nation", key: "finance", add: 2 }, "p_b4_consul"),
+          effects: clause("ch14_b4_tariff", "관세 자주권", "ch14_b4_tariff", { k: "nation", key: "finance", add: 2 }),
         },
         {
           id: "concede",
           text: "이 조항은 내주고 다음 조항에 힘을 모읍시다.",
           hint: "관세 포기",
-          effects: concede("ch14_b4_tariff", "p_b4_consul"),
+          effects: concede("ch14_b4_tariff"),
         },
       ],
     },
@@ -669,13 +674,13 @@ export const ch14: ChapterDef = {
           id: "press",
           text: "상호주의로 — 일본에 간 조선 사람도 같은 대우를 받게 합시다.",
           hint: "지략 판정 (사전 준비에 따라 보정) · 성공 시 외교 ▲",
-          effects: clause("ch14_b4_consul", "영사 재판 상호주의", "ch14_b4_consul", { k: "nation", key: "diplomacy", add: 2 }, "p_b4_survey"),
+          effects: clause("ch14_b4_consul", "영사 재판 상호주의", "ch14_b4_consul", { k: "nation", key: "diplomacy", add: 2 }),
         },
         {
           id: "concede",
           text: "이 조항은 내주고 다음 조항에 힘을 모읍시다.",
           hint: "영사 재판 포기",
-          effects: concede("ch14_b4_consul", "p_b4_survey"),
+          effects: concede("ch14_b4_consul"),
         },
       ],
     },
@@ -692,13 +697,13 @@ export const ch14: ChapterDef = {
           id: "press",
           text: "측량은 연 항구 둘레로 한정하고, 우리 관원이 함께하게 합시다.",
           hint: "지략 판정 (사전 준비에 따라 보정) · 성공 시 국방 ▲",
-          effects: clause("ch14_b4_survey", "해안 측량 제한", "ch14_b4_survey", { k: "nation", key: "defense", add: 2 }, "p_b4_result"),
+          effects: clause("ch14_b4_survey", "해안 측량 제한", "ch14_b4_survey", { k: "nation", key: "defense", add: 2 }),
         },
         {
           id: "concede",
           text: "이 조항은 내줍시다.",
           hint: "해안 측량 포기",
-          effects: concede("ch14_b4_survey", "p_b4_result"),
+          effects: concede("ch14_b4_survey"),
         },
       ],
     },
@@ -723,13 +728,11 @@ export const ch14: ChapterDef = {
               then: [
                 { k: "branch", id: "B4", ok: true },
                 { k: "nation", key: "finance", add: 5 },
-                { k: "nation", key: "infiltration", add: -5 },
                 { k: "chronicle", text: "1876년, 강화도조약의 조항 둘 이상을 바로잡았다." },
-                { k: "toast", text: "B4 성공 — 경제 침투의 통로가 좁아졌다. 재정 ▲ · 침투도 ▼", tone: "epic" },
+                { k: "toast", text: "B4 성공 — 경제 침투의 통로가 좁아졌다. 재정 ▲", tone: "epic" },
               ],
               else: [
                 { k: "branch", id: "B4", ok: false },
-                { k: "nation", key: "infiltration", add: 15 },
                 { k: "toast", text: "B4 실패 — 불평등한 조항이 그대로 남았다. 침투도 +15", tone: "bad" },
               ],
             },
@@ -777,10 +780,9 @@ export const ch14: ChapterDef = {
     {
       id: "s2",
       year: 1866,
-      onEnter: [{ k: "prompt", prompt: "p_persecution" }],
       objectives: [
         { id: "o_persecution", text: "1866년의 소식", kind: "prompt", target: "p_persecution" },
-        { id: "o_park_py", text: "평양에서 박규수를 만난다", kind: "talk", target: "park_gyusu_py", site: "pyeongyang", offset: [1, -1], prompt: "p_park_1866", optional: true },
+        { id: "o_park_py", text: "평양에서 평안감사 박규수를 만난다", kind: "talk", target: "park_gyusu_py", site: "pyeongyang", offset: [1, -1], prompt: "p_park_1866" },
       ],
     },
     {
@@ -823,7 +825,6 @@ export const ch14: ChapterDef = {
     {
       id: "s7",
       year: 1871,
-      onEnter: [{ k: "prompt", prompt: "p_gwangseong_after" }],
       objectives: [
         { id: "o_gwangseong_after", text: "광성보의 끝을 기억한다", kind: "prompt", target: "p_gwangseong_after" },
         { id: "o_b3", text: "도성에서 박규수를 만난다", kind: "talk", target: "park_gyusu", site: "hanyang", offset: [2, -2], prompt: "p_b3" },
@@ -840,7 +841,6 @@ export const ch14: ChapterDef = {
     {
       id: "s9",
       year: 1875,
-      onEnter: [{ k: "prompt", prompt: "p_unyo" }],
       objectives: [
         { id: "o_unyo", text: "운요호의 소식", kind: "prompt", target: "p_unyo" },
         { id: "o_hong", text: "강화에서 역관 홍가를 만난다", kind: "talk", target: "hong_yeokgwan", site: "ganghwa", offset: [1, 2], prompt: "p_hong" },
@@ -854,10 +854,13 @@ export const ch14: ChapterDef = {
         { id: "o_b4", text: "접견대관 신헌 곁에 선다", kind: "talk", target: "sin_heon", site: "ganghwa", offset: [0, -2], prompt: "p_b4_intro" },
       ],
     },
+    { id: "s10b", year: 1876, objectives: [{ id: "o_b4_tariff", text: "제1조항 · 관세", kind: "prompt", target: "p_b4_tariff" }] },
+    { id: "s10c", year: 1876, objectives: [{ id: "o_b4_consul", text: "제2조항 · 영사 재판", kind: "prompt", target: "p_b4_consul" }] },
+    { id: "s10d", year: 1876, objectives: [{ id: "o_b4_survey", text: "제3조항 · 해안 측량", kind: "prompt", target: "p_b4_survey" }] },
     {
       id: "s11",
       year: 1876,
-      objectives: [{ id: "o_b4_result", text: "세 조항을 다툰다", kind: "prompt", target: "p_b4_result" }],
+      objectives: [{ id: "o_b4_result", text: "조약문을 확인한다", kind: "prompt", target: "p_b4_result" }],
     },
     {
       id: "s12",

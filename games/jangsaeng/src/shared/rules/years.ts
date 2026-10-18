@@ -1,29 +1,38 @@
-// Passage of years between chapters (세월 흐르기, GDD §4.7): 10-year tokens,
-// activities, small events, suspicion growth, salary, promotion, nation
-// carry-over, chapter reset, washes, offerings and the successor takeover.
+// Passage of years between chapters (세월 흐르기, GDD §5.7). advanceYears
+// follows the fixed processing order of §5.7.2.
 import type { ContentIndex } from "../content/index.ts";
-import type { ChapterId, Effect, StatKey, WashMethod } from "../content/schema.ts";
+import type { ChapterId, Effect, WashMethod } from "../content/schema.ts";
 import type { PlayerSave, ResultView, YearsPlanView } from "../types.ts";
 import { applyEffectsInto, emptyOutcome } from "./effects.ts";
 import {
-  applyGrace,
   BAND_NAMES,
-  graceAvailable,
+  changeSuspicion,
   growSuspicion,
-  offerVirtue,
-  OFFER_MAX_PER_CHAPTER,
-  pastLifeEnd,
-  successorTakeover,
   suggestName,
   suspicionBand,
   suspicionDelta,
   washBlocker,
+  washCost,
   washIdentity,
   WASH_METHODS,
-} from "./life.ts";
+} from "./identity.ts";
+import { applyGrace, applyResonance, graceAvailable, GRACE_YEARS, offerableYears, offerVirtue } from "./lifespan.ts";
 import { carryNation, INFILTRATION_FROM_ORDER } from "./nation.ts";
-import { promote } from "./progression.ts";
-import { FAMILY_BONDS, hashRoll, line, nationName, round1, type Line } from "./util.ts";
+import { promote, refreshEraGear } from "./progression.ts";
+import { pastLifeEnd, successorTakeover } from "./succession.ts";
+import {
+  discipleGeneration,
+  FAMILY_BONDS,
+  flagTruthy,
+  hashRoll,
+  isFamilyBond,
+  line,
+  nationName,
+  numberFlag,
+  round1,
+  statName,
+  type Line,
+} from "./util.ts";
 
 export interface YearsChoice {
   /** One activity id per 10-year token. */
@@ -33,20 +42,41 @@ export interface YearsChoice {
   offer: boolean;
 }
 
-export const MERIT_STIPEND: Readonly<Record<1 | 2 | 3 | 4, number>> = { 1: 300, 2: 200, 3: 120, 4: 60 };
 export const SALARY_PER_RANK = 40;
 export const WASH_ADVISED_AT = 60;
+export const MAX_TOKENS = 5;
 const WASH_ORDER: readonly WashMethod[] = ["descendant", "fakeDeath", "monk", "merchant", "exam"];
 
-export function tokensBetween(fromYear: number, toYear: number): number {
-  return Math.max(1, Math.ceil((toYear - fromYear) / 10));
+/** §5.7.1: clamp(ceil((next start − current start) / 15), 1, 5). */
+export function tokensBetween(currentStart: number, nextStart: number): number {
+  return Math.min(MAX_TOKENS, Math.max(1, Math.ceil((nextStart - currentStart) / 15)));
+}
+
+function tokensFor(content: ContentIndex, save: PlayerSave, next: ChapterId): number {
+  const start = content.chapters[save.chapter]?.years[0] ?? save.year;
+  return tokensBetween(start, content.chapters[next]?.years[0] ?? start);
 }
 
 function commerceGain(save: PlayerSave): number {
-  return Math.round(400 * (1 + save.stats.tact / 50));
+  const merchants = (save.bonds["baek_house"] ?? 0) >= 60 ? 1.2 : 1;
+  return Math.round(400 * (1 + save.stats.tact / 50) * merchants);
 }
 
-// ── Activities ───────────────────────────────────────────────────────────
+/** The strongest 열전 (historical) bond, for 인맥 쌓기. */
+function topHistoricalBond(save: PlayerSave): string | undefined {
+  let best: string | undefined;
+  let bestValue = -1;
+  for (const id of Object.keys(save.bonds).sort()) {
+    const value = save.bonds[id] ?? 0;
+    if (!isFamilyBond(id) && value > bestValue) {
+      best = id;
+      bestValue = value;
+    }
+  }
+  return best;
+}
+
+// ── Activities (§5.7.3) ──────────────────────────────────────────────────
 
 export interface ActivityDef {
   id: string;
@@ -56,26 +86,26 @@ export interface ActivityDef {
   effect: (save: PlayerSave) => string;
   blocker?: (save: PlayerSave) => string | undefined;
   /** Pure effects for one token. */
-  effects: (save: PlayerSave, ruling: string | undefined, salt: string) => Effect[];
-  /** Changes with no Effect kind (free points, bond decay, lineage counter); returns notes. */
+  effects: (save: PlayerSave, ruling: string | undefined) => Effect[];
+  /** Changes with no Effect kind (free points, bond decay, disciple xp); returns notes. */
   extra?: (save: PlayerSave) => string[];
 }
 
 export const ACTIVITIES: readonly ActivityDef[] = [
   {
-    id: "martial", name: "무예 수련", desc: "산과 들에서 칼과 활을 갈고닦는다.", effect: () => "능력치 점수 +2",
+    id: "train", name: "무예 수련", desc: "산과 들에서 칼과 활을 갈고닦는다.", effect: () => "자유 포인트 +2",
     effects: () => [],
     extra: (save) => {
       save.freePoints += 2;
-      return ["능력치 점수 +2"];
+      return ["자유 포인트 +2"];
     },
   },
   {
-    id: "mountain", name: "산중 수행", desc: "깊은 산에 들어 세상과 인연을 끊고 기를 기른다.",
-    effect: () => "천수 +1년 · 의심도 −8 · 인연 −5%",
-    effects: () => [{ k: "life", add: 1 }, { k: "suspicion", add: -8 }],
+    id: "seclusion", name: "산중 수행", desc: "깊은 산에 들어 세상과 인연을 끊고 기를 기른다.",
+    effect: () => "천수 +1년 · 의심도 −12 · 인연 −5%",
+    effects: () => [{ k: "life", add: 1 }, { k: "suspicion", add: -12 }],
     extra: (save) => {
-      for (const [npc, value] of Object.entries(save.bonds)) save.bonds[npc] = Math.round(value * 0.95);
+      for (const [id, value] of Object.entries(save.bonds)) save.bonds[id] = Math.round(value * 0.95);
       return ["인연 −5%"];
     },
   },
@@ -90,11 +120,11 @@ export const ACTIVITIES: readonly ActivityDef[] = [
   },
   {
     id: "office", name: "관직 근무", desc: "맡은 자리에서 성실히 봉직한다.",
-    effect: (save) => `공적 +20 · 전 +${save.rank * SALARY_PER_RANK} · 집권 파벌 총애 +5 · 의심도 +4`,
+    effect: (save) => `공적 +40 · 전 +${20 * save.rank} · 총애 +5 · 의심도 +4`,
     blocker: (save) => (save.rank >= 1 ? undefined : "관직이 없다"),
     effects: (save, ruling) => [
-      { k: "point", point: "merit", add: 20 },
-      { k: "point", point: "money", add: save.rank * SALARY_PER_RANK },
+      { k: "point", point: "merit", add: 40 },
+      { k: "point", point: "money", add: 20 * save.rank },
       ...(ruling ? [{ k: "favor", faction: ruling, add: 5 } as const] : []),
       { k: "suspicion", add: 4 },
     ],
@@ -104,7 +134,7 @@ export const ACTIVITIES: readonly ActivityDef[] = [
     effects: () => [{ k: "stat", stat: "wit", add: 2 }],
   },
   {
-    id: "charity", name: "선행·구휼", desc: "굶주린 이웃에게 곡식을 나눈다.", effect: () => "전 −150 · 공덕 +60 · 민심 +1",
+    id: "charity", name: "선행·구휼", desc: "굶주린 이웃에게 곡식을 나눈다.", effect: () => "공덕 +60 · 민심 +1 · 전 −150",
     blocker: (save) => (save.points.money >= 150 ? undefined : "전 150이 필요하다"),
     effects: () => [
       { k: "point", point: "money", add: -150 },
@@ -113,135 +143,143 @@ export const ACTIVITIES: readonly ActivityDef[] = [
     ],
   },
   {
-    id: "network", name: "인맥 쌓기", desc: "오랜 가문들을 찾아 정을 잇는다.", effect: () => "가문 인연 +10",
-    effects: (save, _ruling, salt) => [
-      { k: "bond", npc: FAMILY_BONDS[hashRoll(save.seed, `network:${salt}`) % FAMILY_BONDS.length] ?? "smith", add: 10 },
-    ],
+    id: "network", name: "인맥 쌓기", desc: "오랜 가문과 옛 벗을 찾아 정을 잇는다.", effect: () => "가문 인연 3가 +8 · 가장 깊은 열전 인연 +5",
+    effects: (save) => {
+      const top = topHistoricalBond(save);
+      return [
+        ...FAMILY_BONDS.map((family) => ({ k: "bond", npc: family, add: 8 }) as const),
+        ...(top ? [{ k: "bond", npc: top, add: 5 } as const] : []),
+      ];
+    },
   },
   {
-    id: "disciples", name: "제자 양성", desc: "뒤를 이을 제자를 길러 낸다.", effect: () => "제자 인연 +10 · 제자 계보 +1",
-    effects: () => [{ k: "bond", npc: "disciple", add: 10 }],
+    id: "disciple", name: "제자 양성", desc: "유파의 제자를 길러 낸다.", effect: () => "제자 경험 +1",
+    blocker: (save) => (flagTruthy(save.flags["school"]) ? undefined : "유파를 세운 뒤에 가능하다"),
+    effects: () => [],
     extra: (save) => {
-      const generations = save.flags["disciples"];
-      save.flags["disciples"] = (typeof generations === "number" ? generations : 0) + 1;
-      return ["제자 계보 +1"];
+      save.flags["discipleXp"] = numberFlag(save, "discipleXp") + 1;
+      return [`제자 경험 +1 (제자 ${discipleGeneration(save)}세대)`];
     },
   },
 ];
 
 /** Runs one token; a blocked or unknown activity falls back to 무예 수련. */
-function runActivity(content: ContentIndex, save: PlayerSave, id: string, salt: string, label: string): Line[] {
+function runActivity(content: ContentIndex, save: PlayerSave, id: string, label: string): { lines: Line[]; ran: string } {
   const def = ACTIVITIES.find((activity) => activity.id === id);
   const blocked = def ? def.blocker?.(save) : "알 수 없는 활동";
   const chosen = def && !blocked ? def : (ACTIVITIES[0] as ActivityDef);
   const out = emptyOutcome();
-  applyEffectsInto(content, save, chosen.effects(save, content.chapters[save.chapter]?.ruling, salt), out);
+  applyEffectsInto(content, save, chosen.effects(save, content.chapters[save.chapter]?.ruling), out);
   const notes = chosen.extra?.(save) ?? [];
   const detail = [...out.lines.map((entry) => entry.text), ...notes].join(" · ");
   const prefix = blocked ? `${label} · ${def?.name ?? id} 불가(${blocked}) → ${chosen.name}` : `${label} · ${chosen.name}`;
-  return [line(detail ? `${prefix} — ${detail}` : prefix, "info")];
+  return { lines: [line(detail ? `${prefix} — ${detail}` : prefix, "info")], ran: chosen.id };
 }
 
-// ── Small events ─────────────────────────────────────────────────────────
+// ── Small events (§5.7.4) ────────────────────────────────────────────────
+
+export interface SmallEventContext {
+  /** Roll id prefix `yrs:<chapter>:<index>`. */
+  id: string;
+  /** Activity actually run for this token. */
+  activity: string;
+  ruling: string | undefined;
+}
 
 export interface SmallEvent {
-  id: string;
+  kind: number;
   name: string;
   intro: string;
-  stat: StatKey;
-  base: number;
-  per: number;
-  success: (save: PlayerSave, ruling: string | undefined, salt: string) => Effect[];
-  failure: (save: PlayerSave) => Effect[];
+  effects: (save: PlayerSave, context: SmallEventContext) => Effect[];
 }
+
+const statCheck = (id: string, label: string, stat: "agility" | "power", success: Effect[], failure: Effect[]): Effect => ({
+  k: "check", id: `${id}:check`, label: `${label}(${statName(stat)})`, stat, base: 50, per: 1, success, failure,
+});
 
 export const SMALL_EVENTS: readonly SmallEvent[] = [
   {
-    id: "plague", name: "역병", intro: "역병이 고을을 휩쓸었다.", stat: "spirit", base: 35, per: 2,
-    success: () => [{ k: "point", point: "virtue", add: 40 }, { k: "nation", key: "people", add: 1 }],
-    failure: () => [{ k: "point", point: "money", add: -80 }],
+    kind: 0, name: "역병", intro: "역병이 고을을 휩쓸었다.",
+    effects: (_save, context) => (context.activity === "charity"
+      ? [{ k: "point", point: "virtue", add: 30 }]
+      : [{ k: "life", add: -1 }]),
   },
   {
-    id: "tiger", name: "호환", intro: "범이 마을을 덮쳤다.", stat: "power", base: 30, per: 2.5,
-    success: () => [{ k: "point", point: "fame", add: 2 }, { k: "point", point: "money", add: 100 }],
-    failure: () => [{ k: "life", add: -1 }],
-  },
-  {
-    id: "famine", name: "기근", intro: "큰 가뭄 끝에 기근이 들었다.", stat: "tact", base: 35, per: 2,
-    success: () => [{ k: "point", point: "virtue", add: 50 }, { k: "nation", key: "people", add: 1 }],
-    failure: () => [{ k: "nation", key: "people", add: -1 }, { k: "point", point: "money", add: -50 }],
-  },
-  {
-    id: "marriage", name: "혼담", intro: "이웃 가문에서 혼담이 들어왔다.", stat: "tact", base: 40, per: 2,
-    success: (save, _ruling, salt) => [
-      { k: "bond", npc: FAMILY_BONDS[hashRoll(save.seed, `marriage:${salt}`) % FAMILY_BONDS.length] ?? "merchant", add: 8 },
-      { k: "suspicion", add: -3 },
+    kind: 1, name: "흉년", intro: "가뭄 끝에 흉년이 들었다.",
+    effects: (_save, context) => [
+      { k: "nation", key: "people", add: -1 },
+      ...(context.activity === "charity" ? [{ k: "point", point: "virtue", add: 60 } as const] : []),
     ],
-    failure: () => [{ k: "suspicion", add: 4 }],
   },
   {
-    id: "bandits", name: "도적", intro: "고갯길에 도적 떼가 나타났다.", stat: "agility", base: 35, per: 2.5,
-    success: () => [{ k: "point", point: "money", add: 150 }, { k: "point", point: "fame", add: 1 }],
-    failure: () => [{ k: "point", point: "money", add: -100 }],
+    kind: 2, name: "호환", intro: "범이 마을을 덮쳤다.",
+    effects: (_save, context) => [statCheck(context.id, "호환", "agility", [{ k: "item", item: "ginseng", add: 1 }], [{ k: "life", add: -1 }])],
   },
   {
-    id: "procession", name: "왕실 행차", intro: "임금의 행차가 고을을 지났다.", stat: "wit", base: 35, per: 2,
-    success: (_save, ruling) => [
-      { k: "point", point: "merit", add: 15 },
-      ...(ruling ? [{ k: "favor", faction: ruling, add: 3 } as const] : []),
+    kind: 3, name: "혼담", intro: "이웃 가문에서 혼담이 들어왔다.",
+    effects: (save, context) => [
+      { k: "bond", npc: FAMILY_BONDS[hashRoll(save.seed, `${context.id}:family`) % FAMILY_BONDS.length] ?? "han_house", add: 10 },
+      { k: "point", point: "virtue", add: 10 },
     ],
-    failure: () => [{ k: "suspicion", add: 3 }],
+  },
+  {
+    kind: 4, name: "도적", intro: "고갯길에 도적 떼가 나타났다.",
+    effects: (save, context) => (save.points.money >= 1000
+      ? [statCheck(context.id, "도적", "power",
+        [{ k: "point", point: "merit", add: 20 }],
+        [{ k: "point", point: "money", add: -Math.round(save.points.money * 0.15) }])]
+      : []),
+  },
+  { kind: 5, name: "화원의 초상화", intro: "화원이 그린 초상이 저잣거리에 나돌았다.", effects: () => [{ k: "suspicion", add: 10 }] },
+  { kind: 6, name: "옛 벗의 방문", intro: "한씨 가문의 옛 벗이 찾아왔다.", effects: () => [{ k: "bond", npc: "han_house", add: 10 }] },
+  {
+    kind: 7, name: "귀인", intro: "길에서 귀인을 만났다.",
+    effects: (save) => [{ k: "stat", stat: save.stats.tact < save.stats.wit ? "tact" : "wit", add: 1 }],
+  },
+  {
+    kind: 8, name: "산삼 발견", intro: "깊은 골짜기에서 붉은 열매를 보았다.",
+    effects: (_save, context) => (context.activity === "train" || context.activity === "seclusion"
+      ? [{ k: "item", item: "ginseng", add: 1 }]
+      : [{ k: "point", point: "money", add: 50 }]),
+  },
+  {
+    kind: 9, name: "왕실 행차 호위", intro: "임금의 행차를 호위했다.",
+    effects: (_save, context) => [
+      { k: "point", point: "merit", add: 20 },
+      ...(context.ruling ? [{ k: "favor", faction: context.ruling, add: 3 } as const] : []),
+    ],
   },
 ];
 
 export const SMALL_EVENT_CHANCE = 30;
 
-function tokenSalt(fromYear: number, next: ChapterId, index: number): string {
-  return `${fromYear}:${next}:${index}`;
+/** The small event (if any) token `index` rolls when leaving `chapter`. */
+export function smallEventAt(seed: number, chapter: ChapterId, index: number): SmallEvent | undefined {
+  const id = `yrs:${chapter}:${index}`;
+  if (hashRoll(seed, id) >= SMALL_EVENT_CHANCE) return undefined;
+  return SMALL_EVENTS[hashRoll(seed, `${id}:k`) % SMALL_EVENTS.length];
 }
 
-/** The small event (if any) that token `index` of the passage fromYear → next will roll. */
-export function smallEventAt(seed: number, fromYear: number, next: ChapterId, index: number): SmallEvent | undefined {
-  const salt = tokenSalt(fromYear, next, index);
-  if (hashRoll(seed, `years:${salt}:event`) >= SMALL_EVENT_CHANCE) return undefined;
-  return SMALL_EVENTS[hashRoll(seed, `years:${salt}:kind`) % SMALL_EVENTS.length];
-}
-
-function runSmallEvent(content: ContentIndex, save: PlayerSave, event: SmallEvent | undefined, salt: string, year: number): Line[] {
+function runSmallEvent(content: ContentIndex, save: PlayerSave, chapter: ChapterId, index: number, activity: string): Line[] {
+  const event = smallEventAt(save.seed, chapter, index);
   if (!event) return [];
-  const ruling = content.chapters[save.chapter]?.ruling;
+  const context = { id: `yrs:${chapter}:${index}`, activity, ruling: content.chapters[chapter]?.ruling };
   const out = emptyOutcome();
-  applyEffectsInto(content, save, [{
-    k: "check",
-    id: `years:${salt}:${event.id}`,
-    label: event.name,
-    stat: event.stat,
-    base: event.base,
-    per: event.per,
-    success: event.success(save, ruling, salt),
-    failure: event.failure(save),
-  }], out);
-  const [verdict, ...rest] = out.lines;
-  const detail = rest.map((entry) => entry.text).join(" · ");
-  return [
-    line(`${year}년 무렵, ${event.intro}`, "info"),
-    line(`${verdict?.text ?? event.name}${detail ? ` — ${detail}` : ""}`, verdict?.tone ?? "info"),
-  ];
+  applyEffectsInto(content, save, event.effects(save, context), out);
+  const detail = out.lines.map((entry) => entry.text).join(" · ");
+  const tone = out.lines.some((entry) => entry.tone === "bad") ? "bad" : out.lines.length > 0 ? "good" : "info";
+  return [line(`${event.name} — ${event.intro}${detail ? ` ${detail}` : ""}`, tone)];
 }
 
 // ── Planner ──────────────────────────────────────────────────────────────
 
-function hadBattle(content: ContentIndex, save: PlayerSave): boolean {
-  return (content.chapters[save.chapter]?.battles.length ?? 0) > 0;
-}
-
-function washDesc(method: WashMethod): string {
+function washDesc(save: PlayerSave, method: WashMethod): string {
   const spec = WASH_METHODS[method];
-  const cost = spec.cost === "all" ? "재산 전부" : `${spec.cost}전`;
+  const cost = spec.cost === "all" ? "재산 전부" : washCost(save, method) === 0 ? "비용 면제" : `${washCost(save, method)}전`;
   return `${cost} · 세탁 후 의심도 ${spec.suspicion} · ${spec.desc}`;
 }
 
-/** Suspicion if no activity changed it, for the wash advice. */
+/** Suspicion at the next chapter if nothing changed it, for the wash advice. */
 function projectedSuspicion(save: PlayerSave, toYear: number): number {
   let value = save.suspicion;
   for (let year = save.year + 1; year <= toYear; year++) value = Math.min(100, value + suspicionDelta(save, year));
@@ -251,19 +289,18 @@ function projectedSuspicion(save: PlayerSave, toYear: number): number {
 /** Planner view for the years between the current chapter and `next`. */
 export function yearsPlan(content: ContentIndex, save: PlayerSave, next: ChapterId): YearsPlanView {
   const toYear = Math.max(save.year, content.chapters[next]?.years[0] ?? save.year);
-  const battle = hadBattle(content, save);
   const washes: YearsPlanView["washes"] = [];
   for (const method of WASH_ORDER) {
-    const spec = WASH_METHODS[method];
-    if (spec.needsBattle && !battle) continue;
-    const blocked = washBlocker(save, method, battle);
-    washes.push(blocked ? { id: method, name: spec.name, desc: washDesc(method), disabled: blocked } : { id: method, name: spec.name, desc: washDesc(method) });
+    const blocked = washBlocker(save, method);
+    if (WASH_METHODS[method].needsWar && blocked && blocked.startsWith("전쟁")) continue;
+    const view = { id: method, name: WASH_METHODS[method].name, desc: washDesc(save, method) };
+    washes.push(blocked ? { ...view, disabled: blocked } : view);
   }
   return {
     type: "years",
     fromYear: save.year,
     toYear,
-    tokens: tokensBetween(save.year, toYear),
+    tokens: tokensFor(content, save, next),
     activities: ACTIVITIES.map((activity) => {
       const disabled = activity.blocker?.(save);
       const view = { id: activity.id, name: activity.name, desc: activity.desc, effect: activity.effect(save) };
@@ -273,103 +310,76 @@ export function yearsPlan(content: ContentIndex, save: PlayerSave, next: Chapter
     washAdvised: save.suspicion >= WASH_ADVISED_AT || projectedSuspicion(save, toYear) >= 90,
     lifeEnd: save.lifeEnd,
     virtue: save.points.virtue,
-    // Counters reset before the transition offering, so a fresh 5-year allowance applies.
-    canOffer: Math.min(OFFER_MAX_PER_CHAPTER, Math.floor(save.points.virtue / 100)) + (graceAvailable(content, save, next) ? 10 : 0),
+    canOffer: offerableYears(save) + (graceAvailable(content, save, next) ? GRACE_YEARS : 0),
   };
 }
 
 // ── Advance ──────────────────────────────────────────────────────────────
 
-function salary(save: PlayerSave): { total: number; stipend: number } {
-  const stipend = save.meritSubject ? MERIT_STIPEND[save.meritSubject] : 0;
-  return { total: save.rank * SALARY_PER_RANK + stipend, stipend };
-}
-
-/** Successor factions inherit 50% of favor (and a sole successor inherits alignment). */
+/** Successor factions start at 50% of their lineage's favor (kept if already set). */
 function inheritFactions(content: ContentIndex, save: PlayerSave, next: ChapterId): void {
-  const factions = content.chapters[next]?.factions ?? [];
-  for (const faction of factions) {
+  for (const faction of content.chapters[next]?.factions ?? []) {
     if (!faction.lineage || save.favor[faction.id] !== undefined) continue;
     const parent = save.favor[faction.lineage];
     if (parent !== undefined) save.favor[faction.id] = Math.round(parent * 0.5);
   }
-  const aligned = save.aligned;
-  if (aligned && !factions.some((faction) => faction.id === aligned)) {
-    const heirs = factions.filter((faction) => faction.lineage === aligned);
-    const [heir] = heirs;
-    if (heir && heirs.length === 1) save.aligned = heir.id;
-  }
 }
 
 /**
- * Advances save.year to the next chapter's start: applies activities and
- * small events, suspicion growth, salary, nation carry-over (hist baselines
- * and long flags), chapter counters reset, and successor takeover if the
- * lifespan ends. Returns result lines for the summary card.
+ * Advances save.year to the next chapter's start in the §5.7.2 order:
+ * 1 salary (and promotion at the chapter's settlement), 2 activities and small
+ * events, 3 wash, 4 동료 보증, 5 노인성 감응 and offering/grace, 6 yearly
+ * suspicion, 8 nation carry-over, 9 chapter counters reset, 10 successor,
+ * 11 forced wash or inquiry, 12 era gear. (7, farewell cards, is the session's.)
  */
 export function advanceYears(content: ContentIndex, save: PlayerSave, next: ChapterId, choice: YearsChoice): ResultView["lines"] {
   const target = content.chapters[next];
   if (!target) return [line("다음 시대를 찾을 수 없다", "bad")];
+  const leaving = save.chapter;
   const fromYear = save.year;
   const toYear = Math.max(fromYear, target.years[0]);
-  const tokens = tokensBetween(fromYear, toYear);
-  const battle = hadBattle(content, save);
-  const current = content.chapters[save.chapter];
+  const tokens = tokensFor(content, save, next);
   const lines: Line[] = [line(`${fromYear}년 → ${toYear}년 · 세월이 흐른다 (${tokens}토큰)`, "info")];
 
-  // Activities and small events, one per 10-year token.
+  // 1. Salary, then promotion under the regime that is ending.
+  const pay = SALARY_PER_RANK * save.rank;
+  if (save.exile) lines.push(line("유배지에서 세월을 견디다 — 녹봉 없음", "bad"));
+  else if (save.flags["salarySuspended"] === true) {
+    if (pay > 0) lines.push(line("파직의 여파로 녹봉이 끊겼다", "bad"));
+  } else if (pay > 0) {
+    save.points.money += pay;
+    lines.push(line(`녹봉 ${pay}전`, "good"));
+  }
+  delete save.flags["salarySuspended"];
+  lines.push(...promote(save, content.chapters[leaving]?.ruling).lines);
+
+  // 2. Activities and small events, one per token.
   const chosen = Array.isArray(choice.activities) ? choice.activities : [];
   for (let index = 0; index < tokens; index++) {
-    const salt = tokenSalt(fromYear, next, index);
-    const decade = Math.min(toYear, fromYear + index * 10);
-    const activity = chosen[index];
-    lines.push(...runActivity(content, save, typeof activity === "string" ? activity : "martial", salt, `${decade}년~`));
-    const event = smallEventAt(save.seed, fromYear, next, index);
-    lines.push(...runSmallEvent(content, save, event, salt, Math.min(toYear, decade + 5)));
+    const wanted = chosen[index];
+    const { lines: activityLines, ran } = runActivity(content, save, typeof wanted === "string" ? wanted : "train", `${index + 1}번째 세월`);
+    lines.push(...activityLines);
+    lines.push(...runSmallEvent(content, save, leaving, index, ran));
   }
 
-  // Suspicion growth year by year.
-  const suspicionBefore = save.suspicion;
-  growSuspicion(save, fromYear, toYear);
-  const band = suspicionBand(save.suspicion);
-  lines.push(line(`의심도 ${suspicionBefore} → ${save.suspicion} (${BAND_NAMES[band]})`, band === "calm" ? "info" : "bad"));
-
-  // Exile years, salary and promotion under the regime that is ending.
-  if (save.exile) lines.push(line("유배지에서 세월을 견디다 — 녹봉 없음", "bad"));
-  const pay = salary(save);
-  if (save.flags["salarySuspended"]) {
-    delete save.flags["salarySuspended"];
-    if (pay.total > 0) lines.push(line("파직의 여파로 녹봉이 끊겼다", "bad"));
-  } else if (!save.exile && pay.total > 0) {
-    save.points.money += pay.total;
-    lines.push(line(`녹봉 ${pay.total}전${pay.stipend > 0 ? ` (공신전 ${pay.stipend}전 포함)` : ""}`, "good"));
-  }
-  lines.push(...promote(save, current?.ruling).lines);
-
-  // Nation carry-over and faction lineage.
-  save.nation = carryNation(content, save, next);
-  if (target.order < INFILTRATION_FROM_ORDER) save.infiltration = 0;
-  inheritFactions(content, save, next);
-  lines.push(line(`국운 이월 — ${(["defense", "finance", "people", "diplomacy", "reform"] as const).map((key) => `${nationName(key)} ${save.nation[key]}`).join(" · ")}`, "info"));
-
-  // New chapter.
-  save.step = 0;
-  save.objectives = {};
-  save.longevityUses = 0;
-  save.offeredThisChapter = 0;
-  delete save.position;
-  save.year = toYear;
-  save.chapter = next;
-
+  // 3. Wash.
   if (choice.wash) {
-    const blocked = WASH_METHODS[choice.wash] ? washBlocker(save, choice.wash, battle) : "알 수 없는 방법";
+    const blocked = washBlocker(save, choice.wash);
     if (blocked) lines.push(line(`신분 세탁 불가 — ${blocked}`, "bad"));
     else {
-      const name = choice.newName?.trim() || suggestName(save, `wash:${choice.wash}:${toYear}:${save.record.washes}`);
+      const name = choice.newName?.trim() || suggestName(save, `wash:${choice.wash}:${save.year}:${save.record.washes}`);
       lines.push(...washIdentity(content, save, choice.wash, name));
     }
   }
 
+  // 4. 동료 보증.
+  if (save.flags["vouch"] === true) {
+    const delta = changeSuspicion(save, -10);
+    lines.push(line(`동료 보증 — 함께 싸운 장생인이 새 신분을 증언했다 (의심도 ${delta === 0 ? "0" : `−${Math.abs(delta)}`})`, "good"));
+  }
+
+  // 5. 노인성 감응, then offering and the last grace.
+  lines.push(...applyResonance(save, leaving));
   if (choice.offer) {
     const years = offerVirtue(save);
     if (years > 0) lines.push(line(`노인성 제단에 공덕을 바치다 — 천수 +${years}년 (${save.lifeEnd}년까지)`, "good"));
@@ -378,22 +388,54 @@ export function advanceYears(content: ContentIndex, save: PlayerSave, next: Chap
     if (years === 0 && !grace) lines.push(line("바칠 공덕이 모자라다", "info"));
   }
 
-  if (suspicionBand(save.suspicion) === "exposed") {
+  // 6. Years pass one by one.
+  const suspicionBefore = save.suspicion;
+  growSuspicion(save, fromYear, toYear);
+  save.year = toYear;
+  const band = suspicionBand(save.suspicion);
+  lines.push(line(`의심도 ${suspicionBefore} → ${save.suspicion} (${BAND_NAMES[band]})`, band === "calm" ? "info" : "bad"));
+
+  // 8. Nation carry-over and faction lineage.
+  save.nation = carryNation(content, save, next);
+  if (target.order < INFILTRATION_FROM_ORDER) save.infiltration = 0;
+  inheritFactions(content, save, next);
+  lines.push(line(`국운 이월 — ${(["defense", "finance", "people", "diplomacy", "reform"] as const).map((key) => `${nationName(key)} ${save.nation[key]}`).join(" · ")}`, "info"));
+
+  // 9. Chapter counters.
+  save.chapter = next;
+  save.step = 0;
+  save.objectives = {};
+  save.longevityUses = 0;
+  save.offeredThisChapter = 0;
+  save.aligned = null;
+  delete save.position;
+  for (const flag of ["freeReviveUsed", "vouch", "escaped"]) delete save.flags[flag];
+
+  // 10. Lifespan.
+  if (pastLifeEnd(save)) lines.push(...successorTakeover(content, save));
+
+  // 11. Suspicion: exposed → forced flight; inquiry → 사헌부 card at the next chapter start.
+  const settled = suspicionBand(save.suspicion);
+  if (settled === "exposed") {
     lines.push(line("정체가 드러났다! 쫓기듯 이름을 버린다", "bad"));
     lines.push(...washIdentity(content, save, "forced", suggestName(save, `forced:${toYear}:${save.record.washes}`)));
+  } else if (settled === "inquiry") {
+    save.flags["inquiry"] = true;
+    lines.push(line("사헌부가 그대의 내력을 캐기 시작했다 — 새 시대 첫머리에 조사가 있다", "bad"));
   }
 
-  if (pastLifeEnd(save)) lines.push(...successorTakeover(content, save));
+  // 12. Era gear.
+  lines.push(...refreshEraGear(content, save));
   return lines;
 }
 
 /**
- * Moves the in-chapter year forward (a step with a later year): suspicion
- * grows for the elapsed years and the successor takes over past lifeEnd.
+ * In-chapter year change (a step with a later year): suspicion grows for
+ * the elapsed years and the successor takes over past lifeEnd.
  */
-export function advanceStepYear(content: ContentIndex, save: PlayerSave, year: number): ResultView["lines"] {
-  if (!Number.isFinite(year) || year <= save.year) return [];
-  growSuspicion(save, save.year, year);
-  save.year = Math.floor(year);
+export function advanceStepYear(content: ContentIndex, save: PlayerSave, toYear: number): ResultView["lines"] {
+  if (!Number.isFinite(toYear) || toYear <= save.year) return [];
+  growSuspicion(save, save.year, toYear);
+  save.year = Math.floor(toYear);
   return pastLifeEnd(save) ? successorTakeover(content, save) : [];
 }

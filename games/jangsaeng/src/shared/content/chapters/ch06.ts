@@ -33,7 +33,7 @@ export const ch06: ChapterDef = {
   ],
   hist: { defense: 58, finance: 55, people: 56, diplomacy: 55, reform: 58 },
   factions: [
-    { id: "suyang", name: "수양대군파", power: 55, lineage: "court", desc: "임금의 숙부 수양대군과 한명회·권람. 왕실의 힘을 앞세운다." },
+    { id: "suyang", name: "수양대군파", power: 55, lineage: "sejong", desc: "임금의 숙부 수양대군과 한명회·권람. 왕실의 힘을 앞세운다." },
     { id: "daesin", name: "의정부 대신", power: 60, lineage: "bukbang", desc: "김종서·황보인. 선왕의 부탁을 받은 늙은 재상들." },
     { id: "boksa", name: "집현전 출신 신하들", power: 25, desc: "성삼문·박팽년. 어린 임금에 대한 의리를 지킨다." },
   ],
@@ -76,7 +76,7 @@ export const ch06: ChapterDef = {
       offset: [-1, 1],
       dir: "right",
       historical: true,
-      talk: ["\"훈민정음 해례를 함께 쓰던 날이 엊그제 같소.\"", "\"선왕께 받은 은혜를 갚을 날이 온다면, 나는 머뭇거리지 않을 것이오.\""],
+      talk: ["\"훈민정음 해례를 엮던 날이 엊그제 같소.\"", "\"선왕께 받은 은혜를 갚을 날이 온다면, 나는 머뭇거리지 않을 것이오.\""],
       fromStep: "s2",
       untilStep: "s2",
     },

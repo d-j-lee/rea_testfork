@@ -53,6 +53,8 @@ export function mapTab(
   const side = h(
     "aside",
     { class: "bigmap-side" },
+    h("h3", { class: "sub-title" }, `${year}년의 강토`),
+    h("p", { class: "muted bm-note" }, "확대하면 모든 고을의 이름이 보인다."),
     h("h3", { class: "sub-title" }, "목표"),
     h("ul", { class: "bm-objs" },
       ...self.objectives.filter((o) => !o.done).map((o) => h("li", null, h("span", { class: "obj-dia", "aria-hidden": "true" }, "◆"), o.text, o.siteName ? h("small", null, ` · ${o.siteName}`) : null))),

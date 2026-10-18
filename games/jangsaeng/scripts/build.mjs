@@ -1,7 +1,9 @@
-// Builds the browser client twice from one source tree:
+// Builds the browser client from one source tree:
 //   dist/client/        — served by the Node server (online + offline modes)
 //   dist/jangsaeng.html — one self-contained file (offline mode), used as the
 //                         shareable prototype build.
+//   dist/artifact.html  — the same page without the document wrapper, for
+//                         hosts that supply their own <html>/<head>/<body>.
 import { build, context } from "esbuild";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -62,7 +64,34 @@ async function writeSingleFile(version) {
       () => `<script type="module">\n${safeJs}\n</script>`,
     );
   await writeFile(join(out, "jangsaeng.html"), page);
+  await writeFile(join(out, "artifact.html"), unwrapDocument(page));
   return page.length;
+}
+
+/**
+ * Removes the document wrapper (doctype, html/head/body tags, charset and
+ * viewport metas) so a host skeleton can wrap the content. The page title is
+ * shortened to the bare name.
+ */
+function unwrapDocument(page) {
+  // Only touch markup outside the inlined module script.
+  const open = page.indexOf('<script type="module">');
+  const close = page.lastIndexOf("</script>");
+  if (open < 0 || close < open) throw new Error("single-file page has no module script");
+  const unwrap = (markup) =>
+    markup
+      .replace(/<!doctype html>\s*/i, "")
+      .replace(/<\/?html[^>]*>\s*/gi, "")
+      .replace(/<\/?head>\s*/gi, "")
+      .replace(/<\/?body>\s*/gi, "")
+      .replace(/<meta charset="utf-8" \/>\s*/i, "")
+      .replace(/<meta\s+name="viewport"[^>]*>\s*/i, "")
+      .replace(/<title>[^<]*<\/title>/i, "<title>장생 오백년</title>");
+  return (
+    unwrap(page.slice(0, open)) +
+    page.slice(open, close + "</script>".length) +
+    unwrap(page.slice(close + "</script>".length))
+  );
 }
 
 const pkg = JSON.parse(await readFile(join(root, "package.json"), "utf8"));

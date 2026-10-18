@@ -94,6 +94,7 @@ export class Session {
   #ended = false;
   /** While > 0, queued prompts are not shown (keeps result cards first). */
   #hold = 0;
+  #refreshing = false;
   closed = false;
 
   constructor(
@@ -317,9 +318,26 @@ export class Session {
         this.send({ t: "toast", text: `목표 달성 — ${objective.text}`, tone: "good" });
         this.#fxSelf("sfx", "quest");
       }
-      this.#checkStep();
+      this.#refreshObjectives();
     }
     this.#markSelf();
+  }
+
+  /**
+   * Objectives gated by `requires` activate when their condition starts to
+   * hold (flags set by earlier objectives or choices): prompt objectives open,
+   * auto/collect ones complete, and the step advances when nothing remains.
+   */
+  #refreshObjectives(): void {
+    if (this.#refreshing) return;
+    this.#refreshing = true;
+    try {
+      const step = this.step;
+      if (step) this.#armObjectives(step);
+      this.#checkStep();
+    } finally {
+      this.#refreshing = false;
+    }
   }
 
   #checkStep(): void {
@@ -592,6 +610,7 @@ export class Session {
     } finally {
       this.#hold--;
     }
+    this.#refreshObjectives();
     this.#markSelf();
     this.persist();
     this.#showNext();

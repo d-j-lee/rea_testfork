@@ -61,18 +61,19 @@ export function chronicle(save: PlayerSave, text: string, tone?: "info" | "good"
 
 // ── Names ────────────────────────────────────────────────────────────────
 
-/** The six fictional families whose bonds carry across generations. */
-export const FAMILY_BONDS = ["smith", "merchant", "monk", "clerk", "interpreter", "disciple"] as const;
+/** The three fictional families whose bonds carry across generations (GDD §5.8.2). */
+export const FAMILY_BONDS = ["han_house", "baek_house", "hong_house"] as const;
 export type FamilyBond = (typeof FAMILY_BONDS)[number];
 
 export const FAMILY_NAMES: Readonly<Record<FamilyBond, string>> = {
-  smith: "대장장이 석가",
-  merchant: "개성 송상 백가",
-  monk: "보현사 노승 계보",
-  clerk: "한양 아전 문가",
-  interpreter: "사역원 역관 홍가",
-  disciple: "무가 제자 계보",
+  han_house: "한씨 궁수 가문",
+  baek_house: "개성 송상 백가",
+  hong_house: "사역원 역관 홍가",
 };
+
+export function isFamilyBond(id: string): id is FamilyBond {
+  return (FAMILY_BONDS as readonly string[]).includes(id);
+}
 
 /** Faction ids seeded by origins before any chapter defines them. */
 const ORIGIN_FACTION_NAMES: Readonly<Record<string, string>> = { yi: "이성계파", choe: "최영파" };
@@ -88,7 +89,7 @@ export function factionName(content: ContentIndex, save: PlayerSave, id: string)
 }
 
 export function bondName(content: ContentIndex, id: string): string {
-  if ((FAMILY_BONDS as readonly string[]).includes(id)) return FAMILY_NAMES[id as FamilyBond];
+  if (isFamilyBond(id)) return FAMILY_NAMES[id];
   for (const chapter of Object.values(content.chapters)) {
     const npc = chapter.npcs.find((candidate) => candidate.id === id);
     if (npc) return npc.name;
@@ -128,4 +129,30 @@ export function numberFlag(save: PlayerSave, flag: string): number {
 
 export function flagTruthy(value: unknown): boolean {
   return value !== undefined && value !== false && value !== 0 && value !== "";
+}
+
+// ── Flag-backed counters (no PlayerSave field yet; GDD §17 requests them) ─
+
+/** Cumulative virtue ever earned (offerings spend virtue but not deeds). */
+export function virtueEarned(save: PlayerSave): number {
+  return Math.max(save.points.virtue, numberFlag(save, "virtueEarned"));
+}
+
+/** Adds virtue and the cumulative counter together (the only way virtue is gained). */
+export function gainVirtue(save: PlayerSave, amount: number): number {
+  const gained = Math.max(0, Math.round(amount));
+  if (gained === 0) return 0;
+  save.flags["virtueEarned"] = virtueEarned(save) + gained;
+  save.points.virtue += gained;
+  return gained;
+}
+
+/** This identity has publicly won renown (공신 책록 or a great battle): exposure +0.4. */
+export function isRenowned(save: PlayerSave): boolean {
+  return flagTruthy(save.flags["renowned"]);
+}
+
+/** 제자 세대 = 1 + floor(discipleXp / 2) once a school exists (flag `school`), else 0. */
+export function discipleGeneration(save: PlayerSave): number {
+  return flagTruthy(save.flags["school"]) ? 1 + Math.floor(numberFlag(save, "discipleXp") / 2) : 0;
 }

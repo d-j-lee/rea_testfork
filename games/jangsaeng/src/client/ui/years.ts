@@ -260,11 +260,14 @@ export class YearsPlanner {
     }, { class: "btn btn-primary btn-wide", "data-action": "years-confirm" });
 
     return paperPanel(
-      { title: `세월이 흐른다 · ${plan.fromYear} → ${plan.toYear}`, kicker: p.title || "세월 흐르기", glyph: "歲", class: "years-panel", footer: confirm },
+      { title: `세월이 흐른다 · ${plan.fromYear} → ${plan.toYear}`, kicker: p.title || "세월 흐르기", glyph: "年", class: "years-panel", footer: confirm },
+      h("div", { class: "yr-grid" },
+      h("div", { class: "yr-main" },
       p.body.length ? h("div", { class: "yr-body" }, ...p.body.map((t) => h("p", null, t))) : null,
       h("h3", { class: "sub-title" }, `10년마다 무엇을 하며 지낼까 · ${tokens}마디`),
       track,
-      cards,
+      cards),
+      h("div", { class: "yr-side" },
       h("h3", { class: "sub-title" }, "신분"),
       plan.washAdvised
         ? h("p", { class: "yr-warn", role: "alert" }, "의심이 짙다. 늙지 않는 얼굴을 보는 눈이 많다 — 이번 세월에 신분을 바꾸는 편이 안전하다.")
@@ -273,7 +276,7 @@ export class YearsPlanner {
       nameRow,
       h("h3", { class: "sub-title" }, "천수"),
       offerBtn,
-      projection,
+      projection)),
     );
   }
 }

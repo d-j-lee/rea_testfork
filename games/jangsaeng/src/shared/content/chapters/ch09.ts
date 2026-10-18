@@ -29,7 +29,7 @@ export const ch09: ChapterDef = {
     "1593년 2월 12일 권율이 행주산성에서 화차와 비격진천뢰를 써서 일본군을 물리쳤다. 병력 2,300여 명은 기록상 수치다.",
     "[해석] 조령을 버린 신립의 판단, 김성일 보고의 의미 등은 평가가 갈린다. 일본군 병력 규모도 추정치마다 다르다.",
   ],
-  hist: { defense: 30, finance: 35, people: 35, diplomacy: 40, reform: 25 },
+  hist: { defense: 32, finance: 38, people: 38, diplomacy: 42, reform: 34 },
   factions: [
     { id: "seonjo", name: "선조 행재소", power: 60, desc: "피란 조정. 국왕을 모신 신료와 호위 무관들." },
     { id: "bunjo", name: "광해군 분조", power: 35, desc: "세자 광해군이 이끄는 나뉜 조정. 민심을 다독이며 의병을 모은다." },
@@ -309,7 +309,7 @@ export const ch09: ChapterDef = {
       site: "haengju",
       offset: [0, 1],
       radius: 8,
-      kind: "waves",
+      kind: "boss",
       great: true,
       scaled: true,
       music: "siege",
@@ -317,7 +317,7 @@ export const ch09: ChapterDef = {
       intro: [
         "새벽, 성 아래가 깃발로 덮였다. 적은 아홉 차례 몰려왔다고 기록은 전한다.",
         "목책을 지켜라. 화차 앞을 비워 두어라.",
-        "공성탑이 다가오면 비격진천뢰를 굴려라.",
+        "공성 대장이 진 뒤에서 지휘한다. 그를 쓰러뜨리면 적이 무너진다. 공성탑이 다가오면 비격진천뢰를 굴려라.",
       ],
       waves: [
         { from: "south", enemies: [{ enemy: "japanese_spear", count: 5, level: 29 }], line: "제1진 — 목책으로 달려든다!" },
@@ -325,7 +325,7 @@ export const ch09: ChapterDef = {
         { from: "west", enemies: [{ enemy: "japanese_spear", count: 6, level: 29 }], line: "제3진 — 서쪽, 승병이 맡은 성벽!" },
         { from: "south", enemies: [{ enemy: "japanese_spear", count: 4, level: 30 }, { enemy: "japanese_musket", count: 4, level: 30 }], line: "제4진 — 화살이 떨어져 간다. 한강 쪽 배에서 화살 짐이 올라온다!" },
         { from: "around", enemies: [{ enemy: "japanese_spear", count: 7, level: 30 }], line: "제5진 — 사방에서 오른다. 아낙들이 돌을 나른다!" },
-        { from: "south", enemies: [{ enemy: "japanese_musket", count: 3, level: 30 }], line: "제6진 — 공성 대장이 직접 나섰다!" },
+        { from: "south", enemies: [{ enemy: "japanese_musket", count: 3, level: 30 }], line: "제6진 — 공성 대장의 본진이 몰려온다!" },
       ],
       boss: {
         enemy: "boss_japanese_general",
@@ -743,7 +743,6 @@ export const ch09: ChapterDef = {
     {
       id: "s3",
       year: 1592,
-      onEnter: [{ k: "prompt", prompt: "p_dongnae_fall" }],
       objectives: [{ id: "o_fall", text: "동래성의 마지막을 기억한다", kind: "prompt", target: "p_dongnae_fall" }],
     },
     {
@@ -812,7 +811,6 @@ export const ch09: ChapterDef = {
     {
       id: "s10",
       year: 1593,
-      onEnter: [{ k: "prompt", prompt: "p_war_turns" }],
       objectives: [
         { id: "o_turns", text: "전쟁의 흐름을 듣는다", kind: "prompt", target: "p_war_turns" },
         { id: "o_reach_haengju", text: "행주산성으로 간다", kind: "reach", target: "haengju", site: "haengju" },
@@ -839,7 +837,6 @@ export const ch09: ChapterDef = {
       id: "s13",
       year: 1593,
       narration: ["4월, 일본군은 한양에서 물러나 남쪽 해안으로 내려갔다. 전쟁은 끝나지 않았다."],
-      onEnter: [{ k: "prompt", prompt: "p_jinju2" }],
       objectives: [{ id: "o_jinju2", text: "진주성의 소식을 듣는다", kind: "prompt", target: "p_jinju2" }],
     },
     {

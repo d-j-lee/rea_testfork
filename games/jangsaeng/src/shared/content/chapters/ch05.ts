@@ -30,10 +30,10 @@ export const ch05: ChapterDef = {
   ],
   hist: { defense: 52, finance: 48, people: 50, diplomacy: 50, reform: 50 },
   factions: [
-    { id: "court", name: "세종 조정", power: 70, lineage: "bangwon", desc: "상왕 태종과 젊은 임금 세종. 집현전에 인재가 모인다." },
+    { id: "sejong", name: "세종 조정", power: 70, lineage: "bangwon", desc: "상왕 태종과 젊은 임금 세종. 집현전에 인재가 모인다." },
     { id: "bukbang", name: "북방 장수", power: 40, desc: "4군 6진을 여는 최윤덕·김종서 등 변방의 장수들." },
   ],
-  ruling: "court",
+  ruling: "sejong",
   npcs: [
     // s1 — 거제 견내량, 쓰시마
     {
@@ -149,7 +149,7 @@ export const ch05: ChapterDef = {
       offset: [-2, 0],
       dir: "right",
       historical: true,
-      talk: ["\"선왕께서 어린 세손을 부탁하셨소. 나는 그 부탁을 지킬 것이오.\""],
+      talk: ["\"선왕께서 어린 임금을 부탁하셨소. 나는 그 부탁을 지킬 것이오.\""],
       fromStep: "s4",
     },
   ],
@@ -187,7 +187,7 @@ export const ch05: ChapterDef = {
       ],
       allies: [{ sprite: "soldier_joseon", name: "박실의 좌군", count: 5 }],
       victory: [
-        { k: "favor", faction: "court", add: 10 },
+        { k: "favor", faction: "sejong", add: 10 },
         { k: "point", point: "merit", add: 40 },
         { k: "point", point: "virtue", add: 20 },
         { k: "exp", add: 1600 },
@@ -413,7 +413,7 @@ export const ch05: ChapterDef = {
       body: [
         "1452년. 백발의 좌의정 김종서가 한참 동안 너를 바라보았다.",
         "\"회령에서 처음 본 게 열여섯 해 전이오. 그런데 자네는 그 얼굴 그대로군.\"",
-        "\"선왕께서 어린 세손을 부탁하셨소. 요즘 수양대군 댁에 사람이 많이 드나든다더군. 자네도 몸조심하시오.\"",
+        "\"선왕께서 어린 임금을 부탁하셨소. 요즘 수양대군 댁에 사람이 많이 드나든다더군. 자네도 몸조심하시오.\"",
       ],
       options: [
         {

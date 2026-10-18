@@ -328,7 +328,7 @@ export const ch04: ChapterDef = {
           effects: [
             { k: "bond", npc: "kang_hwi", add: 20 },
             { k: "suspicion", add: -8 },
-            { k: "chronicle", text: "1398년, 열 해 전 살려 보낸 강휘가 나를 골목에서 끌어냈다. 국밥 한 그릇의 빚은 그렇게 갚아졌다." },
+            { k: "chronicle", text: "1398년, 열 해 전 살려 보낸 강휘가 나를 골목에서 끌어냈다. \"목숨 빚은 갚았다. 국밥 빚은 아직이다.\"" },
           ],
         },
         {
