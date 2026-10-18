@@ -31,7 +31,6 @@ function snap(sim: Sim, a: Actor, viewer: number): EntitySnap {
   if (a.pl || a.en) s.lvl = a.level;
   if (a.variant) s.v = a.variant;
   if (a.hist) s.hist = true;
-  if (a.pl?.bot) s.bot = true;
   if (a.pl && a.pl.downedAt >= 0) s.down = true;
   if (a.npcId) {
     const mk = sim.hooks.npcMarker(viewer, a.npcId);

@@ -9,7 +9,7 @@ import { WebSocketServer, type RawData } from "ws";
 import { createGameHost } from "../shared/host/host.ts";
 import type { HostConnection } from "../shared/host/api.ts";
 import { createStaticHandler } from "./static.ts";
-import { ABUSE_FACTOR, RateGate } from "./rate.ts";
+import { ABUSE_FACTOR, RateGate, supersedable } from "./rate.ts";
 import { JsonProfileStore } from "./store.ts";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -41,7 +41,7 @@ const server = createServer((request, response) => {
 });
 
 const MAX_MESSAGE_BYTES = 8 * 1024;
-/** Per-socket budget; excess is dropped, ABUSE_FACTOR × this closes (rate.ts). */
+/** Per-socket budget; excess input heartbeats are dropped, ABUSE_FACTOR × this closes (rate.ts). */
 const MESSAGES_PER_SECOND = 40;
 const wss = new WebSocketServer({
   server,
@@ -69,14 +69,6 @@ wss.on("connection", (socket, request) => {
       socket.close(1008, "binary unsupported");
       return;
     }
-    const verdict = gate.admit(performance.now());
-    if (verdict === "close") {
-      log(`rate limit: closing ${remote} (over ${MESSAGES_PER_SECOND * ABUSE_FACTOR} messages in one second)`);
-      socket.close(1008, "rate limit");
-      close("rate limit");
-      return;
-    }
-    if (verdict === "drop") return;
     let message: unknown;
     try {
       message = JSON.parse(data.toString());
@@ -84,6 +76,14 @@ wss.on("connection", (socket, request) => {
       socket.close(1007, "invalid json");
       return;
     }
+    const verdict = gate.admit(performance.now(), supersedable(message));
+    if (verdict === "close") {
+      log(`rate limit: closing ${remote} (over ${MESSAGES_PER_SECOND * ABUSE_FACTOR} messages in one second)`);
+      socket.close(1008, "rate limit");
+      close("rate limit");
+      return;
+    }
+    if (verdict === "drop") return;
     connection.receive(message);
   });
   socket.on("close", () => close("socket closed"));

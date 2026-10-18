@@ -110,7 +110,7 @@ export class PlateLayer {
     let party = 0;
     for (const v of views) {
       if (!v.character || v.lying || v.dissolve >= 0) continue;
-      const role = plateRole(v.track.snap, v.track.id === selfId);
+      const role = plateRole(v.track.snap, v.track.mk, v.track.id === selfId);
       if (role === "enemy") enemies++;
       else if (isParty(role)) party++;
     }
@@ -132,7 +132,7 @@ export class PlateLayer {
       }
       if (!v.character) continue;
       const snap = track.snap;
-      const role = plateRole(snap, track.id === selfId);
+      const role = plateRole(snap, track.mk, track.id === selfId);
       const isSelf = role === "self";
       const boss = role === "boss";
       const s = this.#slot(n++);
@@ -173,10 +173,8 @@ export class PlateLayer {
       const v = s.v as PlateSubject;
       const track = v.track;
       const snap = track.snap;
-      if (s.showHp) {
-        const boss = snap.tm === "boss";
-        drawHpBar(ctx, v.wx, s.hpY, Math.max(0, Math.min(100, track.hp)) / 100, boss ? HP_BOSS : HP_NORMAL);
-      }
+      if (s.showHp)
+        drawHpBar(ctx, v.wx, s.hpY, Math.max(0, Math.min(100, track.hp)) / 100, s.role === "boss" ? HP_BOSS : HP_NORMAL);
       let top = s.base;
       if (s.plate) {
         o.color = s.role === "companion" ? COMPANION_COLOR : (TEAM_COLORS[snap.tm] ?? TEAM_COLORS.npc);

@@ -1,12 +1,12 @@
-// Name plates around the player: simulated companions are marked in the
-// snapshot and give way in a crowd; the player's own plate keeps its spot.
+// Name plates around the player: simulated companions are told apart by their
+// entity kind and give way in a crowd; the player's own plate keeps its spot.
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { EntitySnap } from "../../src/shared/types.ts";
 import { byPlacement, placePlates, plateRole, type PlateBox, type PlateRole } from "../../src/client/game/plate-layout.ts";
 import { arena, makeWorld, spec } from "./world-fixture.ts";
 
-test("snapshots flag simulated companions, not real players", () => {
+test("a companion's snapshot plates as a companion, a real player's as a player", () => {
   const { world } = makeWorld();
   const c = arena();
   const human = spec(c.x, c.y);
@@ -14,23 +14,32 @@ test("snapshots flag simulated companions, not real players", () => {
   const bot = spec(c.x - 1, c.y, { kind: "bot", name: "동료" });
   for (const p of [human, other, bot]) world.addPlayer(p);
   const ents = world.snapshotFor(human.id).ents;
-  const of = (id: number) => ents.find((e) => e.id === id);
-  assert.equal(of(bot.id)?.tm, "player");
-  assert.equal(of(bot.id)?.bot, true);
-  assert.equal(of(other.id)?.bot, undefined);
-  assert.equal(of(human.id)?.bot, undefined);
+  const of = (id: number) => ents.find((e) => e.id === id) as EntitySnap;
+  assert.deepEqual([of(bot.id).k, of(bot.id).tm], ["bot", "player"]);
+  // The kind is the one fact; the snapshot carries no second companion flag.
+  assert.ok(!("bot" in of(bot.id)));
+  assert.equal(plateRole(of(bot.id), of(bot.id).mk, false), "companion");
+  assert.equal(plateRole(of(other.id), of(other.id).mk, false), "player");
+  assert.equal(plateRole(of(human.id), of(human.id).mk, true), "self");
 });
 
 const snap = (patch: Partial<EntitySnap>): EntitySnap =>
   ({ id: 1, k: "player", s: "hero_youth", x: 0, y: 0, d: "down", a: "idle", tm: "player", ...patch }) as EntitySnap;
 
 test("plate roles come from the snapshot facts", () => {
-  assert.equal(plateRole(snap({ tm: "player", bot: true }), false), "companion");
-  assert.equal(plateRole(snap({ tm: "player" }), false), "player");
-  assert.equal(plateRole(snap({ tm: "self" }), false), "self");
-  assert.equal(plateRole(snap({ tm: "player" }), true), "self");
-  assert.equal(plateRole(snap({ tm: "npc", hist: true }), false), "story");
-  assert.equal(plateRole(snap({ tm: "npc" }), false), "npc");
+  assert.equal(plateRole(snap({ k: "bot", tm: "player" }), undefined, false), "companion");
+  assert.equal(plateRole(snap({ tm: "player" }), undefined, false), "player");
+  assert.equal(plateRole(snap({ tm: "self" }), undefined, false), "self");
+  assert.equal(plateRole(snap({ tm: "player" }), undefined, true), "self");
+  assert.equal(plateRole(snap({ k: "npc", tm: "npc", hist: true }), undefined, false), "story");
+  assert.equal(plateRole(snap({ k: "npc", tm: "npc" }), undefined, false), "npc");
+});
+
+test("the story role follows the marker drawn this frame, not the newest snapshot's", () => {
+  // The newest snapshot already shows "!" but the render delay still draws none.
+  assert.equal(plateRole(snap({ k: "npc", tm: "npc", mk: "quest" }), undefined, false), "npc");
+  // The marker on screen lingers after the newest snapshot cleared it.
+  assert.equal(plateRole(snap({ k: "npc", tm: "npc" }), "quest", false), "story");
 });
 
 const box = (role: PlateRole, dist: number): PlateBox => ({ role, dist, plate: true, x0: -20, x1: 20, y0: -10, y1: 0 });

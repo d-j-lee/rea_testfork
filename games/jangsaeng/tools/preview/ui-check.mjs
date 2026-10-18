@@ -40,8 +40,9 @@ try {
   );
   const url = pathToFileURL(join(dir, "index.html")).href;
   const browser = await chromium.launch();
-  const open = async (state, viewport = { width: 1280, height: 720 }, phone = false) => {
+  const open = async (state, viewport = { width: 1280, height: 720 }, phone = false, init = undefined) => {
     const context = await browser.newContext({ viewport, hasTouch: phone, isMobile: phone });
+    if (init) await context.addInitScript(init.script, init.arg);
     // Offline, like the single-file demo: the only remote requests are web fonts.
     await context.route(/^https?:\/\//, (route) => route.abort());
     const page = await context.newPage();
@@ -156,6 +157,37 @@ try {
     await t.page.keyboard.press("KeyO");
     const stored = await t.page.evaluate(() => ({ owned: localStorage.getItem("jangsaeng:v1:settings"), legacy: localStorage.getItem("jangsaeng.settings.v1") }));
     check("settings: saved through the client storage owner", JSON.parse(stored.owned ?? "{}").muted === true && stored.legacy === null, JSON.stringify(stored));
+    await t.close();
+  }
+  {
+    // Settings saved before the storage owner existed are carried over once.
+    const legacy = { music: 0.25, sfx: 2, muted: true, touch: "off", motion: "reduced" };
+    const seed = (value) => {
+      // Once per tab: a reload must find the legacy key gone.
+      if (sessionStorage.getItem("seeded")) return;
+      sessionStorage.setItem("seeded", "1");
+      localStorage.setItem("jangsaeng.settings.v1", value);
+    };
+    const t = await open("hud", undefined, false, { script: seed, arg: JSON.stringify(legacy) });
+    const read = () =>
+      t.page.evaluate(() => ({
+        owned: JSON.parse(localStorage.getItem("jangsaeng:v1:settings") ?? "null"),
+        legacy: localStorage.getItem("jangsaeng.settings.v1"),
+        motion: document.documentElement.dataset.motion,
+        touch: document.documentElement.dataset.touch,
+      }));
+    const first = await read();
+    const want = { music: 0.25, sfx: 0.8, muted: true, touch: "off", motion: "reduced" };
+    check("settings: legacy settings carried over, validated", JSON.stringify(first.owned) === JSON.stringify(want) && first.motion === "reduced", JSON.stringify(first));
+    check("settings: the legacy key is removed", first.legacy === null, JSON.stringify(first));
+    await t.page.reload();
+    await t.page.waitForFunction(() => window.__ready === true);
+    const second = await read();
+    check("settings: carried-over settings survive a reload", JSON.stringify(second.owned) === JSON.stringify(want) && second.legacy === null && second.motion === "reduced", JSON.stringify(second));
+    await t.close();
+  }
+  {
+    const t = await open("hud");
     const arrow = await t.page.evaluate(() => window.__arrowLabel("center"));
     check("arrow: edge label starts on screen even after centred text", arrow.label[0] >= 4, JSON.stringify(arrow));
     check("arrow: edge label clears its arrow", arrow.label[0] > arrow.arrow[1], JSON.stringify(arrow));
@@ -173,6 +205,34 @@ try {
     const after = await visible();
     check("toasts: none over the years planner; errors dock below", before.top >= 2 && open1.top === 0 && open2.top === 0 && open2.dock === 1, JSON.stringify({ before, open1, open2 }));
     check("toasts: held toasts play after the planner closes", after.top === Math.min(4, before.top + 1), JSON.stringify({ before, after }));
+    await t.close();
+  }
+  {
+    // The shipped years path: an error already showing moves to the dock,
+    // then confirm → the host's result card → the roll ends → held toasts play.
+    const t = await open("hud");
+    const visible = () =>
+      t.page.evaluate(() => ({
+        top: [...document.querySelectorAll(".toasts .toast:not(.out)")].map((el) => el.textContent ?? ""),
+        dock: [...document.querySelectorAll(".toast-dock .toast")].map((el) => el.textContent ?? ""),
+      }));
+    await t.page.evaluate(() => window.__ui.handle({ t: "toast", text: "전이 모자랍니다", tone: "bad" }));
+    const before = await visible();
+    await t.page.evaluate(() => window.__ui.handle({ t: "prompt", prompt: window.__mock.YEARS_PROMPT }));
+    const opened = await visible();
+    check("toasts: an error showing when the planner opens moves to the dock", before.top.includes("전이 모자랍니다") && opened.top.length === 0 && opened.dock.join() === "전이 모자랍니다", JSON.stringify({ before, opened }));
+    await t.page.click('[data-action="years-confirm"]');
+    await t.page.evaluate(() => {
+      window.__ui.handle({ t: "prompt", prompt: window.__mock.RESULT_PROMPT });
+      window.__ui.handle({ t: "toast", text: "세월이 흘렀다 — 시험", tone: "good" });
+    });
+    const rolling = await visible();
+    await t.page.waitForTimeout(3600); // the roll: 2100 + 650 + 420 ms
+    const done = await visible();
+    check("toasts: held through the years roll", rolling.top.length === 0, JSON.stringify(rolling));
+    check("toasts: play once the years roll ends", done.top.includes("세월이 흘렀다 — 시험"), JSON.stringify(done));
+    check("years: the planner is gone after the roll, the result card stays", await t.page.evaluate(() => document.querySelector(".years-host")?.childElementCount === 0 && !!document.querySelector(".prompt")));
+    check("toasts (years path): no page errors", t.errors.length === 0, t.errors.join(" | "));
     await t.close();
   }
   for (const phone of [false, true]) {
