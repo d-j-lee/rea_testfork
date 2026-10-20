@@ -67,8 +67,9 @@ mask_columns = ["account"]
 
     def test_command_driver(self):
         script = self.ws.root / "fake_client.py"
-        script.write_text("import sys\nprint('uid\\taccount')\nprint('1\\tsteam_1')\nprint(sys.argv[1][:6])\n",
-                          encoding="utf-8")
+        script.write_text("import sys\nrows = {'ok': ['uid\\taccount', '---\\t-------', '1\\tsteam_1', '007\\tNULL', '(2 rows affected)'],\n"
+                          "        'bad': ['uid\\taccount', '1\\tnick\\twith tab']}\n"
+                          "print('\\n'.join(rows[sys.argv[1].split()[-1]]))\n", encoding="utf-8")
         import sys
         cfg_text = f"""
 [env.qa]
@@ -81,10 +82,12 @@ mask_columns = ["account"]
 """
         ws = _util.Workspace(cfg_text)
         try:
-            r = db.run_query(config.load(ws.root), "qa", "SELECT 1")
+            cfg = config.load(ws.root)
+            r = db.run_query(cfg, "qa", "SELECT ok")
             self.assertEqual(r["columns"], ["uid", "account"])
-            self.assertEqual(r["rows"][0], ["1", "***"])
-            self.assertEqual(r["rows"][1], ["SELECT"])
+            self.assertEqual(r["rows"], [[1, "***"], ["007", "***"]])  # separator/trailer dropped, typed when lossless
+            with self.assertRaises(db.Refused):  # a tab inside a value would misalign masking
+                db.run_query(cfg, "qa", "SELECT bad")
         finally:
             ws.cleanup()
 
@@ -129,7 +132,8 @@ class ScenarioTest(unittest.TestCase):
 
     def run_scn(self, name: str, adapter: str = "sandbox") -> dict:
         from devloop.cli import _builtin_probes
-        return bot.run_scenario(self.cfg, self.scenario(name), None, adapter, _builtin_probes(self.cfg, "sandbox"))
+        return bot.run_scenario(self.cfg, self.scenario(name), None, adapter,
+                                lambda env: _builtin_probes(self.cfg, env))
 
     def test_race_red_then_green_with_both_adapters(self):
         for adapter in ("sandbox", "sandbox-proc"):
@@ -149,11 +153,41 @@ class ScenarioTest(unittest.TestCase):
         os.environ["SANDBOX_FIX"] = "reset"
         self.assertEqual(self.run_scn("daily-reset-boundary.json")["outcome"], "pass")
 
-    def test_tier_refusal(self):
+    def test_tier_refusal_and_env_binding(self):
         scn = self.scenario("happy-path.json")
-        with self.assertRaises(bot.ScenarioError) as ctx:
+        with self.assertRaises(bot.ScenarioError) as ctx:  # adapter bound to sandbox: --env cannot relabel it
             bot.run_scenario(self.cfg, scn, "incident", "sandbox", {})
-        self.assertIn("refused", str(ctx.exception))
+        self.assertIn("bound", str(ctx.exception))
+
+    def test_probe_on_other_env_follows_policy(self):
+        from devloop.cli import _builtin_probes
+        probe = _builtin_probes(self.cfg, "sandbox")["db"]
+        with self.assertRaises(bot.ScenarioError):
+            probe({"env": "incident", "sql": "SELECT COUNT(*) FROM users"})
+
+    def test_process_adapter_survives_cp949_and_reports_crash(self):
+        import sys
+        from pathlib import Path
+        script = Path(self.tmp.name) / "fake_bot.py"
+        script.write_text(
+            "import sys, json\n"
+            "sys.stdout.buffer.write('봇 시작\\n'.encode('cp949')); sys.stdout.flush()\n"
+            "for line in sys.stdin:\n"
+            "    req = json.loads(line)\n"
+            "    if req.get('op') == 'crash':\n"
+            "        sys.exit(3)\n"
+            "    print(json.dumps({'id': req['id'], 'result': {'ok': True}}), flush=True)\n", encoding="utf-8")
+        adapter = bot.ProcessAdapter([sys.executable, str(script)])
+        try:
+            session = adapter.open("a", {})
+            self.assertEqual(session.call("ping", {}, 5), {"ok": True})
+            import time
+            t0 = time.monotonic()
+            with self.assertRaises((RuntimeError, bot.ScenarioError)):
+                session.call("crash", {}, 20)
+            self.assertLess(time.monotonic() - t0, 10)  # released at EOF, not after the timeout
+        finally:
+            adapter.close()
 
 
 if __name__ == "__main__":

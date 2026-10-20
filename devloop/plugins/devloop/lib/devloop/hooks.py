@@ -83,7 +83,7 @@ def tokens(segment: str) -> list[str]:
 
 
 def _base(tok: str) -> str:
-    name = re.split(r"[\\/]", tok)[-1]
+    name = re.split(r"[\\/]", tok.lstrip("({$`"))[-1]
     return re.sub(r"\.(exe|cmd|bat|ps1)$", "", name, flags=re.I).lower()
 
 
@@ -96,14 +96,31 @@ def segment_tier(cfg: Config, segment: str) -> tuple[str, list[str]]:
     return tier, sorted({e for t, e in hits if t == tier})
 
 
-def _flag_value(toks: list[str], flags: set[str]) -> str | None:
-    for i, t in enumerate(toks):
+def _flag_values(toks: list[str], flags: set[str]) -> list[str]:
+    """Every value given to any of ``flags``: ``-e X``, ``--execute=X`` and
+    attached short forms ``-eX`` / ``-XPOST``."""
+    out = []
+    i = 0
+    while i < len(toks):
+        t = toks[i]
         if t in flags and i + 1 < len(toks):
-            return toks[i + 1]
+            out.append(toks[i + 1])
+            i += 2
+            continue
         for f in flags:
             if f.startswith("--") and t.startswith(f + "="):
-                return t.split("=", 1)[1]
-    return None
+                out.append(t.split("=", 1)[1])
+                break
+            if len(f) == 2 and f[0] == "-" and t.startswith(f) and len(t) > 2 and not t.startswith("--"):
+                out.append(t[2:])
+                break
+        i += 1
+    return out
+
+
+def _flag_value(toks: list[str], flags: set[str]) -> str | None:
+    vals = _flag_values(toks, flags)
+    return vals[0] if vals else None
 
 
 def _redis_args(toks: list[str], start: int) -> list[str]:
@@ -139,7 +156,8 @@ def classify_db(toks: list[str], idx: int, cfg: Config) -> tuple[str, str]:
         if sql is None:
             return sqlguard.RISKY, "sqlite3 without an inline statement (interactive or piped)"
     else:
-        sql = _flag_value(rest, _SQL_FLAGS)
+        statements = _flag_values(rest, _SQL_FLAGS)
+        sql = ";\n".join(statements) if statements else None
     if sql is None:
         if _flag_value(rest, _FILE_FLAGS) is not None or "<" in toks:
             return sqlguard.RISKY, f"{name} reads SQL from a file the guard cannot see"
@@ -156,11 +174,28 @@ def classify_db(toks: list[str], idx: int, cfg: Config) -> tuple[str, str]:
 
 def _http_writes(toks: list[str], idx: int) -> bool:
     rest = toks[idx + 1:]
-    method = _flag_value(rest, {"-X", "--request", "--method", "-Method", "-method"})
-    if method and method.upper() not in {"GET", "HEAD", "OPTIONS"}:
-        return True
-    return any(t in _HTTP_WRITE_FLAGS or any(t.startswith(f + "=") for f in _HTTP_WRITE_FLAGS if f.startswith("--"))
-               for t in rest)
+    for method in _flag_values(rest, {"-X", "--request", "--method", "-Method", "-method"}):
+        if method.upper() not in {"GET", "HEAD", "OPTIONS"}:
+            return True
+    for t in rest:
+        if t in _HTTP_WRITE_FLAGS or any(t.startswith(f + "=") for f in _HTTP_WRITE_FLAGS if f.startswith("--")):
+            return True
+        if re.match(r"^-[dFT].", t) and not t.startswith("--"):  # curl -dfoo, -Fx=y, -Tfile
+            return True
+    return False
+
+
+# Commands that only inspect local text or the working tree; anything else that
+# names a stage/live marker without being classified is uncertain and asks.
+_INSPECT_ONLY = {"grep", "egrep", "fgrep", "rg", "ag", "cat", "zcat", "gzcat", "head", "tail", "less", "more", "ls",
+                 "find", "wc", "sort", "uniq", "cut", "awk", "jq", "echo", "printf", "diff", "git", "file", "stat",
+                 "du", "tr", "column", "sed", "select-string", "get-content", "type", "findstr", "nslookup", "dig",
+                 "ping", "host", "code", "vim", "nano"}
+_KUBECTL_READ = {"get", "logs", "describe", "top", "explain", "version", "api-resources", "events"}
+_KUBECTL_WRITE = {"exec", "delete", "apply", "edit", "patch", "scale", "rollout", "cp", "run", "create", "replace",
+                  "set", "label", "annotate", "drain", "cordon", "uncordon", "taint", "attach", "port-forward",
+                  "debug", "expose", "autoscale"}
+_SUBST = re.compile(r"\$\(((?:[^()]|\([^()]*\))*)\)|`([^`]*)`")
 
 
 def _devloop_db(toks: list[str], cfg: Config, v: Verdict) -> bool:
@@ -176,14 +211,31 @@ def _devloop_db(toks: list[str], cfg: Config, v: Verdict) -> bool:
     return False
 
 
+def _program(toks: list[str]) -> str:
+    """The command a segment runs, skipping env assignments and sudo-like wrappers."""
+    for t in toks:
+        if re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", t):
+            continue
+        b = _base(t)
+        if b in {"sudo", "env", "nice", "time", "timeout", "nohup", "exec", "command"} or b.startswith("-"):
+            continue
+        return b
+    return ""
+
+
+_SHELLS = {"bash", "sh", "zsh", "dash", "powershell", "pwsh", "cmd"}
+
+
 def analyze_command(command: str, cfg: Config, v: Verdict | None = None, inherited: str | None = None,
-                    depth: int = 0) -> Verdict:
+                    depth: int = 0, executed: bool = True) -> Verdict:
     """Analyze each shell segment. Quoted arguments that hold a command line
     (``ssh host "mysql -e ..."``, ``bash -c "..."``) are analyzed recursively
     and inherit the outer tier when they carry no marker of their own."""
     v = v if v is not None else Verdict()
     g = cfg.guard
     db_clients = {c.lower() for c in g["db_clients"]}
+    admin_clients = {c.lower() for c in g.get("db_admin_clients", [])}
+    dump_clients = {c.lower() for c in g.get("db_dump_clients", [])}
     local_db = {c.lower() for c in g["local_db_clients"]}
     http = {c.lower() for c in g["http_clients"]}
     remote = {c.lower() for c in g["remote_clients"]}
@@ -202,12 +254,21 @@ def analyze_command(command: str, cfg: Config, v: Verdict | None = None, inherit
         for pat in pol.get("ask_patterns", []) + g.get("ask_patterns", []):
             if re.search(pat, seg):
                 v.add("ask", f"matches ask pattern {pat!r} on {where}")
-        if _devloop_db(toks, cfg, v):
-            continue
+        classified = _devloop_db(toks, cfg, v)
         for i, t in enumerate(toks):
             b = _base(t)
             # Local database tools matter only when a marker ties them to a shared tier.
+            if b in admin_clients:
+                classified = True
+                v.add(pol["db_write"], f"{b} changes a database on {where}; run it yourself after review")
+                continue
+            if b in dump_clients:
+                classified = True
+                v.add(max(pol["db_read"], "ask" if tier in {"stage", "live"} else "none", key=_RANK.__getitem__),
+                      f"{b} bulk read on {where}")
+                continue
             if b in db_clients or (b in local_db and tier != "unknown"):
+                classified = True
                 cls, detail = classify_db(toks, i, cfg)
                 if cls == sqlguard.WRITE:
                     v.add(pol["db_write"], f"{b} write on {where}: {detail}. Writes are human-run; "
@@ -219,14 +280,35 @@ def analyze_command(command: str, cfg: Config, v: Verdict | None = None, inherit
                     v.add(pol["db_read"], f"{b} read on {where}" + (": prefer `devloop db query`" if tier != "unknown" else ""))
                     if cls == "read-unbounded" and pol.get("require_bounded"):
                         v.add("ask", f"{b} unbounded read on {where}: add TOP/LIMIT")
-            elif b in http and _http_writes(toks, i):
-                v.add(pol["http_write"], f"{b} sends a write request on {where}")
+            elif b in http:
+                classified = True
+                if _http_writes(toks, i):
+                    v.add(pol["http_write"], f"{b} sends a write request on {where}")
             elif b in remote:
+                classified = True
+                words = {x.lower() for x in toks[i + 1:]}
+                if b == "kubectl" and words & _KUBECTL_READ and not words & _KUBECTL_WRITE:
+                    continue
                 v.add(pol["remote"], f"{b} remote execution on {where}")
+        prog = _program(toks)
+        if executed and not classified and tier in {"stage", "live"}:
+            target = prog
+            if prog in {"devloop", "devloop.py"}:
+                # devloop commands are read-only except `ev run -- <command>`, which runs that command
+                target = _program(toks[toks.index("--") + 1:]) if "--" in toks else ""
+            if target and target not in _INSPECT_ONLY and target not in _SHELLS:
+                v.add("ask", f"{target} references a {tier} target ({', '.join(envs)}) and was not "
+                             "classified; confirm it is read-only")
         if depth < 2:
+            # $(...) and `...` always run, whatever quoting surrounds them.
+            for m in _SUBST.finditer(seg):
+                analyze_command(m.group(1) or m.group(2) or "", cfg, v, tier if tier != "unknown" else None,
+                                depth + 1, executed=True)
+            # Quoted text runs as a command only under a shell or remote runner (bash -c, ssh host "...").
+            runs = prog in _SHELLS or prog in remote
             for t in toks[1:]:
                 if " " in t.strip():
-                    analyze_command(t, cfg, v, tier if tier != "unknown" else None, depth + 1)
+                    analyze_command(t, cfg, v, tier if tier != "unknown" else None, depth + 1, executed=runs)
     return v
 
 

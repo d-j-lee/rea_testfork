@@ -41,9 +41,17 @@ display_tz = "UTC"          # time zone used in every tool output (timestamps al
 # deny_patterns = []
 
 # --- guard ----------------------------------------------------------------------------------
+# Lists here EXTEND the built-in ones (they cannot remove defaults).
 # [guard]
-# db_clients = ["sqlcmd", "mysql", "psql", "redis-cli", "Invoke-Sqlcmd"]
+# db_clients = ["mysqlsh"]                 # extra inline-SQL clients
+# db_admin_clients = ["gm_restore"]        # tools that change data without inline SQL (treated as writes)
 # mcp_sql_tools = [{ tool = "mcp__db__execute_sql", field = "sql", tier = "qa" }]
+
+# --- secrets --------------------------------------------------------------------------------
+# Values of these environment variables are replaced by ${NAME} before anything is written
+# to a case (ledger, artifacts, recorded commands). Only listed variables are redacted.
+# [secrets]
+# env = ["QA_DB_PASSWORD", "LOG_API_TOKEN"]
 
 # --- logs -----------------------------------------------------------------------------------
 # Regex profiles use named groups; ts / level / msg are the conventional names.
@@ -54,7 +62,8 @@ display_tz = "UTC"          # time zone used in every tool output (timestamps al
 # tz_map = { "fra-*" = "Europe/Berlin" }
 # encoding = "auto"                    # auto = BOM/UTF-16 sniffing, UTF-8 with per-line CP949 fallback
 #
-# A source streams logs from a command (argv form, no shell). {since}/{until} are ISO UTC.
+# A source streams logs from a command (argv form, no shell). {since}/{until} are ISO UTC;
+# ${ENV} is expanded at run time and never recorded.
 # [log.sources.live-game]
 # command = ["ssh", "log01", "zcat /logs/game/game-*.log.gz"]
 # profile = "game"

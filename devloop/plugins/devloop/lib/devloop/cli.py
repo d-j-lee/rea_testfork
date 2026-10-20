@@ -31,20 +31,34 @@ def _cfg() -> config.Config:
     return config.load()
 
 
+def _kv_pairs(items: list[str] | None, flag: str) -> dict[str, str]:
+    out = {}
+    for item in items or []:
+        if "=" not in item:
+            raise Usage(f"{flag} expects key=value (got {item!r})")
+        k, v = item.split("=", 1)
+        out[k] = v
+    return out
+
+
+def _ledger(cfg: config.Config, d: Path) -> ledger.Ledger:
+    return ledger.Ledger(d, secrets=cfg.secret_values())
+
+
 def _case_dir(cfg: config.Config, case_id: str) -> Path:
     cfg.require_workspace()
     return case.case_dir(cfg.cases_dir, case_id)  # type: ignore[arg-type]
 
 
 def _save(args, cfg: config.Config, tool: str, payload: dict, claim: str, kind: str = "tool",
-          outcome: str | None = None, scope: str | None = None) -> str:
+          outcome: str | None = None, scope: str | None = None, repro_key: str | None = None) -> str:
     if not getattr(args, "save", None):
         return ""
     d = _case_dir(cfg, args.save)
     if getattr(args, "note", None):
         claim = f"{claim} — {args.note}"
-    e = ledger.Ledger(d).save_tool_result(tool=tool, argv=sys.argv[1:], payload=payload, claim=claim, kind=kind,
-                                          outcome=outcome, scope=scope)
+    e = _ledger(cfg, d).save_tool_result(tool=tool, argv=sys.argv[1:], payload=payload, claim=claim, kind=kind,
+                                         outcome=outcome, scope=scope, repro_key=repro_key)
     return f"\nsaved {e['id']} ({e['kind']}, {e['grade']}) to {d.name}: {e['artifact']['path']}"
 
 
@@ -142,7 +156,7 @@ def cmd_case(args) -> int:
             (text or "nothing to purge") + ("" if args.yes else "\ndry run: pass --yes to delete"))
         return 0
     d = case.case_dir(cases_dir, args.id)
-    led = ledger.Ledger(d)
+    led = _ledger(cfg, d)
     if sub == "show":
         doc, issues = case.check(d)
         entries = led.entries()
@@ -183,7 +197,7 @@ def cmd_case(args) -> int:
         out(args, e, f"{d.name}: {e['from']} -> {e['to']}")
         return 0
     if sub == "ask":
-        e = led.append({"type": "question", "id": led.next_id("Q"), "text": args.text, "to": args.to})
+        e = led.append({"type": "question", "text": args.text, "to": args.to}, id_prefix="Q")
         out(args, e, f"{e['id']} recorded for {args.to or '?'}")
         return 0
     if sub == "answer":
@@ -195,7 +209,7 @@ def cmd_case(args) -> int:
         out(args, e, f"{args.qid} {e['resolution']}")
         return 0
     if sub == "decide":
-        e = led.append({"type": "decision", "id": led.next_id("D"), "text": args.text, "by": args.by})
+        e = led.append({"type": "decision", "text": args.text, "by": args.by}, id_prefix="D")
         out(args, e, f"{e['id']} recorded (by {args.by})")
         return 0
     if sub == "close":
@@ -210,7 +224,7 @@ def cmd_case(args) -> int:
 def cmd_ev(args) -> int:
     cfg = _cfg()
     d = _case_dir(cfg, args.id)
-    led = ledger.Ledger(d)
+    led = _ledger(cfg, d)
     if args.ev_cmd == "add":
         e = led.add_evidence(kind=args.kind, claim=args.claim, grade=args.grade, ref=args.ref, scope=args.scope,
                              premises=[p.strip() for p in args.from_.split(",")] if args.from_ else None,
@@ -219,9 +233,11 @@ def cmd_ev(args) -> int:
         out(args, e, f"{e['id']} {e['kind']}/{e['grade']}: {e['claim']}")
         return 0
     if args.ev_cmd == "run":
-        cmd = args.command[1:] if args.command[:1] == ["--"] else args.command
-        e, tail = led.run_command(argv=cmd, claim=args.claim, timeout=args.timeout, scope=args.scope)
-        out(args, e, f"{tail}\n{e['id']} run/{e['grade']} outcome={e['outcome']} exit={e['exit_code']} "
+        if not args.command:
+            raise Usage("ev run needs the command after --, e.g. ev run CASE --claim \"...\" -- pytest -k claim")
+        e, tail = led.run_command(argv=args.command, claim=args.claim, timeout=args.timeout, scope=args.scope)
+        exit_text = "timeout" if e.get("timed_out") else e.get("exit_code")
+        out(args, e, f"{tail}\n{e['id']} run/{e['grade']} outcome={e['outcome']} exit={exit_text} "
                      f"({e['elapsed_s']}s) → {e['artifact']['path']}")
         return 0 if e["outcome"] == "pass" else EXIT_FAIL
     if args.ev_cmd == "list":
@@ -251,7 +267,10 @@ def _filter(args, tz) -> logs.Filter:
     if args.grep:
         import re
 
-        f.grep = re.compile(args.grep)
+        try:
+            f.grep = re.compile(args.grep)
+        except re.error as exc:
+            raise Usage(f"bad --grep regex: {exc}") from exc
     f.conds = [logs.parse_cond(c) for c in args.where or []]
     f.keys = [logs.key_pattern(k) for k in args.key or []]
     f.template_ids = set(args.template or [])
@@ -264,10 +283,11 @@ def _sources(args, cfg: config.Config, paths: list[str], since=None, until=None)
         spec = cfg.log_sources.get(args.source)
         if spec is None:
             raise Usage(f"unknown log source {args.source!r}; configured: {', '.join(sorted(cfg.log_sources)) or '-'}")
-        params = {"since": since.isoformat() if since else "", "until": until.isoformat() if until else ""}
-        for p in args.param or []:
-            k, _, v = p.partition("=")
-            params[k] = v
+        from datetime import timezone as _tz
+
+        params = {"since": since.astimezone(_tz.utc).isoformat() if since else "",
+                  "until": until.astimezone(_tz.utc).isoformat() if until else ""}
+        params.update(_kv_pairs(args.param, "--param"))
         return [logs.command_source(args.source, spec, params)], spec.get("profile")
     if not paths:
         raise Usage("give log files/globs/directories, '-' for stdin, or --source NAME")
@@ -281,8 +301,9 @@ def _engine(args, cfg: config.Config, profile_hint: str | None) -> logs.Engine:
 def _cov_line(cov: dict) -> str:
     parts = [f"{len(cov['sources'])} source(s)", f"{_num(cov['records'])} records"]
     for key, label in (("unparsed_lines", "unparsed"), ("untimed_records", "untimed"),
-                       ("decode_fallback_lines", "decode-fallback"), ("decode_replaced_lines", "decode-replaced")):
-        if cov[key]:
+                       ("decode_fallback_lines", "decode-fallback"), ("decode_replaced_lines", "decode-replaced"),
+                       ("ambiguous_local_times", "ambiguous-DST-times")):
+        if cov.get(key):
             parts.append(f"{label} {_num(cov[key])}")
     if cov.get("skipped_binary"):
         parts.append(f"skipped binary {len(cov['skipped_binary'])} ({', '.join(cov['skipped_binary'][:3])})")
@@ -306,7 +327,9 @@ def _rec_line(r: dict, show_delta: bool = False) -> str:
     if show_delta:
         delta = "         " if r.get("delta_ms") is None else f"{'+' + str(r['delta_ms']) + 'ms':>9}"
         delta += " "
-    msg = r["msg"].replace("\n", "\n      ")
+    head, *more = r["msg"].split("\n")
+    shown = more[:4]
+    msg = "\n      ".join([head, *shown]) + (f"\n      … (+{len(more) - 4} lines; --json for all)" if len(more) > 4 else "")
     fields = ""
     if r.get("fields"):
         fields = " {" + ", ".join(f"{k}={v}" for k, v in r["fields"].items()) + "}"
@@ -462,7 +485,7 @@ def cmd_sql(args) -> int:
 
 def cmd_db(args) -> int:
     cfg = _cfg()
-    sql = db.bind(_read_sql(args), dict(p.split("=", 1) for p in args.param or []))
+    sql = db.bind(_read_sql(args), _kv_pairs(args.param, "--param"))
     r = db.run_query(cfg, args.env, sql, allow_risky=args.allow_risky, allow_unbounded=args.allow_unbounded,
                      max_rows=args.max_rows)
     lines = [f"db {r['env']} (tier {r['tier']}, {r['driver']}): {r['returned']} row(s)"
@@ -484,6 +507,11 @@ def _builtin_probes(cfg: config.Config, env_name: str | None) -> dict:
         env = a.get("env") or env_name
         if not env:
             raise bot.ScenarioError("db probe needs an env")
+        if env != env_name:
+            # No person can answer an "ask" mid-run: another env must be open to bots and to db query.
+            pol = cfg.policy(cfg.env(env).get("tier", "unknown"))
+            if not pol.get("bot") or pol.get("devloop_db", "none") != "none":
+                raise bot.ScenarioError(f"refused: db probe on env {env} is outside the scenario's target policy")
         r = db.run_query(cfg, env, db.bind(a["sql"], a.get("params")), max_rows=int(a.get("max_rows", 50)))
         cols = r.get("columns") or []
         return {"rows": [dict(zip(cols, row)) for row in r["rows"]] if cols else r["rows"],
@@ -512,11 +540,9 @@ def cmd_bot(args) -> int:
         out(args, {"valid": not problems, "problems": problems},
             "valid" if not problems else "invalid:\n  " + "\n  ".join(problems))
         return EXIT_FAIL if problems else 0
-    for v in args.var or []:
-        k, _, val = v.partition("=")
+    for k, val in _kv_pairs(args.var, "--var").items():
         scn.setdefault("vars", {})[k] = val
-    env_name = args.env or cfg.adapters.get(args.adapter or scn.get("adapter", ""), {}).get("env")
-    r = bot.run_scenario(cfg, scn, args.env, args.adapter, _builtin_probes(cfg, env_name))
+    r = bot.run_scenario(cfg, scn, args.env, args.adapter, lambda env_name: _builtin_probes(cfg, env_name))
     lines = [f"scenario {r['scenario']}: {r['outcome'].upper()} on {r['env']} ({r['tier']}) via {r['adapter']} "
              f"in {r['elapsed_s']}s"]
     lines += render_steps(r["steps"], args.verbose)
@@ -526,7 +552,10 @@ def cmd_bot(args) -> int:
     claim = (f"bot scenario {r['scenario']} on {r['env']} ({r['tier']}): {r['outcome']}"
              + (f"; {'; '.join(repeats)}" if repeats else "")
              + (f"; failed {', '.join(plain_fail[:5])}" if plain_fail else ""))
-    out(args, r, "\n".join(lines) + _save(args, cfg, "bot.run", r, claim, kind="bot", outcome=r["outcome"],
+    import hashlib
+
+    repro = f"bot:{r['scenario']}:{hashlib.sha256(Path(args.file).read_bytes()).hexdigest()[:16]}"
+    out(args, r, "\n".join(lines) + _save(args, cfg, "bot.run", r, claim, kind="bot", outcome=r["outcome"], repro_key=repro,
                                           scope=f"env={r['env']}"))
     return 0 if r["outcome"] == "pass" else EXIT_FAIL
 
@@ -680,7 +709,7 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--claim", required=True)
     x.add_argument("--scope")
     x.add_argument("--timeout", type=float)
-    x.add_argument("command", nargs=argparse.REMAINDER)
+    x.set_defaults(command=[])  # filled from the arguments after "--" (see main)
     x = e.add_parser("list")
     x.add_argument("id")
     x.add_argument("--kind")
@@ -764,7 +793,7 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("file")
     x.add_argument("--sheet")
     x.add_argument("--max-rows", type=int, default=500)
-    x.add_argument("--max-chars", type=int, default=60000)
+    x.add_argument("--max-chars", type=int, default=20000)
     x.add_argument("--notes", action="store_true", help="include slide notes")
     x.add_argument("--save", metavar="CASE")
     x.add_argument("--note")
@@ -782,7 +811,18 @@ def main(argv: list[str] | None = None) -> int:
             stream.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
         except (AttributeError, ValueError):
             pass
+    argv = list(sys.argv[1:] if argv is None else argv)
+    # Everything after the first "--" is a command for `ev run`; argparse must not see it.
+    tail: list[str] = []
+    if "--" in argv:
+        cut = argv.index("--")
+        argv, tail = argv[:cut], argv[cut + 1:]
     args = build_parser().parse_args(argv)
+    if tail:
+        if not hasattr(args, "command"):
+            print("error: arguments after -- are only accepted by `ev run`", file=sys.stderr)
+            return EXIT_USAGE
+        args.command = tail
     try:
         return args.fn(args)
     except db.Refused as exc:
@@ -795,7 +835,7 @@ def main(argv: list[str] | None = None) -> int:
         print(str(exc), file=sys.stderr)
         return EXIT_REFUSED if str(exc).startswith("refused") else EXIT_USAGE
     except (Usage, config.ConfigError, case.CaseError, ledger.LedgerError, logs.LogError, db.DbError,
-            doctext.DocError, TimeError, FileNotFoundError) as exc:
+            doctext.DocError, TimeError, FileNotFoundError, TimeoutError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return EXIT_USAGE
     except BrokenPipeError:

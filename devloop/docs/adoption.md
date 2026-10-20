@@ -66,13 +66,20 @@ Python 실행 파일은 런처가 `DEVLOOP_PYTHON` → `python3` → `python` �
   예: "조사·검증·설계검토는 devloop 스킬을 쓴다. 결론에는 확인/도출/추론/미확인 등급을 단다. 라이브 쓰기는 하지 않는다. 정식 DB 경로는 `devloop db query`다."
 - **권한.** `.claude/settings.json`의 `permissions.allow`에 `"Bash(*/scripts/devloop *)"`를 넣으면 CLI 호출마다 묻지 않는다. 가드의 deny/ask는 이 설정과 상관없이 적용된다.
 - **기존 MCP DB 도구**를 쓴다면 `[guard] mcp_sql_tools = [{ tool = "mcp__x__query", field = "sql", tier = "qa" }]`로 SQL 분류를 걸 수 있다.
+- **설정 병합 규칙.**
+  - `[guard]`의 목록은 기본값에 *추가*된다.
+  - 개인 설정(`~/.devloop`)과 워크스페이스 설정이 함께 있을 때, 마커는 합집합이고 티어 결정은 더 엄격한 쪽을 쓴다. 저장소 설정으로 개인의 live 보호를 약하게 만들 수 없다.
+- **비밀값.** 명령에 비밀번호·토큰이 들어갈 수 있으면 `[secrets] env = [...]`에 그 환경변수 이름을 적는다. 기록 전에 `${이름}`으로 가려진다.
 
 ## 5. 안전 모델의 한계 (반드시 읽기)
 
 - 가드는 실수를 막는 장치이지 보안 경계가 아니다. 명령 문자열을 분석하므로 스크립트 파일 안의 명령, DSN 별칭, 마커 없는 호스트는 볼 수 없다.
+  해석이 불확실한 경우는 ask로 처리한다: stage/live 마커가 붙었는데 분류할 수 없는 명령(예: `python fix.py --host live-db`, `bash -c`·`ssh`·`$(...)` 안의 명령).
+  `kubectl get/logs/describe` 같은 읽기 동사는 묻지 않는다.
   **live/stage DB는 읽기전용 계정과 복제본을 쓴다.** 이것이 실제 경계다.
 - SQL 분류기는 주석·문자열·다중 문장·T-SQL `GO`·MySQL 실행 주석을 다루고, 방언을 모르면 가장 엄격한 해석을 택한다.
   다만 사용자 정의 함수의 부수효과는 알 수 없다.
+- 정책 설정 파일(`.devloop/config.toml`, `~/.devloop/config.toml`)을 바꾸면 가드를 약하게 만들 수 있다. 설정 변경은 코드 리뷰 대상으로 다룬다.
 - 개인정보: 도구 출력은 Claude Code 대화 기록(`~/.claude/projects`)과 API로 전달된다. live 조회에는 `mask_columns`를 쓴다.
   케이스 아티팩트는 `case purge --older-than <일>`로 정리한다. SteamID·IP·HWID는 개인정보로 취급한다.
 

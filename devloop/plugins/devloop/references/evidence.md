@@ -28,11 +28,12 @@
 | artifact | `ev add --kind artifact --attach 파일` | 확인 | 확인 |
 | derived | `ev add --kind derived --from E1,E2` | min(전제, 도출) | 같음 |
 | report | 티켓·문서·사람·에이전트 진술 (`--ref` 필수) | 확인 | **추론** |
-| review | 독립 교차검증 결과 (`--attach`) | 확인 | **추론** |
+| review | 독립 교차검증 결과 (`--attach` 필수) | 확인 | **추론** |
 | manual | 재확인 불가한 메모 (`--ref` 필수) | 추론 | 추론 |
 | unknown | 알려진 공백 (`--how` 필수) | 미확인 | 미확인 |
 
-정정은 지우지 않고 `--supersedes E#`로 새 항목을 추가한다. `ledger.jsonl`은 CLI 전용이다(편집 시 가드가 거부).
+정정은 지우지 않고 `--supersedes E#`로 새 항목을 추가한다. `ledger.jsonl`은 CLI 전용이다. Edit/Write 도구로 편집하면 가드가 거부하고, 다른 경로로 편집해도 줄마다 들어 있는 이전 줄 해시(`prev`)가 끊겨 `case check`가 오류로 잡는다. 첨부 아티팩트도 해시를 다시 확인한다.
+`[secrets] env = ["QA_DB_PASSWORD"]`처럼 명시한 환경변수의 값은 원장과 아티팩트에 기록되기 전에 `${이름}`으로 가린다.
 
 ## case.md 문법 (파서가 읽는 것만)
 
@@ -54,18 +55,22 @@
 | dangling-ref | 오류 | 원장에 없는 E# 인용 |
 | check-without-run | 오류 | PASS/FAIL인데 실행 증거(run/bot/tool) 없음 |
 | status-mismatch | 오류 | front matter 상태를 손으로 바꿈 |
-| uncited-inference, unparsed-grade, uncovered-req, check-todo, superseded-ref | 경고 | |
+| ledger-chain / artifact-modified / artifact-missing | 오류 | 원장이나 아티팩트가 CLI 밖에서 바뀜 |
+| uncited-inference, unparsed-grade, unparsed-check, uncovered-req, check-todo, superseded-ref | 경고 | |
 
 ## 종료 게이트 (`case close --reason`)
 
 | 유형 | 사유 | 요구 |
 | --- | --- | --- |
-| 공통 | (duplicate, dropped 제외) | 린트 오류 0, 미답 질문 0(답하거나 `--defer`) |
-| review / verify | done | review 증거 1개 이상. verify는 모든 REQ에 실행 또는 명시적 SKIP CHK, TODO 0 |
-| bug / issue | fixed | review 증거, 회귀 CHK의 red→green(run/bot FAIL 뒤 PASS), `[원인]` 주장 |
+| 모든 사유 | – | 린트 오류 0 |
+| 모든 사유 | duplicate·dropped 제외 | 미답 질문 0(답하거나 `--defer`) |
+| review | done / dropped | done: review 증거(첨부). dropped: 사람 결정 |
+| verify | done / blocked / dropped | done: REQ 1개 이상·CHK 1개 이상, 모든 REQ에 실행 또는 명시적 SKIP CHK, TODO 0, review 증거. blocked·dropped: 사람 결정 |
+| bug / issue | fixed | review 증거, 회귀 CHK에서 **같은 재현**(같은 명령 또는 같은 시나리오 파일)의 FAIL 뒤 PASS(원장 순서), `[원인]` 주장 |
 | bug / issue | data-fix | review 증거, 사람 결정(`case decide`), 영향 조회(`db query --save`) |
 | bug / issue | external | report 증거 |
 | bug / issue | not-reproducible | 재현 시도 실행 증거 |
-| 모두 | duplicate / wont-fix / dropped / blocked | `--of CASE` 또는 사람 결정 |
+| bug / issue | duplicate | `--of CASE` |
+| bug / issue | wont-fix / dropped | 사람 결정 |
 
 게이트를 못 넘으면 고치거나 `--force "이유"`로 넘긴다(원장에 기록되고 `case stats`의 강제 종료율에 잡힌다).

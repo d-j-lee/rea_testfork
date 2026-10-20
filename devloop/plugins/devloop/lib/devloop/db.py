@@ -9,14 +9,13 @@ write. Read-only database accounts remain the actual boundary.
 from __future__ import annotations
 
 import hashlib
-import os
 import re
 import sqlite3
 import subprocess
 import time
 
 from . import sqlguard, textio
-from .config import Config
+from .config import Config, render_argv
 
 DEFAULT_MAX_ROWS = 200
 
@@ -111,6 +110,44 @@ def run_query(cfg: Config, env_name: str, sql: str, *, allow_risky: bool = False
     return result
 
 
+_ROWS_AFFECTED = re.compile(r"^\(\d+ rows? affected\)$")
+_INT = re.compile(r"-?(?:0|[1-9]\d*)")
+
+
+def _typed(cell: str):
+    """Numbers become numbers only when the text round-trips (keeps '007')."""
+    if cell == "NULL":
+        return None
+    if _INT.fullmatch(cell):
+        return int(cell)
+    return cell
+
+
+def parse_tsv(lines: list[str]) -> tuple[list[str], list[list]]:
+    """Header + rows from a tab-separated client output. sqlcmd's dashed
+    separator line and "(N rows affected)" trailer are dropped. A row whose
+    width differs from the header means the client did not escape a tab or
+    newline inside a value; the result is refused rather than misaligned,
+    since column masking depends on alignment."""
+    lines = [ln for ln in lines if not _ROWS_AFFECTED.match(ln.strip())]
+    if not lines:
+        return [], []
+    header = lines[0].split("\t")
+    rest = lines[1:]
+    if rest and all(re.fullmatch(r"-+", c.strip() or "-") for c in rest[0].split("\t")) \
+            and len(rest[0].split("\t")) == len(header):
+        rest = rest[1:]
+    rows = []
+    for n, ln in enumerate(rest, 2):
+        cells = ln.split("\t")
+        if len(cells) != len(header):
+            raise Refused(f"refused: output row {n} has {len(cells)} fields but the header has {len(header)} "
+                          "(an unescaped tab or newline in a value?); fix the client output format or select "
+                          "fewer/cleaner columns")
+        rows.append([_typed(c) for c in cells])
+    return header, rows
+
+
 def _sqlite(cfg: Config, db: dict, sql: str, limit: int) -> dict:
     path = cfg.resolve_path(db["path"])
     if not path.is_file():
@@ -135,8 +172,7 @@ def _command(db: dict, sql: str, limit: int) -> dict:
     template = db.get("command")
     if not isinstance(template, list) or not template or not any("{sql}" in str(a) for a in template):
         raise DbError("command driver needs command = [..] with a '{sql}' argument (argv form, no shell)")
-    argv = [os.path.expandvars(str(a)).replace("{sql}", sql) if "{sql}" in str(a) else os.path.expandvars(str(a))
-            for a in template]
+    argv = render_argv(template, {"sql": sql})
     try:
         proc = subprocess.run(argv, capture_output=True, timeout=float(db.get("timeout", 30)))
     except FileNotFoundError as exc:
@@ -151,8 +187,7 @@ def _command(db: dict, sql: str, limit: int) -> dict:
     if proc.returncode != 0:
         raise DbError(f"database client exited {proc.returncode}: {err.strip()[-500:]}")
     if db.get("output") == "tsv":
-        header = lines[0].split("\t") if lines else []
-        body = [ln.split("\t") for ln in lines[1:]]
+        header, body = parse_tsv(lines)
         out.update(columns=header, rows=body[:limit], returned=min(len(body), limit), truncated=len(body) > limit)
     else:
         out.update(columns=None, rows=[[ln] for ln in lines[:limit]], returned=min(len(lines), limit),

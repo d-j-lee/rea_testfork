@@ -20,20 +20,21 @@
 | `case decide ID "결정" --by 이름` | 되돌리기 어려운 결정·합의 기록 |
 | `case close ID --reason R [--of ID] [--force "이유"]` | 게이트 확인 후 종료 |
 | `case stats` · `case purge --older-than 30 [--yes]` | 지표 · 종료 케이스 아티팩트 정리 |
-| `ev add ID --kind K --claim "…" [--ref] [--grade] [--from E1,E2] [--attach f] [--supersedes E#] [--how]` | 증거 추가(상한 강제) |
+| `ev add ID --kind K --claim "…" [--ref] [--grade] [--from E1,E2] [--attach f] [--supersedes E#] [--how]` | 증거 추가(상한 강제). artifact·review는 `--attach` 필수 |
 | `ev run ID --claim "…" [--timeout s] -- <명령…>` | 명령 실행을 증거로(재현·테스트·빌드) |
 | `ev list ID [--kind K]` | 증거 목록(인용 등급 표시) |
 
 ## 로그
 입력: 파일·글롭·디렉터리·`-`(stdin) 또는 `--source 이름`(설정된 명령 원천, `--param k=v`).
 필터: `--since/--until`(ISO, 오프셋 없으면 display_tz; `-2h` 같은 상대값), `--level WARN`, `--grep 정규식`,
-`--where k=v|k!=v|k~re|k>n`(반복=AND), `--key 값`(단어 경계 일치, 반복=OR), `--template ID`.
+`--where k=v|k!=v|k~re|k>n`(반복=AND), `--key 값`(레코드 어디서든 단어 단위 일치, 반복=OR), `--template ID`.
+숫자 ID는 다른 필드 값과 겹치기 쉽다(`--key 102`는 `mission=102`도 잡는다). 필드가 있으면 `--where uid=1042`를 먼저 쓴다.
 | 명령 | 용도 |
 | --- | --- |
 | `log probe 파일…` | 인코딩·프로필 적합도·샘플 (프로필 작성용) |
 | `log scan … [--top 20]` | 레벨 분포 + 메시지 템플릿 요약(가장 먼저) |
 | `log query … [--limit 50 --offset 0 --context 2 --fields a,b]` | 레코드 조회(전체 건수 항상 표시) |
-| `log timeline … --key <uid>` | 여러 소스를 UTC로 합친 순서 + 간격(Δms) + 편차 경고 |
+| `log timeline … --where uid=<id>` (또는 `--key <값>`) | 여러 소스를 UTC로 합친 순서 + 간격(Δms) + 편차 경고 |
 | `log diff … --base-window A..B --target-window C..D` | 배포 전후 템플릿·레벨 변화(신규/소멸/증감) |
 `--save CASE [--note 메모]`를 붙이면 결과가 아티팩트로 저장되고 확인 등급 증거가 된다.
 
@@ -48,6 +49,6 @@
 | 명령 | 용도 |
 | --- | --- |
 | `bot validate 시나리오.json` | 형식 검사 |
-| `bot run 시나리오.json [--env E] [--adapter A] [--var k=v] [--save CASE] [--verbose]` | 실행(티어 정책 적용, live 금지) |
-| `doc text 파일 [--sheet 이름] [--max-rows N] [--notes]` | xlsx/docx/pptx/csv/txt 텍스트(위치 표기 포함) |
+| `bot run 시나리오.json [--env E] [--adapter A] [--var k=v] [--save CASE] [--verbose]` | 실행(티어 정책 적용, live 금지). 어댑터에 env가 지정돼 있으면 `--env`로 바꿀 수 없다 |
+| `doc text 파일 [--sheet 이름] [--max-rows N] [--max-chars 20000] [--notes]` | xlsx/docx/pptx/csv/txt 텍스트(시트·열 문자·행 번호, 슬라이드, 문단 위치 표기) |
 | `hook pretooluse\|sessionstart` | Claude Code 훅 진입점(직접 쓰지 않음) |

@@ -130,6 +130,32 @@ def xlsx(path: Path, sheet: str | None, max_rows: int) -> list[dict]:
     return out
 
 
+def _wtext(el) -> str:
+    """Run text with tabs and line breaks kept."""
+    out = []
+    for node in el.iter():
+        tag = node.tag.split("}")[-1]
+        if tag == "t":
+            out.append(node.text or "")
+        elif tag == "tab":
+            out.append("\t")
+        elif tag in {"br", "cr"}:
+            out.append("\n")
+    return "".join(out)
+
+
+def _blocks(parent):
+    """Body-level paragraphs and tables, descending into content controls (w:sdt)."""
+    for el in parent:
+        tag = el.tag.split("}")[-1]
+        if tag == "sdt":
+            content = el.find("w:sdtContent", _NS)
+            if content is not None:
+                yield from _blocks(content)
+        elif tag in {"p", "tbl"}:
+            yield tag, el
+
+
 def docx(path: Path) -> list[str]:
     z = _zip(path)
     root = _xml(z, "word/document.xml")
@@ -138,10 +164,9 @@ def docx(path: Path) -> list[str]:
     body = root.find("w:body", _NS)
     lines = []
     n = 0
-    for el in (body if body is not None else []):
-        tag = el.tag.split("}")[1]
+    for tag, el in _blocks(body if body is not None else []):
         if tag == "p":
-            text = "".join(t.text or "" for t in el.iter(f"{{{_NS['w']}}}t"))
+            text = _wtext(el)
             if not text.strip():
                 continue
             n += 1
@@ -154,8 +179,7 @@ def docx(path: Path) -> list[str]:
             n += 1
             lines.append(f"[¶{n}] (table)")
             for tr in el.iter(f"{{{_NS['w']}}}tr"):
-                cells = ["".join(t.text or "" for t in tc.iter(f"{{{_NS['w']}}}t")).strip()
-                         for tc in tr.findall("w:tc", _NS)]
+                cells = [_wtext(tc).strip().replace("\n", " ") for tc in tr.findall("w:tc", _NS)]
                 lines.append("| " + " | ".join(c.replace("|", "\\|") for c in cells) + " |")
     return lines
 
@@ -200,8 +224,20 @@ def delimited(path: Path, max_rows: int) -> tuple[list[list[str]], str, int]:
     return rows[:max_rows], src.stats.label(), len(rows)
 
 
-def _table(rows: list[list[str]], numbers: list[int] | None = None) -> list[str]:
+def _col_letter(i: int) -> str:
+    s = ""
+    i += 1
+    while i:
+        i, r = divmod(i - 1, 26)
+        s = chr(65 + r) + s
+    return s
+
+
+def _table(rows: list[list[str]], numbers: list[int] | None = None, letters: bool = False) -> list[str]:
     out = []
+    if letters and rows:
+        width = max(len(r) for r in rows)
+        out.append("   # | " + " | ".join(_col_letter(i) for i in range(width)))
     for i, r in enumerate(rows):
         num = numbers[i] if numbers else i + 1
         out.append(f"{num:>4} | " + " | ".join(c.replace("\n", " ").replace("|", "\\|") for c in r))
@@ -217,7 +253,7 @@ def extract(path: Path, sheet: str | None = None, max_rows: int = 500, notes: bo
         lines = []
         for s in sheets:
             lines.append(f"## sheet {s['sheet']} ({s['total_rows']} rows{', truncated' if s['truncated'] else ''})")
-            lines += _table(s["rows"], s["row_numbers"])
+            lines += _table(s["rows"], s["row_numbers"], letters=True)
         return {"kind": "xlsx", "lines": lines, "sheets": [{k: s[k] for k in ("sheet", "total_rows", "truncated")}
                                                            for s in sheets]}
     if ext == ".docx":

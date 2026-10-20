@@ -1,7 +1,7 @@
 ---
-type: tool_used
-tool: Bash
-input_match: 'devloop[^ ]* log (timeline|query|scan|diff)'
+type: regex
+pattern: 'log (scan|timeline|diff|query) '
+target: trace
 weight: 1
 arm: with-only
 ---

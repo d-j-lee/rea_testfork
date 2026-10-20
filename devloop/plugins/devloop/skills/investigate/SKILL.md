@@ -17,7 +17,7 @@ argument-hint: "[증상·티켓·케이스 ID]"
 ## 진행
 0. **규모 판단.** 몇 번의 확인으로 끝나면 케이스 없이 답한다(근거는 문장 속 출처로). 세션을 넘기거나, 증거 보존·수정·데이터 대응이 필요하면 `case new issue|bug "제목" --ref <티켓>`. 진행 중 케이스가 있으면 이어서 한다(`case list`).
 1. **증상 고정.** 누가·언제(UTC 변환, 원문 시각 병기)·어디·얼마나·빌드. 케이스 1장을 채우고, 사람만 아는 것은 `case ask`.
-2. **사실 수집.** 변화 지점(git log, 배포·데이터 테이블·설정) → `log scan` → `log diff`(먼저 `--level WARN`) → `log timeline --key`. 로그가 크거나 서버가 여럿이면 `log-analyst` 에이전트에 위임하고 결론과 근거 ID만 받는다. 결론에 쓸 결과는 `--save CASE`.
+2. **사실 수집.** 변화 지점(git log, 배포·데이터 테이블·설정) → `log scan` → `log diff`(먼저 `--level WARN`) → `log timeline --where uid=<id>`(필드가 없으면 `--key`). 로그가 크거나 서버가 여럿이면 `log-analyst` 에이전트에 위임하고 결론과 근거 ID만 받는다. 결론에 쓸 결과는 `--save CASE`.
 3. **가설표.** 범주별 후보마다 지지·반박 근거와 판별 방법. 결론을 가장 크게 가르는 가장 싼 확인부터. 코드 흐름은 `code-tracer` 에이전트.
 4. **재현.** `ev run CASE --claim … -- <테스트>` 또는 `bot run <시나리오> --save CASE`. 경합은 `repeat`로 분포를 남긴다. 재현 실패도 기록한다.
 5. **결론.** 등급 규칙대로 case.md에 쓰고 `case check` 오류 0.

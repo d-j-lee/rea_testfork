@@ -32,6 +32,7 @@ class DocTextTest(unittest.TestCase):
         r = doctext.extract(p)
         self.assertEqual([s["sheet"] for s in r["sheets"]], ["missions", "items"])
         self.assertIn("   5 | 104 | (이벤트) 클랜전 1회 | clan_match | 0 | item | 9001 | 1 | 10", r["lines"])
+        self.assertIn("   # | A | B | C | D | E | F | G | H", r["lines"])
         only = doctext.extract(p, sheet="items", max_rows=2)
         self.assertTrue(only["sheets"][0]["truncated"])
         with self.assertRaises(doctext.DocError):
@@ -43,12 +44,14 @@ class DocTextTest(unittest.TestCase):
                 '<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>초기화</w:t></w:r></w:p>'
                 '<w:p><w:r><w:t>매일 00:00(UTC)</w:t></w:r></w:p>'
                 '<w:tbl><w:tr><w:tc><w:p><w:r><w:t>ID</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>보상</w:t></w:r></w:p></w:tc></w:tr></w:tbl>'
+                '<w:sdt><w:sdtContent><w:p><w:r><w:t>컨트롤</w:t><w:tab/><w:t>안</w:t></w:r></w:p></w:sdtContent></w:sdt>'
                 '</w:body></w:document>')
         with zipfile.ZipFile(p, "w") as z:
             z.writestr("word/document.xml", body)
         lines = doctext.extract(p)["lines"]
         self.assertEqual(lines[:2], ["[¶1] # 초기화", "[¶2] 매일 00:00(UTC)"])
         self.assertIn("| ID | 보상 |", lines)
+        self.assertIn("[¶4] 컨트롤\t안", lines)
 
     def test_pptx_slides_in_order(self):
         p = self.dir / "d.pptx"

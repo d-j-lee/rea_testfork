@@ -20,6 +20,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from . import config as config_mod
 from .config import Config
 
 _MISSING = object()
@@ -136,35 +137,56 @@ class ProcessAdapter:
 
     Requests: {"id", "cmd": open|call|probe|events|close, ...}; responses carry
     the same id with "result" or "error". Requests may be answered out of order,
-    which is what lets parallel branches reach the server concurrently.
+    which is what lets parallel branches reach the server concurrently. Output
+    is decoded per line (UTF-8, then CP949), and requests still waiting when the
+    process exits are released with an error instead of timing out.
     """
 
-    def __init__(self, command: list[str], cwd: str | None = None, startup_timeout: float = 10):
-        self.proc = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                     cwd=cwd, text=True, encoding="utf-8", bufsize=1)
+    def __init__(self, command: list[str], cwd: str | None = None):
+        try:
+            self.proc = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                         stderr=subprocess.PIPE, cwd=cwd)
+        except OSError as exc:
+            raise ScenarioError(f"cannot start bot process {command[0]!r}: {exc}") from exc
         self._lock = threading.Lock()
         self._next = 0
         self._waiters: dict[int, tuple[threading.Event, list]] = {}
+        self._closed = False
+        self._stderr: list[str] = []
         self._reader = threading.Thread(target=self._read, daemon=True)
         self._reader.start()
-        self._stderr: list[str] = []
-        threading.Thread(target=self._drain, daemon=True).start()
+        self._drainer = threading.Thread(target=self._drain, daemon=True)
+        self._drainer.start()
+
+    @staticmethod
+    def _decode(raw: bytes) -> str:
+        for enc in ("utf-8", "cp949"):
+            try:
+                return raw.decode(enc)
+            except UnicodeDecodeError:
+                continue
+        return raw.decode("utf-8", errors="replace")
 
     def _drain(self) -> None:
-        for line in self.proc.stderr:  # type: ignore[union-attr]
+        for raw in self.proc.stderr:  # type: ignore[union-attr]
             if len(self._stderr) < 200:
-                self._stderr.append(line.rstrip())
+                self._stderr.append(self._decode(raw).rstrip())
 
     def _read(self) -> None:
-        for line in self.proc.stdout:  # type: ignore[union-attr]
+        for raw in self.proc.stdout:  # type: ignore[union-attr]
             try:
-                msg = json.loads(line)
+                msg = json.loads(self._decode(raw))
             except ValueError:
-                continue
-            w = self._waiters.get(msg.get("id"))
+                continue  # banners and stray prints are not protocol lines
+            w = self._waiters.get(msg.get("id")) if isinstance(msg, dict) else None
             if w:
                 w[1].append(msg)
                 w[0].set()
+        self._closed = True
+        for ev, box in list(self._waiters.values()):
+            if not box:
+                box.append({"error": f"bot process ended ({self.proc.poll()}): {' | '.join(self._stderr[-5:])}"})
+                ev.set()
 
     def request(self, payload: dict, timeout: float) -> dict:
         ev, box = threading.Event(), []
@@ -172,10 +194,16 @@ class ProcessAdapter:
             self._next += 1
             rid = self._next
             self._waiters[rid] = (ev, box)
-            if self.proc.poll() is not None:
-                raise ScenarioError(f"bot process exited ({self.proc.returncode}): {' | '.join(self._stderr[-5:])}")
-            self.proc.stdin.write(json.dumps({"id": rid, **payload}, ensure_ascii=False) + "\n")  # type: ignore[union-attr]
-            self.proc.stdin.flush()  # type: ignore[union-attr]
+            if self._closed or self.proc.poll() is not None:
+                self._waiters.pop(rid, None)
+                raise ScenarioError(f"bot process exited ({self.proc.poll()}): {' | '.join(self._stderr[-5:])}")
+            try:
+                data = (json.dumps({"id": rid, **payload}, ensure_ascii=False) + "\n").encode("utf-8")
+                self.proc.stdin.write(data)  # type: ignore[union-attr]
+                self.proc.stdin.flush()  # type: ignore[union-attr]
+            except OSError as exc:
+                self._waiters.pop(rid, None)
+                raise ScenarioError(f"bot process is not accepting input: {exc}") from exc
         if not ev.wait(timeout):
             self._waiters.pop(rid, None)
             raise TimeoutError(f"no response to {payload.get('cmd')} {payload.get('op', '')} within {timeout}s")
@@ -194,7 +222,8 @@ class ProcessAdapter:
 
     def close(self) -> None:
         try:
-            self.request({"cmd": "close"}, 5)
+            if not self._closed:
+                self.request({"cmd": "close"}, 5)
         except Exception:  # noqa: BLE001 - shutting down regardless
             pass
         try:
@@ -204,10 +233,11 @@ class ProcessAdapter:
             self.proc.kill()
             self.proc.wait()
         self._reader.join(timeout=5)
+        self._drainer.join(timeout=5)
         for stream in (self.proc.stdout, self.proc.stderr):
             try:
                 stream.close()  # type: ignore[union-attr]
-            except Exception:  # noqa: BLE001 - the drain thread may still hold it
+            except Exception:  # noqa: BLE001 - a drain thread may still hold it
                 pass
 
 
@@ -238,7 +268,7 @@ def load_adapter(cfg: Config, name: str):
         if not isinstance(cmd, list) or not cmd:
             raise ScenarioError(f"adapter {name}: process adapters need command = [..]")
         cwd = str(cfg.resolve_path(spec["cwd"])) if spec.get("cwd") else (str(cfg.workspace) if cfg.workspace else None)
-        argv = [sys.executable if str(c) == "{python}" else str(c) for c in cmd]
+        argv = [sys.executable if str(c) == "{python}" else c for c in config_mod.render_argv(cmd, {})]
         return ProcessAdapter(argv, cwd=cwd), spec
     if kind == "python":
         path = cfg.resolve_path(spec["module"])
@@ -354,6 +384,8 @@ class Runner:
                     continue
                 return False
             results = [check_assert(a, resp, self.variables) for a in st.get("expect", []) + st.get("expect_all", [])]
+            for r in results:
+                r["actual"] = _redact(r["actual"], self.redact)
             for var, p in st.get("save", {}).items():
                 v = get_path(resp, p)
                 if v is _MISSING:
@@ -435,24 +467,37 @@ class Runner:
         raise TimeoutError(f"no event matching {match} for {spec['actor']}")
 
 
-def run_scenario(cfg: Config, scn: dict, env_name: str | None, adapter_name: str | None, probes: dict) -> dict:
-    problems = validate(scn)
-    if problems:
-        raise ScenarioError("invalid scenario: " + "; ".join(problems))
+def resolve_target(cfg: Config, scn: dict, env_name: str | None, adapter_name: str | None) -> tuple[str, str, str]:
+    """(adapter, env, tier) after policy checks. An adapter bound to an env in
+    the config targets that env; --env cannot relabel it."""
     name = adapter_name or scn.get("adapter")
     if not name:
         raise ScenarioError("no adapter: set \"adapter\" in the scenario or pass --adapter")
-    spec = cfg.adapters.get(name, {})
-    env_name = env_name or spec.get("env")
+    if name not in cfg.adapters:
+        known = ", ".join(sorted(cfg.adapters)) or "(none configured)"
+        raise ScenarioError(f"unknown adapter {name!r}; configured: {known}")
+    bound = cfg.adapters[name].get("env")
+    if bound and env_name and env_name != bound:
+        raise ScenarioError(f"refused: adapter {name} is bound to env {bound}; --env {env_name} cannot change its target")
+    env_name = bound or env_name
     if not env_name:
         raise ScenarioError("no target env: pass --env or set env on the adapter (the runner needs a tier)")
-    env = cfg.env(env_name)
-    tier = env.get("tier", "unknown")
+    tier = cfg.env(env_name).get("tier", "unknown")
     allowed = scn.get("allowed_tiers", DEFAULT_TIERS)
     if tier not in allowed:
         raise ScenarioError(f"refused: scenario allows tiers {allowed}, env {env_name} is {tier}")
     if not cfg.policy(tier).get("bot", False):
         raise ScenarioError(f"refused: bot runs are disabled for tier {tier} (tiers.{tier}.bot)")
+    return name, env_name, tier
+
+
+def run_scenario(cfg: Config, scn: dict, env_name: str | None, adapter_name: str | None, probes_for) -> dict:
+    """``probes_for(env_name)`` returns the built-in probes bound to the target env."""
+    problems = validate(scn)
+    if problems:
+        raise ScenarioError("invalid scenario: " + "; ".join(problems))
+    name, env_name, tier = resolve_target(cfg, scn, env_name, adapter_name)
+    probes = probes_for(env_name) if callable(probes_for) else probes_for
     adapter, spec = load_adapter(cfg, name)
     variables = {"run_id": time.strftime("%Y%m%d%H%M%S", time.gmtime()) + f"{int(time.time() * 1000) % 1000:03d}",
                  **scn.get("vars", {})}
@@ -461,7 +506,10 @@ def run_scenario(cfg: Config, scn: dict, env_name: str | None, adapter_name: str
     started = time.time()
     try:
         for actor, aspec in scn.get("actors", {}).items():
-            runner.sessions[actor] = adapter.open(actor, interpolate(aspec, runner.variables))
+            try:
+                runner.sessions[actor] = adapter.open(actor, interpolate(aspec, runner.variables))
+            except (TimeoutError, RuntimeError, OSError) as exc:
+                raise ScenarioError(f"adapter could not open actor {actor}: {type(exc).__name__}: {exc}") from exc
         ok = runner.run_steps(scn["steps"], "steps")
     finally:
         for s in runner.sessions.values():

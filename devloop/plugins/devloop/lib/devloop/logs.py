@@ -15,17 +15,23 @@ import json
 import os
 import re
 import subprocess
+import threading
 from collections import Counter, deque
 from dataclasses import dataclass, field
-from datetime import datetime, tzinfo
+from datetime import datetime, timezone, tzinfo
 from pathlib import Path
 from typing import Iterable, Iterator
 
 from . import textio
+from .config import render_argv
 from .timeutil import TimeError, fmt_ts, make_ts_parser, parse_ts, parse_tz
 
-LEVEL_RANK = {"TRACE": 0, "VERBOSE": 0, "DEBUG": 1, "INFO": 2, "NOTICE": 2, "WARN": 3, "WARNING": 3,
-              "ERROR": 4, "ERR": 4, "FATAL": 5, "CRITICAL": 5, "CRIT": 5, "PANIC": 5}
+LEVEL_RANK = {"TRACE": 0, "DEBUG": 1, "INFO": 2, "NOTICE": 2, "WARN": 3, "ERROR": 4, "FATAL": 5}
+# Aliases seen in common logging libraries (log4x, Serilog, NLog, glog, syslog).
+_LEVEL_ALIASES = {"TRC": "TRACE", "VERBOSE": "TRACE", "VRB": "TRACE", "DBG": "DEBUG", "INF": "INFO",
+                  "INFORMATION": "INFO", "I": "INFO", "W": "WARN", "WRN": "WARN", "WARNING": "WARN",
+                  "E": "ERROR", "ERR": "ERROR", "F": "FATAL", "FTL": "FATAL", "CRITICAL": "FATAL", "CRIT": "FATAL",
+                  "PANIC": "FATAL", "EMERG": "FATAL", "ALERT": "FATAL", "D": "DEBUG", "T": "TRACE"}
 _LEVEL_SCAN = re.compile(r"\b(TRACE|VERBOSE|DEBUG|INFO|NOTICE|WARN(?:ING)?|ERROR|ERR|FATAL|CRIT(?:ICAL)?|PANIC)\b")
 _LEAD_TS = re.compile(
     r"^\[?(\d{4}[-/.]\d{2}[-/.]\d{2}[ T]\d{2}:\d{2}:\d{2}(?:[.,]\d{1,9})?(?:\s?(?:Z|[+-]\d{2}:?\d{2}))?)\]?")
@@ -44,6 +50,8 @@ _MASK = re.compile("|".join([
     r"(?P<ip>\b\d{1,3}(?:\.\d{1,3}){3}(?::\d+)?\b)",
     r"(?P<hex>\b0x[0-9a-fA-F]+\b|\b(?=[0-9a-fA-F]*\d)[0-9a-fA-F]{12,}\b)",
     r"(?P<kv>(?<![\w.\-])(?P<key>[A-Za-z_][\w.\-]*)=[^\s,;)\]}]+)",
+    # identifiers mixing letters and digits: char_1234, ITEM_3A, game-01, r000746
+    r"(?P<id>\b(?=[\w-]*\d)(?=[\w-]*[A-Za-z])[A-Za-z0-9_][\w-]{2,}\b)",
     r"(?P<n>(?<![A-Za-z_])[-+]?\d+(?:\.\d+)?(?![A-Za-z_]))",
 ]))
 
@@ -172,6 +180,7 @@ class SourceStats:
     unparsed: int = 0
     untimed: int = 0
     ts_errors: int = 0
+    ambiguous_ts: int = 0  # local times that occur twice (DST fall-back): order within that hour is uncertain
     continuation_lines: int = 0
     first: datetime | None = None
     last: datetime | None = None
@@ -181,7 +190,8 @@ class SourceStats:
         d = {
             "source": self.source, "profile": self.profile, "assumed_tz": self.tz,
             "records": self.records, "unparsed_lines": self.unparsed, "untimed_records": self.untimed,
-            "timestamp_errors": self.ts_errors, "continuation_lines": self.continuation_lines,
+            "timestamp_errors": self.ts_errors, "ambiguous_local_times": self.ambiguous_ts,
+            "continuation_lines": self.continuation_lines,
             "first": fmt_ts(self.first, tz), "last": fmt_ts(self.last, tz),
         }
         if self.decode:
@@ -196,7 +206,7 @@ def _norm_level(v) -> str | None:
     if v is None:
         return None
     s = str(v).strip().upper()
-    return {"WARNING": "WARN", "ERR": "ERROR", "CRITICAL": "FATAL", "CRIT": "FATAL"}.get(s, s) or None
+    return _LEVEL_ALIASES.get(s, s) or None
 
 
 def _pick(d: dict, explicit: str | None, candidates: tuple[str, ...]):
@@ -229,9 +239,10 @@ def detect_profile(lines: list[str], profiles: dict[str, Profile]) -> tuple[Prof
     for name, p in profiles.items():
         if p.format == "regex" and p.pattern is not None:
             rates[name] = sum(1 for ln in sample if p.pattern.match(ln)) / len(sample)
-    best = max(((r, n) for n, r in rates.items()), default=(0.0, "plain"))
-    if best[0] >= 0.5:
-        return profiles[best[1]], rates
+    # Ties go to the earliest profile (built-ins first, then configuration order).
+    best = max(rates, key=rates.__getitem__, default=None)
+    if best is not None and rates[best] >= 0.5:
+        return profiles[best], rates
     return profiles["plain"], rates
 
 
@@ -245,6 +256,7 @@ def _iter_lines(source: textio.TextSource) -> Iterator[tuple[int, str]]:
 def parse_records(name: str, lines: Iterable[tuple[int, str]], profile: Profile, stats: SourceStats) -> Iterator[Record]:
     tz, _ = profile.tz_for(name)
     parse = make_ts_parser(profile.ts_format, tz)
+    zoned = not isinstance(tz, timezone)  # an IANA zone with DST transitions
     pending: Record | None = None
 
     def finish(rec: Record) -> Record:
@@ -262,7 +274,10 @@ def parse_records(name: str, lines: Iterable[tuple[int, str]], profile: Profile,
         if raw in (None, ""):
             return None
         try:
-            return parse(str(raw))
+            dt = parse(str(raw))
+            if zoned and dt.tzinfo is tz and dt.replace(fold=1).utcoffset() != dt.utcoffset():
+                stats.ambiguous_ts += 1
+            return dt
         except (ValueError, OverflowError, OSError):
             stats.ts_errors += 1
             return None
@@ -355,15 +370,28 @@ def expand_paths(items: list[str]) -> list[str]:
     return out
 
 
+def _display_name(path: str) -> str:
+    """Paths under the working directory are shown relative to it (shorter
+    refs); others keep their given form."""
+    if path != "-" and os.path.isabs(path):
+        try:
+            rel = os.path.relpath(path)
+        except ValueError:  # another drive on Windows
+            return path
+        if not rel.startswith(".."):
+            return rel
+    return path
+
+
 def file_sources(paths: list[str]) -> list[Source]:
-    return [Source(p, (lambda p=p: p)) for p in expand_paths(paths)]
+    return [Source(_display_name(p), (lambda p=p: p)) for p in expand_paths(paths)]
 
 
 def command_source(name: str, spec: dict, params: dict[str, str]) -> Source:
     cmd = spec.get("command")
     if not isinstance(cmd, list) or not cmd:
         raise LogError(f"log source {name}: 'command' must be a non-empty list (argv, no shell)")
-    argv = [str(a).format(**params) if "{" in str(a) else str(a) for a in cmd]
+    argv = render_argv(cmd, params)  # ${ENV} expanded here, never recorded
     origin = {"kind": "command", "source": name, "argv_template": cmd, "params": params, "env": spec.get("env")}
     return Source(f"source:{name}", (lambda: argv), origin)
 
@@ -371,7 +399,15 @@ def command_source(name: str, spec: dict, params: dict[str, str]) -> Source:
 def open_source(src: Source, profile: Profile) -> tuple[textio.TextSource, subprocess.Popen | None]:
     target = src.open()  # type: ignore[operator]
     if isinstance(target, list):
-        proc = subprocess.Popen(target, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        try:
+            proc = subprocess.Popen(target, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        except OSError as exc:
+            raise LogError(f"cannot start log source {target[0]!r}: {exc}") from exc
+        # Drain stderr concurrently: a chatty source would otherwise block on a full pipe.
+        tail: deque[bytes] = deque(maxlen=50)
+        drain = threading.Thread(target=lambda: tail.extend(proc.stderr), daemon=True)  # type: ignore[arg-type]
+        drain.start()
+        proc.stderr_tail, proc.stderr_drain = tail, drain  # type: ignore[attr-defined]
         head = proc.stdout.read(4096)  # type: ignore[union-attr]
         enc, basis, fb = textio.choose_encoding(head, profile.encoding, profile.fallback)
         stats = textio.DecodeStats(source=src.name, encoding=enc, basis=basis, fallback=fb)
@@ -460,7 +496,7 @@ def key_pattern(value: str) -> re.Pattern:
 
 def level_threshold(text: str) -> int:
     s = text.strip().upper().lstrip(">=")
-    s = {"WARNING": "WARN"}.get(s, s)
+    s = _LEVEL_ALIASES.get(s, s)
     if s not in LEVEL_RANK:
         raise LogError(f"unknown level {text!r}")
     return LEVEL_RANK[s]
@@ -553,7 +589,13 @@ class Engine:
                 if len(head) >= 200:
                     break
             profile, _ = detect_profile([t for _, t in head], self.profiles)
-            lines = _chain(head, lines)
+            if (profile.encoding != "auto" and proc is None and profile.encoding != text.stats.encoding):
+                # The detected profile pins an encoding: decode the file again with it.
+                text.close()
+                text = textio.open_text(src.open(), profile.encoding, profile.fallback)  # type: ignore[operator]
+                lines = _iter_lines(text)
+            else:
+                lines = _chain(head, lines)
         tz_obj, tz_spec = profile.tz_for(src.name)
         stats = SourceStats(src.name, profile.name, tz_spec, text.stats, origin=src.origin)
         self.sources.append(stats)
@@ -571,7 +613,8 @@ class Engine:
                 except subprocess.TimeoutExpired:
                     proc.kill()
                     proc.wait()
-                err = (proc.stderr.read() or b"").decode("utf-8", "replace")[:500]  # type: ignore[union-attr]
+                proc.stderr_drain.join(timeout=5)  # type: ignore[attr-defined]
+                err = b"".join(proc.stderr_tail).decode("utf-8", "replace")[-500:]  # type: ignore[attr-defined]
                 proc.stderr.close()  # type: ignore[union-attr]
                 if proc.returncode:
                     stats.origin = {**(stats.origin or {}), "exit_code": proc.returncode, "stderr": err}
@@ -587,11 +630,13 @@ def coverage(engine: Engine, tz: tzinfo) -> dict:
     total = sum(s.records for s in engine.sources)
     unparsed = sum(s.unparsed for s in engine.sources)
     untimed = sum(s.untimed for s in engine.sources)
+    ambiguous = sum(s.ambiguous_ts for s in engine.sources)
     fallback = sum((s.decode.fallback_lines if s.decode else 0) for s in engine.sources)
     replaced = sum((s.decode.replaced_lines if s.decode else 0) for s in engine.sources)
     skipped = [s.source for s in engine.sources if s.profile.startswith("skipped:")]
     return {"sources": srcs, "records": total, "unparsed_lines": unparsed, "untimed_records": untimed,
-            "decode_fallback_lines": fallback, "decode_replaced_lines": replaced, "skipped_binary": skipped}
+            "decode_fallback_lines": fallback, "decode_replaced_lines": replaced, "skipped_binary": skipped,
+            "ambiguous_local_times": ambiguous}
 
 
 def scan(engine: Engine, sources: list[Source], flt: Filter, top: int, tz: tzinfo) -> dict:

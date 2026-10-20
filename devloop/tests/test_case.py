@@ -63,6 +63,47 @@ class LedgerTest(CaseTestBase):
         self.assertTrue((led.case_dir / ok["artifact"]["path"]).is_file())
 
 
+class IntegrityTest(CaseTestBase):
+    def test_chain_detects_edits_outside_the_cli(self):
+        d = self.new()
+        led = ledger.Ledger(d)
+        led.add_evidence(kind="manual", claim="a", ref="memo")
+        led.add_evidence(kind="manual", claim="b", ref="memo")
+        self.assertNotIn("ledger-chain", self.codes(d))
+        lines = (d / "ledger.jsonl").read_text(encoding="utf-8").splitlines()
+        lines[-2] = lines[-2].replace('"추론"', '"확인"')
+        (d / "ledger.jsonl").write_text("\n".join(lines) + "\n", encoding="utf-8")
+        self.assertIn("ledger-chain", self.codes(d))
+
+    def test_artifact_hash_is_rechecked(self):
+        d = self.new()
+        e, _ = ledger.Ledger(d).run_command(argv=[sys.executable, "-c", "print(1)"], claim="x", timeout=30, scope=None)
+        (d / e["artifact"]["path"]).write_text("forged", encoding="utf-8")
+        self.assertIn("artifact-modified", self.codes(d))
+
+    def test_concurrent_appends_get_unique_ids(self):
+        import threading
+        led = ledger.Ledger(self.new())
+        threads = [threading.Thread(target=lambda: led.add_evidence(kind="manual", claim="x", ref="m"))
+                   for _ in range(30)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        ids = [e["id"] for e in led.entries() if e.get("type") == "evidence"]
+        self.assertEqual(len(ids), len(set(ids)))
+        self.assertEqual(led.verify_chain(), [])
+
+    def test_explicit_secrets_are_redacted(self):
+        d = self.new()
+        led = ledger.Ledger(d, secrets={"hunter2-secret": "DB_PASS"})
+        e, tail = led.run_command(argv=[sys.executable, "-c", "print('pw=hunter2-secret')", "-p", "hunter2-secret"],
+                                  claim="x", timeout=30, scope=None)
+        raw = (d / "ledger.jsonl").read_text(encoding="utf-8") + (d / e["artifact"]["path"]).read_text(encoding="utf-8")
+        self.assertNotIn("hunter2-secret", raw)
+        self.assertIn("${DB_PASS}", raw)
+
+
 class LintTest(CaseTestBase):
     def test_template_is_clean(self):
         for t in case.TYPES:
@@ -129,6 +170,15 @@ class LintTest(CaseTestBase):
 
 
 class CloseTest(CaseTestBase):
+    def repro(self, led, claim: str) -> str:
+        """The same command before and after a 'fix' (the marker file)."""
+        marker = self.ws.root / "fixed.flag"
+        code = f"import pathlib, sys; sys.exit(0 if pathlib.Path({str(marker)!r}).exists() else 1)"
+        return led.run_command(argv=[sys.executable, "-c", code], claim=claim, timeout=30, scope=None)[0]["id"]
+
+    def fix(self):
+        (self.ws.root / "fixed.flag").write_text("x", encoding="utf-8")
+
     def run_evidence(self, led, code: int, claim: str) -> str:
         return led.run_command(argv=[sys.executable, "-c", f"import sys; sys.exit({code})"], claim=claim,
                                timeout=30, scope=None)[0]["id"]
@@ -136,8 +186,9 @@ class CloseTest(CaseTestBase):
     def test_fixed_requires_red_green_review_and_answers(self):
         d = self.new()
         led = ledger.Ledger(d)
-        red = self.run_evidence(led, 1, "before")
-        green = self.run_evidence(led, 0, "after")
+        red = self.repro(led, "before")
+        self.fix()
+        green = self.repro(led, "after")
         self.write_body(d, "## 4. 결론\n", f"## 4. 결론\n- (도출) [원인] 재현됨 [{red}][{green}]\n")
         self.write_body(d, CHK6, f"{CHK6}| CHK-1 | 회귀 | t | ok | PASS | [{green}] |\n")
         led.append({"type": "question", "id": "Q1", "text": "보상?"})
@@ -151,7 +202,10 @@ class CloseTest(CaseTestBase):
         self.write_body(d, f"| PASS | [{green}] |", f"| PASS | [{red}][{green}] |")
         review = self.ws.root / "review.md"
         review.write_text("ok", encoding="utf-8")
-        led.add_evidence(kind="review", claim="reviewed", ref="adversary", attach=review)
+        with self.assertRaises(ledger.LedgerError):
+            led.add_evidence(kind="review", claim="reviewed", ref="adversary")  # a review must attach its output
+        e = led.add_evidence(kind="review", claim="reviewed", ref="adversary", attach=review)
+        self.assertTrue((d / e["artifact"]["path"]).is_file())
         led.append({"type": "answer", "question": "Q1", "text": "no", "resolution": "answered"})
         entry, failed, _ = case.close(d, "fixed", None, None, self.cases)
         self.assertEqual((failed, entry["forced"]), ([], False))
@@ -159,11 +213,43 @@ class CloseTest(CaseTestBase):
         with self.assertRaises(case.CaseError):
             case.close(d, "fixed", None, None, self.cases)
 
+    def test_different_commands_do_not_make_red_green(self):
+        d = self.new()
+        led = ledger.Ledger(d)
+        red = self.run_evidence(led, 1, "false")
+        green = self.run_evidence(led, 0, "true")
+        self.write_body(d, CHK6, f"{CHK6}| CHK-1 | 회귀 | t | ok | PASS | [{red}][{green}] |\n")
+        failed, _ = case.close_gates(d, "fixed", None, self.cases)
+        self.assertTrue(any("regression" in f for f in failed))
+
+    def test_order_is_ledger_order_not_citation_order(self):
+        d = self.new()
+        led = ledger.Ledger(d)
+        red = self.repro(led, "before")
+        self.fix()
+        green = self.repro(led, "after")
+        self.write_body(d, CHK6, f"{CHK6}| CHK-1 | 회귀 | t | ok | PASS | [{green}][{red}] |\n")
+        failed, _ = case.close_gates(d, "fixed", None, self.cases)
+        self.assertFalse(any("regression" in f for f in failed), failed)
+
+    def test_data_fix_needs_db_query_and_verify_needs_reqs(self):
+        d = self.new()
+        led = ledger.Ledger(d)
+        led.save_tool_result(tool="log.scan", argv=["log", "scan"], payload={}, claim="scan")
+        led.append({"type": "decision", "text": "ok", "by": "pm"}, id_prefix="D")
+        failed, _ = case.close_gates(d, "data-fix", None, self.cases)
+        self.assertTrue(any("impact query" in f for f in failed))
+        v = self.new("verify", "empty verify")
+        failed, _ = case.close_gates(v, "done", None, self.cases)
+        self.assertTrue(any("at least one" in f for f in failed))
+
     def test_green_before_red_does_not_count(self):
         d = self.new()
         led = ledger.Ledger(d)
-        green = self.run_evidence(led, 0, "after")
-        red = self.run_evidence(led, 1, "before")
+        self.fix()
+        green = self.repro(led, "after")
+        (self.ws.root / "fixed.flag").unlink()
+        red = self.repro(led, "before")
         self.write_body(d, CHK6, f"{CHK6}| CHK-1 | 회귀 | t | ok | PASS | [{green}][{red}] |\n")
         failed, _ = case.close_gates(d, "fixed", None, self.cases)
         self.assertTrue(any("regression" in f for f in failed))

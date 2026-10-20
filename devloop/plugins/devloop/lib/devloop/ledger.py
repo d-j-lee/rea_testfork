@@ -1,9 +1,13 @@
 """Append-only case ledger: evidence, questions, decisions and status events.
 
-The CLI is the only writer. Evidence grades are capped by provenance: what the
-tool can resolve or hash may be ``확인``; a statement nobody can re-check is at
-most ``추론``. Reports from people, tickets and agents are confirmed only as
-"this was stated", so they count as ``추론`` when cited for a conclusion.
+The CLI is the only writer. Appends are serialized with a file lock and each
+entry carries the hash of the previous line, so edits made outside the CLI
+(including through a shell) are detectable by ``case check``.
+
+Evidence grades are capped by provenance: what the tool can resolve or hash may
+be ``확인``; a statement nobody can re-check is at most ``추론``. Reports from
+people, tickets and agents are confirmed only as "this was stated", so they
+count as ``추론`` when cited for a conclusion.
 """
 
 from __future__ import annotations
@@ -15,7 +19,8 @@ import re
 import shutil
 import subprocess
 import time
-from dataclasses import dataclass
+from contextlib import contextmanager
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -34,12 +39,13 @@ KINDS = {
     "artifact": ("확인", None),  # attached file, hashed
     "derived": ("도출", None),   # computed from cited evidence (--from)
     "report": ("확인", "추론"),  # someone/something stated it (ticket, doc, person, agent)
-    "review": ("확인", "추론"),  # independent review output
+    "review": ("확인", "추론"),  # independent review output (attached)
     "manual": ("추론", None),    # no resolvable source
     "unknown": ("미확인", None), # recorded unknown with how to check
 }
 EXECUTION_KINDS = {"run", "bot", "tool"}
 REPRO_KINDS = {"run", "bot"}
+GENESIS = "0" * 16
 
 
 class LedgerError(ValueError):
@@ -54,7 +60,7 @@ def norm_grade(text: str) -> str:
 
 
 def now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+    return datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
 def sha256_file(path: Path) -> str:
@@ -65,9 +71,45 @@ def sha256_file(path: Path) -> str:
     return h.hexdigest()
 
 
+def _line_hash(line: str) -> str:
+    return hashlib.sha256(line.rstrip("\n").encode("utf-8")).hexdigest()[:16]
+
+
+@contextmanager
+def _locked(path: Path):
+    """Exclusive inter-process lock (released by the OS if the process dies)."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    f = open(path, "a+b")
+    try:
+        if os.name == "nt":
+            import msvcrt
+
+            f.seek(0)
+            msvcrt.locking(f.fileno(), msvcrt.LK_LOCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(f, fcntl.LOCK_EX)
+        yield
+    finally:
+        try:
+            if os.name == "nt":
+                import msvcrt
+
+                f.seek(0)
+                msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                import fcntl
+
+                fcntl.flock(f, fcntl.LOCK_UN)
+        finally:
+            f.close()
+
+
 @dataclass
 class Ledger:
     case_dir: Path
+    secrets: dict[str, str] = field(default_factory=dict)  # value -> env var name, redacted on write
 
     @property
     def path(self) -> Path:
@@ -77,39 +119,74 @@ class Ledger:
     def artifacts(self) -> Path:
         return self.case_dir / "artifacts"
 
-    def entries(self) -> list[dict]:
+    # --- reading -----------------------------------------------------------------
+    def _lines(self) -> list[str]:
         if not self.path.exists():
             return []
-        out = []
         with open(self.path, encoding="utf-8") as f:
-            for n, line in enumerate(f, 1):
-                if not line.strip():
-                    continue
-                try:
-                    out.append(json.loads(line))
-                except ValueError as exc:
-                    raise LedgerError(f"{self.path}:{n}: corrupt ledger line ({exc}); the ledger is CLI-owned") from exc
+            return [ln for ln in f if ln.strip()]
+
+    def entries(self) -> list[dict]:
+        out = []
+        for n, line in enumerate(self._lines(), 1):
+            try:
+                out.append(json.loads(line))
+            except ValueError as exc:
+                raise LedgerError(f"{self.path}:{n}: corrupt ledger line ({exc}); the ledger is CLI-owned") from exc
         return out
 
-    def append(self, entry: dict) -> dict:
-        entry = {"ts": now_iso(), **entry}
-        self.case_dir.mkdir(parents=True, exist_ok=True)
-        with open(self.path, "a", encoding="utf-8") as f:
-            f.write(json.dumps(entry, ensure_ascii=False, sort_keys=False) + "\n")
-        return entry
-
-    def next_id(self, prefix: str) -> str:
-        n = 0
-        for e in self.entries():
-            m = re.fullmatch(rf"{prefix}(\d+)", str(e.get("id", "")))
-            if m:
-                n = max(n, int(m.group(1)))
-        return f"{prefix}{n + 1}"
+    def verify_chain(self) -> list[str]:
+        """Return problems with the hash chain (edits, insertions, deletions)."""
+        problems = []
+        prev = GENESIS
+        for n, line in enumerate(self._lines(), 1):
+            try:
+                e = json.loads(line)
+            except ValueError:
+                problems.append(f"line {n} is not JSON")
+                prev = _line_hash(line)
+                continue
+            if e.get("prev") != prev:
+                problems.append(f"line {n} ({e.get('id') or e.get('type')}) does not follow line {n - 1}")
+            prev = _line_hash(line)
+        return problems
 
     def evidence(self) -> dict[str, dict]:
         return {e["id"]: e for e in self.entries() if e.get("type") == "evidence"}
 
-    # --- evidence -------------------------------------------------------------------
+    # --- writing -----------------------------------------------------------------
+    def redact(self, value):
+        if not self.secrets:
+            return value
+        if isinstance(value, str):
+            for secret, name in self.secrets.items():
+                value = value.replace(secret, "${" + name + "}")
+            return value
+        if isinstance(value, list):
+            return [self.redact(v) for v in value]
+        if isinstance(value, dict):
+            return {k: self.redact(v) for k, v in value.items()}
+        return value
+
+    def append(self, entry: dict, id_prefix: str | None = None) -> dict:
+        """Append under the lock; assigns ``id`` (E1, Q1, D1...) when asked."""
+        with _locked(self.case_dir / ".ledger.lock"):
+            lines = self._lines()
+            prev = _line_hash(lines[-1]) if lines else GENESIS
+            entry = {"ts": now_iso(), **self.redact(entry)}
+            if id_prefix:
+                n = 0
+                for line in lines:
+                    m = re.search(rf'"id": "{id_prefix}(\d+)"', line)
+                    if m:
+                        n = max(n, int(m.group(1)))
+                entry = {"id": f"{id_prefix}{n + 1}", **entry}
+            entry["prev"] = prev
+            with open(self.path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+        return entry
+
+    # --- evidence ------------------------------------------------------------------
     def add_evidence(self, *, kind: str, claim: str, grade: str | None = None, ref: str | None = None,
                      scope: str | None = None, premises: list[str] | None = None, supersedes: str | None = None,
                      how_to_check: str | None = None, extra: dict | None = None, workspace: Path | None = None,
@@ -121,9 +198,9 @@ class Ledger:
         existing = self.evidence()
         if kind == "file":
             entry["file"] = _resolve_file_ref(ref, workspace)
-        if kind == "artifact":
-            if attach is None:
-                raise LedgerError("kind artifact needs --attach PATH")
+        if kind in {"artifact", "review"} and attach is None:
+            raise LedgerError(f"kind {kind} needs --attach PATH (the file is copied and hashed)")
+        if attach is not None:
             entry["artifact"] = self._store(attach)
         if kind == "derived":
             if not premises:
@@ -146,17 +223,16 @@ class Ledger:
             raise LedgerError(f"cannot supersede unknown evidence {supersedes}")
         entry.update({"grade": g, "ref": ref, "scope": scope, "supersedes": supersedes,
                       "how_to_check": how_to_check})
-        if extra:
-            entry.update(extra)
         entry = {k: v for k, v in entry.items() if v is not None}
-        entry["id"] = self.next_id("E")
-        return self.append(entry)
+        if extra:
+            entry.update(extra)  # extra keeps explicit None values (e.g. exit_code of a timeout)
+        return self.append(entry, id_prefix="E")
 
     def _store(self, src: Path, name: str | None = None) -> dict:
         if not src.is_file():
             raise LedgerError(f"no such file to attach: {src}")
         self.artifacts.mkdir(parents=True, exist_ok=True)
-        dest = self.artifacts / (name or f"{int(time.time() * 1000)}-{src.name}")
+        dest = self.artifacts / (name or f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')}-{src.name}")
         shutil.copyfile(src, dest)
         return {"path": str(dest.relative_to(self.case_dir)).replace(os.sep, "/"), "sha256": sha256_file(dest),
                 "bytes": dest.stat().st_size, "original": str(src)}
@@ -164,18 +240,23 @@ class Ledger:
     def write_artifact(self, name: str, data: bytes) -> dict:
         self.artifacts.mkdir(parents=True, exist_ok=True)
         dest = self.artifacts / name
+        if self.secrets:
+            text = data.decode("utf-8", errors="surrogateescape")
+            data = self.redact(text).encode("utf-8", errors="surrogateescape")
         dest.write_bytes(data)
         return {"path": str(dest.relative_to(self.case_dir)).replace(os.sep, "/"),
                 "sha256": hashlib.sha256(data).hexdigest(), "bytes": len(data)}
 
     def save_tool_result(self, *, tool: str, argv: list[str], payload: dict, claim: str, kind: str = "tool",
-                         outcome: str | None = None, scope: str | None = None) -> dict:
+                         outcome: str | None = None, scope: str | None = None, repro_key: str | None = None) -> dict:
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
         art = self.write_artifact(f"{stamp}-{tool}.json",
                                   json.dumps(payload, ensure_ascii=False, indent=1, default=str).encode("utf-8"))
         extra = {"artifact": art, "tool": {"name": tool, "argv": argv, "cwd": os.getcwd()}}
         if outcome:
             extra["outcome"] = outcome
+        if repro_key:
+            extra["repro_key"] = repro_key
         return self.add_evidence(kind=kind, claim=claim, ref=f"artifact:{art['path']}", scope=scope, extra=extra)
 
     def run_command(self, *, argv: list[str], claim: str, timeout: float | None, scope: str | None,
@@ -195,14 +276,16 @@ class Ledger:
         elapsed = round(time.monotonic() - started, 3)
         out_text, out_stats = textio.decode_output(out)
         err_text, _ = textio.decode_output(err)
-        body = (f"$ {subprocess.list2cmdline(argv)}\n# started {t0}, elapsed {elapsed}s, exit {code}"
-                f"{' (timeout)' if timed_out else ''}\n# stdout ({out_stats.label()})\n{out_text}\n# stderr\n{err_text}\n")
+        body = self.redact(f"$ {subprocess.list2cmdline(argv)}\n# started {t0}, elapsed {elapsed}s, exit {code}"
+                           f"{' (timeout)' if timed_out else ''}\n# stdout ({out_stats.label()})\n{out_text}\n"
+                           f"# stderr\n{err_text}\n")
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
         art = self.write_artifact(f"{stamp}-run.txt", body.encode("utf-8"))
         outcome = "pass" if code == 0 else "fail"
         entry = self.add_evidence(kind="run", claim=claim, ref=f"artifact:{art['path']}", scope=scope, extra={
             "artifact": art, "outcome": outcome, "exit_code": code, "timed_out": timed_out,
-            "elapsed_s": elapsed, "command": argv, "cwd": os.getcwd()})
+            "elapsed_s": elapsed, "command": argv, "cwd": os.getcwd(),
+            "repro_key": "run:" + json.dumps(self.redact(argv), ensure_ascii=False)})
         tail = body if len(body) <= max_echo else "...\n" + body[-max_echo:]
         return entry, tail
 
@@ -221,6 +304,11 @@ def citation_grade(entry: dict) -> str:
     if override and GRADE_RANK[override] < GRADE_RANK.get(g, 0):
         return override
     return g
+
+
+def evidence_number(eid: str) -> int:
+    m = re.fullmatch(r"E(\d+)", eid or "")
+    return int(m.group(1)) if m else -1
 
 
 def _resolve_file_ref(ref: str | None, workspace: Path | None) -> dict:

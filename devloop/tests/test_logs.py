@@ -120,8 +120,10 @@ class ParseTest(LogTestBase):
             'msg="hello world" n=3': 'msg=<*> n=<*>',
             "at 2026-10-20T00:00:01.5Z took 12.5 ms": "at <ts> took <n> ms",
             "ptr 0x7ffe at=2026-10-20T00:00:00Z": "ptr <hex> at=<*>",
-            "token deadbeef00112233 v2 x-1 -7": "token <hex> v2 x-<n> <n>",
-            "player3 hit 25 times": "player3 hit <n> times",
+            "token deadbeef00112233 v2 x-1 -7": "token <hex> v2 <id> <n>",
+            "player3 hit 25 times": "<id> hit <n> times",
+            "char_1234 picked ITEM_3A at #G12 on game-01": "<id> picked <id> at #<id> on <id>",
+            "build 1.4.3 tick ms": "build <n>.<n> tick ms",
         }
         for text, expected in cases.items():
             self.assertEqual(logs.template_of(text), expected, text)
@@ -190,6 +192,38 @@ class CommandsTest(LogTestBase):
         r = logs.scan(self.engine(), [src], logs.Filter(), 3, self.tz)
         self.assertEqual(r["matched"], 31)
         self.assertEqual(r["coverage"]["sources"][0]["origin"]["kind"], "command")
+
+    def test_command_source_with_noisy_stderr_does_not_hang(self):
+        code = ("import sys\nsys.stderr.write('warning: x\\n' * 20000)\nsys.stderr.flush()\n"
+                f"print(open({self.a!r}).read())")
+        src = logs.command_source("noisy", {"command": [os.sys.executable, "-c", code]}, {})
+        r = logs.scan(self.engine(), [src], logs.Filter(), 3, self.tz)
+        self.assertEqual(r["matched"], 31)
+
+    def test_short_level_names(self):
+        p = self.write("s.log", [f"2026-10-20 09:00:0{i}.000 [{lv}] [g1] m" for i, lv in enumerate(["INF", "WRN", "ERR", "FTL", "DBG"])])
+        f = logs.Filter(min_level=logs.level_threshold("WARN"))
+        r = logs.query(self.engine(), logs.file_sources([p]), f, None, 0, 0, self.tz)
+        self.assertEqual([x["level"] for x in r["records"]], ["WARN", "ERROR", "FATAL"])
+
+    def test_profile_encoding_applies_under_auto(self):
+        profiles = logs.profiles_from({"sj": {"pattern": PATTERN, "ts_format": "%Y-%m-%d %H:%M:%S.%f",
+                                              "tz": "+09:00", "encoding": "shift_jis"}})
+        p = self.write("jp.log", ["2026-10-20 09:00:00.000 [INFO] [g1] ログイン成功 uid=1"] * 3, "shift_jis")
+        recs = list(logs.Engine(profiles, "auto").records(logs.file_sources([p])))
+        self.assertEqual(recs[0].msg, "ログイン成功 uid=1")
+
+    def test_dst_ambiguous_local_times_are_counted(self):
+        try:
+            profiles = logs.profiles_from({"eu": {"pattern": PATTERN, "ts_format": "%Y-%m-%d %H:%M:%S.%f",
+                                                  "tz": "Europe/Berlin"}})
+        except logs.LogError:
+            self.skipTest("IANA zone data unavailable")
+        p = self.write("eu.log", ["2026-10-25 02:30:00.000 [INFO] [g1] in the repeated hour",
+                                  "2026-10-25 04:30:00.000 [INFO] [g1] after"])
+        eng = logs.Engine(profiles, "eu")
+        list(eng.records(logs.file_sources([p])))
+        self.assertEqual(eng.sources[0].ambiguous_ts, 1)
 
     def test_bad_inputs(self):
         with self.assertRaises(logs.LogError):

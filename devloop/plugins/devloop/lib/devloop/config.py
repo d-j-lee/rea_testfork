@@ -12,6 +12,7 @@ from __future__ import annotations
 import copy
 import json
 import os
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -44,6 +45,11 @@ DEFAULT_POLICY = {
 DEFAULT_GUARD = {
     "db_clients": ["sqlcmd", "osql", "isql", "bcp", "mysql", "mariadb", "psql", "mongosh", "mongo",
                    "redis-cli", "Invoke-Sqlcmd"],
+    # tools that change a database without an inline statement: treated as writes
+    "db_admin_clients": ["mysqladmin", "mysqlimport", "pg_restore", "dropdb", "createdb", "mongorestore",
+                         "mongoimport", "sqlpackage", "Restore-SqlDatabase"],
+    # bulk readers: risky on shared tiers (load, personal data)
+    "db_dump_clients": ["mysqldump", "pg_dump", "pg_dumpall", "mongodump", "mongoexport", "Backup-SqlDatabase"],
     "local_db_clients": ["sqlite3"],
     "http_clients": ["curl", "wget", "http", "https", "Invoke-WebRequest", "Invoke-RestMethod", "iwr", "irm"],
     "remote_clients": ["ssh", "kubectl", "psexec", "PsExec", "Enter-PSSession", "Invoke-Command"],
@@ -97,9 +103,23 @@ class Config:
 
     @property
     def guard(self) -> dict:
+        """Configured client lists extend the defaults; they cannot remove them."""
         g = copy.deepcopy(DEFAULT_GUARD)
-        g.update(self.data.get("guard", {}))
+        for k, v in self.data.get("guard", {}).items():
+            if isinstance(v, list) and isinstance(g.get(k), list) and k != "mcp_sql_tools":
+                g[k] = list(dict.fromkeys([*g[k], *v]))
+            else:
+                g[k] = v
         return g
+
+    def secret_values(self) -> dict[str, str]:
+        """Values of environment variables explicitly listed in [secrets] env."""
+        out = {}
+        for name in self.data.get("secrets", {}).get("env", []):
+            val = os.environ.get(name)
+            if val and len(val) >= 4:
+                out[val] = name
+        return out
 
     @property
     def envs(self) -> dict:
@@ -151,19 +171,45 @@ def _load_file(path: Path) -> dict:
         raise ConfigError(f"cannot read {path}: {exc}") from exc
 
 
-def _merge(base: dict, extra: dict) -> dict:
+_DECISION_KEYS = {"db_read", "db_write", "http_write", "remote", "devloop_db"}
+
+
+def _merge(base: dict, extra: dict, path: tuple = ()) -> dict:
+    """Workspace settings override user settings, except where weakening is
+    unsafe: tier markers are united, tier decisions keep the stricter value
+    and pattern lists are united."""
     out = dict(base)
     for k, v in extra.items():
-        if isinstance(v, dict) and isinstance(out.get(k), dict):
-            out[k] = _merge(out[k], v)
+        cur = out.get(k)
+        if isinstance(v, dict) and isinstance(cur, dict):
+            out[k] = _merge(cur, v, path + (k,))
+        elif k in {"markers", "ask_patterns", "deny_patterns"} and isinstance(v, list) and isinstance(cur, list):
+            out[k] = list(dict.fromkeys([*cur, *v]))
+        elif path[:1] == ("tiers",) and k in _DECISION_KEYS and cur in DECISIONS and v in DECISIONS:
+            out[k] = max(cur, v, key=DECISIONS.index)
         else:
             out[k] = v
     return out
 
 
+_ENV_REF = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
+
+
+def render_argv(template: list, params: dict[str, str]) -> list[str]:
+    """Render a configured argv: ``${ENV}`` from the environment (never recorded),
+    ``{name}`` from params. Unknown ``{...}`` text is left as is."""
+    out = []
+    for raw in template:
+        s = _ENV_REF.sub(lambda m: os.environ.get(m.group(1), ""), str(raw))
+        for name, value in params.items():
+            s = s.replace("{" + name + "}", str(value))
+        out.append(s)
+    return out
+
+
 def _validate(data: dict, origin: str) -> list[str]:
     warnings = []
-    known = {"display_tz", "tiers", "guard", "env", "log", "bot", "sql", "case"}
+    known = {"display_tz", "tiers", "guard", "env", "log", "bot", "sql", "case", "secrets"}
     for key in data:
         if key not in known:
             warnings.append(f"{origin}: unknown top-level key {key!r}")

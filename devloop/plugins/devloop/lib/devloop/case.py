@@ -13,8 +13,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from .ledger import (EXECUTION_KINDS, GRADE_RANK, REPRO_KINDS, Ledger, LedgerError, citation_grade, now_iso,
-                     norm_grade, sha256_file)
+from .ledger import (EXECUTION_KINDS, GRADE_RANK, REPRO_KINDS, Ledger, LedgerError, citation_grade,
+                     evidence_number, now_iso, norm_grade, sha256_file)
 
 TYPES = ("review", "verify", "bug", "issue")
 STATUSES = ("open", "active", "waiting", "closed")
@@ -269,6 +269,20 @@ def check(d: Path) -> tuple[CaseDoc, list[Issue]]:
     for key in ("id", "type", "title", "status"):
         if not doc.meta.get(key):
             issues.append(Issue("error", "front-matter", f"front matter is missing {key!r}"))
+    for problem in led.verify_chain():
+        issues.append(Issue("error", "ledger-chain",
+                            f"ledger.jsonl was changed outside the CLI: {problem}"))
+    purged = any(e.get("type") == "purge" for e in entries)
+    for e in ev.values():
+        art = e.get("artifact")
+        if not art or not isinstance(art, dict) or not art.get("sha256"):
+            continue
+        path = d / art["path"]
+        if not path.is_file():
+            if not purged:
+                issues.append(Issue("error", "artifact-missing", f"{e['id']}: {art['path']} is missing"))
+        elif sha256_file(path) != art["sha256"]:
+            issues.append(Issue("error", "artifact-modified", f"{e['id']}: {art['path']} no longer matches its hash"))
     ledger_status = current_status(entries)
     if doc.meta.get("status") and ledger_status and doc.meta["status"] != ledger_status:
         issues.append(Issue("error", "status-mismatch",
@@ -380,6 +394,8 @@ def close_gates(d: Path, reason: str, of: str | None, cases: Path) -> tuple[list
     if reason in {"done", "fixed", "data-fix"} and not has_review:
         failed.append("no independent review recorded (ev add --kind review --attach <adversary output>)")
     if reason == "done" and ctype == "verify":
+        if not doc.reqs or not doc.checks:
+            failed.append("a verification needs at least one [REQ-n] and one CHK row")
         covered: dict[str, set[str]] = {}
         for c in doc.checks:
             for r in c.reqs:
@@ -394,8 +410,8 @@ def close_gates(d: Path, reason: str, of: str | None, cases: Path) -> tuple[list
             notes.append("FAIL checks remain: make sure each has a bug case")
     if reason == "fixed":
         if not _red_green(doc, ev):
-            failed.append("no regression check citing a failing run before a passing run "
-                          "(관점 '회귀' row with run/bot evidence: FAIL then PASS)")
+            failed.append("no regression check citing a failing run before a passing run of the same "
+                          "reproduction (관점 '회귀' row citing run/bot evidence with the same command or scenario)")
         causes = [c for c in doc.claims if c.label == "원인"]
         if not causes:
             failed.append("no [원인] claim in the conclusion")
@@ -404,7 +420,7 @@ def close_gates(d: Path, reason: str, of: str | None, cases: Path) -> tuple[list
     if reason == "data-fix":
         if not has_decision:
             failed.append("data correction needs a recorded human decision (case decide)")
-        if "tool" not in kinds:
+        if not any(e.get("kind") == "tool" and (e.get("tool") or {}).get("name") == "db.query" for e in ev.values()):
             failed.append("no saved impact query (db query --save)")
     if reason == "external" and "report" not in kinds:
         failed.append("external cause needs report evidence (ev add --kind report)")
@@ -424,15 +440,21 @@ def close_gates(d: Path, reason: str, of: str | None, cases: Path) -> tuple[list
 
 
 def _red_green(doc: CaseDoc, ev: dict[str, dict]) -> bool:
+    """A regression row passes the gate when, for one reproduction (same
+    repro_key: same command, or same scenario file), a failing run is followed
+    by a passing run. Order is the ledger order (evidence number)."""
     for c in doc.checks:
-        if "회귀" not in c.aspect and "regression" not in c.aspect.lower():
+        if c.result != "PASS" or ("회귀" not in c.aspect and "regression" not in c.aspect.lower()):
             continue
-        runs = sorted((ev[r] for r in c.refs if r in ev and ev[r].get("kind") in REPRO_KINDS),
-                      key=lambda e: e.get("ts", ""))
-        first_fail = next((i for i, e in enumerate(runs) if e.get("outcome") == "fail"), None)
-        if first_fail is not None and any(e.get("outcome") == "pass" for e in runs[first_fail + 1:]) \
-                and c.result == "PASS":
-            return True
+        runs = sorted((ev[r] for r in c.refs if r in ev and ev[r].get("kind") in REPRO_KINDS and ev[r].get("repro_key")),
+                      key=lambda e: evidence_number(e["id"]))
+        by_key: dict[str, list[dict]] = {}
+        for e in runs:
+            by_key.setdefault(e["repro_key"], []).append(e)
+        for seq in by_key.values():
+            first_fail = next((i for i, e in enumerate(seq) if e.get("outcome") == "fail"), None)
+            if first_fail is not None and any(e.get("outcome") == "pass" for e in seq[first_fail + 1:]):
+                return True
     return False
 
 

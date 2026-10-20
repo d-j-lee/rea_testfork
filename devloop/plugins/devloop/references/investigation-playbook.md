@@ -28,6 +28,12 @@
 - 경합은 확률적이다: `repeat`로 반복하고 분포(예: 10회 중 7회 중복)를 기록한다. 한 번 통과는 "경합 없음"의 증거가 아니다.
 - 재현 환경과 실서버의 차이(격리수준, 지연, 데이터 규모)는 미확인으로 남긴다.
 
+## 영향 범위 산정
+- **초과분과 전체를 구분한다.** 중복 지급의 초과분은 그룹마다 `(건수 − 1) × 금액`의 합이다. 중복 그룹의 전체 지급 합이 아니다.
+  예: `SELECT COUNT(*) AS groups, SUM(n - 1) AS extra_grants, SUM((n - 1) * amount) AS extra_amount FROM (SELECT uid, mission_id, cycle, COUNT(*) AS n, MAX(amount) AS amount FROM reward_log GROUP BY uid, mission_id, cycle HAVING COUNT(*) > 1)`
+- **같은 수치를 서로 다른 경로로 두 번 센다.** 로그(예: `retry=1` 건수)와 DB(중복 그룹 수)가 맞는지 본다. 어긋나면 그 차이가 다음 조사 대상이다.
+- 기간·서버·스냅샷 시점을 수치와 함께 쓴다. 대상 사용자 목록은 마스킹된 범위에서만 다룬다.
+
 ## 대응 계획
 - 코드 수정(fix 스킬), 설정/플래그, **데이터 보정은 사람이 실행**(스크립트 + dry-run 집계 + 백업/롤백 + 멱등), 보상 정책은 기획·운영 결정(`case ask`/`case decide`), 공지·CS 답변(report 스킬).
 - 되돌리기 어려운 항목은 실행 전 합의 기록을 남긴다.

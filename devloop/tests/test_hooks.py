@@ -57,6 +57,18 @@ class GuardTest(unittest.TestCase):
             ("devloop db query --env live 'SELECT 1'", "ask"),
             ("devloop db query --env qa 'SELECT 1'", "none"),
             ("ls -la && echo done", "none"),
+            ('mysql -h live-db01 -e "select 1 limit 1" -e "drop table x"', "deny"),  # every -e is classified
+            ("curl -XPOST https://live-gm/grant", "deny"),
+            ("curl -duid=1 https://live-gm/grant", "deny"),
+            ("mysqladmin -h live-db01 shutdown", "deny"),
+            ("mysqldump -h live-db01 game", "ask"),
+            ("python fix_rewards.py --host live-db01", "ask"),  # unclassified command naming a live target
+            ('bash -c "python fix.py --host live-db01"', "ask"),
+            ('echo "$(sqlcmd -S live-db01 -Q \'DELETE FROM t\')"', "deny"),
+            ("kubectl --context live-gm logs pod/x", "none"),
+            ("kubectl --context live-gm exec pod/x -- sh", "ask"),
+            ("devloop ev run C --claim x -- python fix.py --host live-db01", "ask"),
+            ("devloop log scan --source live-db01", "none"),
         ]
         for cmd, expected in table:
             with self.subTest(cmd=cmd):
@@ -86,6 +98,29 @@ class GuardTest(unittest.TestCase):
         ctx = json.loads(text)["hookSpecificOutput"]["additionalContext"]
         self.assertIn("dup reward", ctx)
         self.assertLessEqual(len(ctx.splitlines()), 10)
+
+
+class MergeTest(unittest.TestCase):
+    def test_user_markers_survive_and_stricter_policy_wins(self):
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as home:
+            user = Path(home) / "config.toml"
+            user.write_text('[env.live]\ntier = "live"\nmarkers = ["prod-db"]\n[tiers.live]\ndb_read = "deny"\n',
+                            encoding="utf-8")
+            ws = _util.Workspace('[env.live]\ntier = "live"\nmarkers = ["live-db01"]\n[tiers.live]\ndb_read = "none"\n'
+                                 '[guard]\ndb_clients = ["mysqlsh"]\n')
+            old = os.environ.get("DEVLOOP_USER_CONFIG")
+            os.environ["DEVLOOP_USER_CONFIG"] = str(user)
+            try:
+                cfg = config.load(ws.root)
+                self.assertEqual(sorted(cfg.envs["live"]["markers"]), ["live-db01", "prod-db"])
+                self.assertEqual(cfg.policy("live")["db_read"], "deny")
+                self.assertIn("sqlcmd", cfg.guard["db_clients"])  # extends, not replaces
+                self.assertIn("mysqlsh", cfg.guard["db_clients"])
+            finally:
+                os.environ["DEVLOOP_USER_CONFIG"] = old
+                ws.cleanup()
 
 
 class LauncherTest(unittest.TestCase):
