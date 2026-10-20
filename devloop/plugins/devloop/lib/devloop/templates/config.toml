@@ -1,0 +1,74 @@
+# devloop workspace configuration (TOML). Shared by the team: commit this file.
+# Secrets never go here: reference them as ${ENV_VAR} (expanded at run time, never recorded).
+# Reference: docs/adoption.md in the devloop repository.
+
+display_tz = "UTC"          # time zone used in every tool output (timestamps always carry an offset)
+
+# --- environments -------------------------------------------------------------------------
+# tier: local | dev | qa | stage | live. A marker (host name, IP prefix, DB name) found in a
+# data-plane command (DB client, redis-cli, curl write, ssh...) selects the tier; several
+# matches pick the strictest. Put live/stage markers here first: they drive the guard.
+#
+# [env.qa]
+# tier = "qa"
+# markers = ["qa-game-db01", "10.20.30."]
+#
+# [env.qa.db]                 # read-only account strongly recommended
+# driver = "command"          # command | sqlite
+# dialect = "mssql"           # mssql | mysql | postgres | sqlite | auto
+# command = ["sqlcmd", "-S", "qa-game-db01", "-d", "GameDB", "-U", "readonly", "-P", "${QA_DB_PASSWORD}",
+#            "-W", "-s", "\t", "-u", "-Q", "{sql}"]
+# output = "tsv"              # tsv (first line = header) enables column masking
+# output_encoding = "auto"    # auto | utf-8 | cp949 | utf-16-le
+# timeout = 30
+# max_rows = 200
+# mask_columns = []           # e.g. ["steam_id", "ip_address"] on live
+#
+# [env.live]
+# tier = "live"
+# markers = ["live-", "prod-", "10.9."]
+
+# --- tier policy overrides (defaults shown in docs/adoption.md) ------------------------------
+# [tiers.live]
+# db_read = "ask"             # none | ask | deny
+# db_write = "deny"
+# http_write = "deny"
+# remote = "ask"
+# devloop_db = "ask"
+# require_bounded = true
+# bot = false
+# ask_patterns = ["gm_tool\\s+(give|grant|set)"]
+# deny_patterns = []
+
+# --- guard ----------------------------------------------------------------------------------
+# [guard]
+# db_clients = ["sqlcmd", "mysql", "psql", "redis-cli", "Invoke-Sqlcmd"]
+# mcp_sql_tools = [{ tool = "mcp__db__execute_sql", field = "sql", tier = "qa" }]
+
+# --- logs -----------------------------------------------------------------------------------
+# Regex profiles use named groups; ts / level / msg are the conventional names.
+# [log.profiles.game]
+# pattern = '^(?P<ts>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}) \[(?P<level>\w+)\] \[(?P<thread>\d+)\] (?P<msg>.*)$'
+# ts_format = "%Y-%m-%d %H:%M:%S.%f"   # or iso8601 | epoch | epoch_ms
+# tz = "+09:00"                        # zone of naive timestamps; IANA names need tzdata on Windows
+# tz_map = { "fra-*" = "Europe/Berlin" }
+# encoding = "auto"                    # auto = BOM/UTF-16 sniffing, UTF-8 with per-line CP949 fallback
+#
+# A source streams logs from a command (argv form, no shell). {since}/{until} are ISO UTC.
+# [log.sources.live-game]
+# command = ["ssh", "log01", "zcat /logs/game/game-*.log.gz"]
+# profile = "game"
+# env = "live"
+
+# --- bots -----------------------------------------------------------------------------------
+# [bot.adapters.mybot]
+# type = "process"                     # wraps an existing bot speaking JSON lines (any language)
+# command = ["dotnet", "tools/BotRunner.dll", "--jsonl"]
+# env = "qa"
+# redact_fields = ["token", "password"]
+#
+# [bot.adapters.pybot]
+# type = "python"
+# module = "tools/devloop_adapter.py"
+# class = "Adapter"
+# env = "qa"

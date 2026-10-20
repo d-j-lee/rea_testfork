@@ -1,0 +1,17 @@
+{
+  "name": "devloop",
+  "version": "0.1.0",
+  "description": "Evidence-driven work loops for game server teams: design review, feature verification, bug/live-issue investigation and fixes, with log forensics, read-only DB access, bot scenarios and a data-plane guard.",
+  "author": {
+    "name": "d-j-lee"
+  },
+  "keywords": [
+    "game-server",
+    "qa",
+    "investigation",
+    "evidence",
+    "bot-testing",
+    "logs",
+    "design-review"
+  ]
+}

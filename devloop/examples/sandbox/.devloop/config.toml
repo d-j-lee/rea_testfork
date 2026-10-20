@@ -1,0 +1,39 @@
+# Sandbox workspace for devloop (tier markers, log profile, DB snapshots, bot adapters).
+display_tz = "UTC"
+
+[env.sandbox]
+tier = "local"
+markers = ["run/game.db"]
+
+[env.sandbox.db]
+driver = "sqlite"
+dialect = "sqlite"
+path = "run/game.db"
+
+# Snapshot of the "live" database at incident time: read-only analysis, live policy applies.
+[env.incident]
+tier = "live"
+markers = ["incident.db", "live-game"]
+
+[env.incident.db]
+driver = "sqlite"
+dialect = "sqlite"
+path = "run/incident/incident.db"
+mask_columns = ["account"]
+
+[log.profiles.sandbox]
+pattern = '^(?P<ts>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}) \[(?P<level>[A-Z]+)\] \[(?P<server>[\w-]+)\] \[(?P<thread>[\w-]+)\] (?P<msg>.*)$'
+ts_format = "%Y-%m-%d %H:%M:%S.%f"
+tz = "+09:00"
+
+[bot.adapters.sandbox]
+type = "python"
+module = "server/adapter.py"
+class = "SandboxAdapter"
+env = "sandbox"
+options = { db_path = "run/game.db", log_path = "run/game.log", reward_latency = 0.03 }
+
+[bot.adapters.sandbox-proc]
+type = "process"
+command = ["{python}", "server/bot_process.py", "--db", "run/game.db", "--log", "run/game.log"]
+env = "sandbox"

@@ -1,0 +1,19 @@
+{
+  "name": "daily-reset-boundary",
+  "description": "일일 미션은 UTC 00:00에 초기화된다 (REQ-1). 23:59:50Z에 수령 후 00:00:10Z에 다시 수령 가능해야 한다.",
+  "requirements": ["REQ-1"],
+  "adapter": "sandbox",
+  "actors": {"p": {"account": "reset_${run_id}"}},
+  "steps": [
+    {"actor": "p", "op": "login", "save": {"uid": "$.user_id"}},
+    {"actor": "p", "op": "gm", "args": {"cmd": "set_time", "utc": "2026-10-20T23:59:50Z"},
+     "expect": [{"path": "$.cycle", "op": "eq", "value": "2026-10-20"}]},
+    {"actor": "p", "op": "progress", "args": {"mission": 101, "amount": 1}},
+    {"actor": "p", "op": "claim", "args": {"mission": 101}, "expect": [{"path": "$.ok", "op": "eq", "value": true}]},
+    {"actor": "p", "op": "gm", "args": {"cmd": "set_time", "utc": "2026-10-21T00:00:10Z"},
+     "expect": [{"path": "$.cycle", "op": "eq", "value": "2026-10-21"}]},
+    {"actor": "p", "op": "progress", "args": {"mission": 101, "amount": 1}},
+    {"actor": "p", "op": "claim", "args": {"mission": 101},
+     "expect": [{"path": "$.ok", "op": "eq", "value": true}]}
+  ]
+}

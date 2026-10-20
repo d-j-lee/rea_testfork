@@ -1,0 +1,11 @@
+schema_version: "1.1"
+name: investigate-dup-reward
+description: Live-issue investigation on the sandbox incident (duplicate mission rewards after patch 1.4.3).
+tags: [investigate, smoke]
+runs: 1
+expected_outcome: >
+  Identifies client retry after a ~1.5 s timeout as the trigger of a second grant for uid 1042,
+  explains the non-atomic claim as the likely defect while marking it unconfirmed without code or
+  reproduction, quantifies impact with a bounded read-only query, and states scope and time zones.
+context:
+  scaffold_script: scaffold.sh

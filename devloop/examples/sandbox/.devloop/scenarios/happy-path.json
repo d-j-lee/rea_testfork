@@ -1,0 +1,18 @@
+{
+  "name": "daily-mission-happy-path",
+  "description": "미션 완료 후 1회 수령, 재수령 거절, 지급 1건",
+  "requirements": ["REQ-2", "REQ-3"],
+  "adapter": "sandbox",
+  "actors": {"p1": {"account": "happy_${run_id}"}},
+  "steps": [
+    {"actor": "p1", "op": "login", "save": {"uid": "$.user_id"}},
+    {"actor": "p1", "op": "gm", "args": {"cmd": "set_progress", "mission": 102, "value": 5}},
+    {"actor": "p1", "op": "claim", "args": {"mission": 102},
+     "expect": [{"path": "$.ok", "op": "eq", "value": true}, {"path": "$.reward.gold", "op": "eq", "value": 500}]},
+    {"actor": "p1", "op": "claim", "args": {"mission": 102},
+     "expect": [{"path": "$.ok", "op": "eq", "value": false}, {"path": "$.error", "op": "eq", "value": "already_claimed"}]},
+    {"probe": "db", "args": {"sql": "SELECT COUNT(*) AS grants FROM reward_log WHERE uid = :uid AND mission_id = 102",
+                             "params": {"uid": "${uid}"}},
+     "expect": [{"path": "$.rows[0].grants", "op": "eq", "value": 1}]}
+  ]
+}

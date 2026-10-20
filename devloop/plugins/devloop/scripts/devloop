@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# devloop launcher. Runs the CLI with the first Python >= 3.11 among
+# DEVLOOP_PYTHON, python3, python and "py -3" (exit 9 or 127 means try the next).
+# For hook events an unusable interpreter or a crash degrades to "ask"
+# (PreToolUse) instead of letting the tool call through unchecked.
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+entry="$here/devloop.py"
+candidates=("${DEVLOOP_PYTHON:-}" python3 python "py -3")
+
+ask_json='{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"devloop guard unavailable (REASON); confirm this command manually"}}'
+
+if [ "$1" = "hook" ]; then
+  event="$2"
+  payload="$(cat)"
+  last=""
+  for cand in "${candidates[@]}"; do
+    [ -n "$cand" ] || continue
+    read -r -a py <<< "$cand"
+    output="$(printf '%s' "$payload" | "${py[@]}" "$entry" hook "$event" 2>/dev/null)"
+    code=$?
+    if [ $code -eq 0 ]; then
+      [ -n "$output" ] && printf '%s\n' "$output"
+      exit 0
+    fi
+    # 9: too old, 126/127: not runnable, others (e.g. a Store alias stub or a crash): try the next one.
+    [ $code -ne 9 ] && [ $code -ne 126 ] && [ $code -ne 127 ] && last="$cand exited $code"
+  done
+  if [ "$event" = "pretooluse" ]; then
+    printf '%s\n' "${ask_json/REASON/${last:-no Python 3.11+ found}; set DEVLOOP_PYTHON}"
+  else
+    printf '%s\n' '{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"devloop: no Python 3.11+ found (set DEVLOOP_PYTHON); the command guard asks before every Bash call until fixed."}}'
+  fi
+  exit 0
+fi
+
+for cand in "${candidates[@]}"; do
+  [ -n "$cand" ] || continue
+  read -r -a py <<< "$cand"
+  if "${py[@]}" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 9)' >/dev/null 2>&1; then
+    exec "${py[@]}" "$entry" "$@"
+  fi
+done
+echo "devloop: Python 3.11+ not found (tried \$DEVLOOP_PYTHON, python3, python, py -3)" >&2
+exit 2
