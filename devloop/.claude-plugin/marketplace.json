@@ -1,0 +1,16 @@
+{
+  "name": "devloop-tools",
+  "owner": {
+    "name": "d-j-lee"
+  },
+  "description": "devloop: evidence-driven Claude Code loops for game server development.",
+  "plugins": [
+    {
+      "name": "devloop",
+      "source": "./plugins/devloop",
+      "description": "Design review, verification, investigation and fix loops with evidence grading, log forensics, read-only DB access, bot scenarios and a data-plane guard.",
+      "version": "0.1.0",
+      "category": "development"
+    }
+  ]
+}

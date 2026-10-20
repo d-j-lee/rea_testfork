@@ -1,0 +1,3 @@
+# devloop: cases can hold player identifiers, log excerpts and query results.
+# Share sanitized reports instead of committing cases.
+cases/
